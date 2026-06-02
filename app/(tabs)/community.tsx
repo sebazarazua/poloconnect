@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Card, SectionTitle } from "@/components/Card";
 import { Screen } from "@/components/Screen";
+import { AdCarousel } from "@/components/AdCarousel";
 import { colors } from "@/constants/theme";
 
 const joinedChats = [
@@ -62,6 +63,8 @@ export default function CommunityScreen() {
       title="Comunidades"
       subtitle="Espacios creados por Polo Connect para torneos, noticias y equipos. Unite, hablá o abandoná cuando quieras."
     >
+      <AdCarousel height={92} />
+
       <SectionTitle title="Tus comunidades" />
       {joinedChats.map((chat) => (
         <Pressable

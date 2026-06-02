@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   FlatList,
@@ -11,85 +12,22 @@ import {
 } from "react-native";
 import { Screen } from "@/components/Screen";
 import { colors } from "@/constants/theme";
-
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  category: "todos" | "equipamiento" | "indumentaria" | "vehiculos";
-  image: string;
-  isFavorite?: boolean;
-}
-
-const PRODUCTS: Product[] = [
-  {
-    id: "1",
-    name: "Silla Butet\nUsada",
-    price: 3200,
-    category: "equipamiento",
-    image: "https://via.placeholder.com/180x180/8B4513/FFFFFF?text=Silla+Butet"
-  },
-  {
-    id: "2",
-    name: "Casco Kep\nItalia",
-    price: 980,
-    category: "equipamiento",
-    image: "https://via.placeholder.com/180x180/000000/FFFFFF?text=Casco+Kep"
-  },
-  {
-    id: "3",
-    name: "Camisa La Martina\nOficial",
-    price: 120,
-    category: "indumentaria",
-    image: "https://via.placeholder.com/180x180/000000/FFFFFF?text=Camisa"
-  },
-  {
-    id: "4",
-    name: "Botas de Polo\nPremium",
-    price: 350,
-    category: "equipamiento",
-    image: "https://via.placeholder.com/180x180/654321/FFFFFF?text=Botas"
-  },
-  {
-    id: "5",
-    name: "Vehiculo Transporte",
-    price: 15000,
-    category: "vehiculos",
-    image: "https://via.placeholder.com/180x180/CCCCCC/000000?text=Vehiculo"
-  },
-  {
-    id: "6",
-    name: "Set de Tacos\nProfesional",
-    price: 450,
-    category: "equipamiento",
-    image: "https://via.placeholder.com/180x180/C0C0C0/000000?text=Tacos"
-  }
-];
-
-type CategoryFilter = "todos" | "equipamiento" | "indumentaria" | "vehiculos";
+import { useMarket } from "@/contexts/MarketContext";
+import { type Product, type MarketCategory } from "@/services/market";
 
 export default function MarketScreen() {
+  const router = useRouter();
+  const { products, favoriteIds, isFavorite, toggleFavorite } = useMarket();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>("todos");
-  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [selectedCategory, setSelectedCategory] = useState<MarketCategory>("todos");
 
   const filteredProducts = useMemo(() => {
-    return PRODUCTS.filter((product) => {
+    return products.filter((product) => {
       const matchesCategory = selectedCategory === "todos" || product.category === selectedCategory;
       const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [selectedCategory, searchQuery]);
-
-  const toggleFavorite = (productId: string) => {
-    const newFavorites = new Set(favorites);
-    if (newFavorites.has(productId)) {
-      newFavorites.delete(productId);
-    } else {
-      newFavorites.add(productId);
-    }
-    setFavorites(newFavorites);
-  };
+  }, [products, searchQuery, selectedCategory]);
 
   const renderProductCard = ({ item }: { item: Product }) => (
     <View style={styles.productCardContainer}>
@@ -104,9 +42,9 @@ export default function MarketScreen() {
             onPress={() => toggleFavorite(item.id)}
           >
             <Ionicons
-              name={favorites.has(item.id) ? "heart" : "heart-outline"}
+              name={isFavorite(item.id) ? "heart" : "heart-outline"}
               size={24}
-              color={favorites.has(item.id) ? colors.primary : "#ffffff"}
+              color={isFavorite(item.id) ? colors.primary : "#ffffff"}
             />
           </Pressable>
         </View>
@@ -125,6 +63,21 @@ export default function MarketScreen() {
       title="Compra y venta"
       subtitle="Equipamiento, caballos y servicios para jugadores y clubes."
     >
+      <View style={styles.actionRow}>
+        <Pressable style={styles.secondaryAction} onPress={() => router.push("/favorites")}>
+          <Ionicons name="heart-outline" size={18} color={colors.primaryDark} />
+          <Text style={styles.secondaryActionText}>Favoritos</Text>
+          <View style={styles.counterBadge}>
+            <Text style={styles.counterBadgeText}>{favoriteIds.size}</Text>
+          </View>
+        </Pressable>
+
+        <Pressable style={styles.primaryAction} onPress={() => router.push("/market-publish")}>
+          <Ionicons name="add" size={18} color="#ffffff" />
+          <Text style={styles.primaryActionText}>Publicar</Text>
+        </Pressable>
+      </View>
+
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color={colors.muted} />
@@ -182,6 +135,61 @@ export default function MarketScreen() {
 }
 
 const styles = StyleSheet.create({
+  actionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16
+  },
+  secondaryAction: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 12
+  },
+  secondaryActionText: {
+    color: colors.primaryDark,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  counterBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6
+  },
+  counterBadgeText: {
+    color: colors.primaryDark,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  primaryAction: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 12
+  },
+  primaryActionText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "800"
+  },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -204,6 +212,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     marginBottom: 16,
+    flexWrap: "wrap",
     paddingHorizontal: 0
   },
   categoryTab: {

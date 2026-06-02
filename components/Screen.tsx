@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { usePathname, useRouter } from "expo-router";
 import { PropsWithChildren, useRef } from "react";
 import {
   Animated,
@@ -29,7 +30,10 @@ type ScreenProps = PropsWithChildren<{
 
 export function Screen({ children, eyebrow, title, subtitle, style, showBackButton, onBackPress }: ScreenProps) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const pathname = usePathname();
   const { openDrawer } = useAppDrawer();
+  const isOnNotifications = pathname === "/notifications";
   const topBarTranslateY = useRef(new Animated.Value(0)).current;
   const lastScrollY = useRef(0);
   const isTopBarVisible = useRef(true);
@@ -105,8 +109,17 @@ export function Screen({ children, eyebrow, title, subtitle, style, showBackButt
           />
         </View>
 
-        <Pressable style={styles.notificationButton} accessibilityLabel="Notificaciones">
-          <Ionicons name="notifications-outline" size={23} color={colors.primaryDark} />
+        <Pressable
+          style={styles.notificationButton}
+          accessibilityLabel="Notificaciones"
+          onPress={() => !isOnNotifications && router.push("/notifications")}
+          disabled={isOnNotifications}
+        >
+          <Ionicons
+            name="notifications-outline"
+            size={23}
+            color={isOnNotifications ? colors.muted : colors.primaryDark}
+          />
           <View style={styles.notificationDot} />
         </Pressable>
       </Animated.View>

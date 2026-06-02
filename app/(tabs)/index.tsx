@@ -12,6 +12,7 @@ import {
   View
 } from "react-native";
 import { Badge, Card, SectionTitle } from "@/components/Card";
+import { AdCarousel } from "@/components/AdCarousel";
 import { Screen } from "@/components/Screen";
 import { colors } from "@/constants/theme";
 
@@ -47,6 +48,8 @@ export default function HomeScreen() {
       router.push("/(tabs)/tournaments");
     } else if (label === "Partidos emitidos") {
       router.push("/broadcast");
+    } else if (label === "Anota a tu equipo") {
+      router.push("/team-register");
     } else if (label === "Noticias") {
       // Navigate to news section
     }
@@ -148,7 +151,7 @@ export default function HomeScreen() {
           </Pressable>
         ))}
       </View>
-    </Screen>
+      <AdCarousel height={90} />    </Screen>
   );
 }
 

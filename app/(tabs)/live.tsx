@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SectionTitle } from "@/components/Card";
+import { AdCarousel } from "@/components/AdCarousel";
 import { Screen } from "@/components/Screen";
 import { colors } from "@/constants/theme";
 
@@ -189,6 +190,8 @@ export default function LiveScreen() {
       title="Transmisiones en vivo"
       subtitle="Sigue los partidos en tiempo real."
     >
+      <AdCarousel height={95} />
+
       {/* Header con navegación de fechas */}
       <View style={styles.dateHeaderContainer}>
         <View style={styles.dateNavigation}>

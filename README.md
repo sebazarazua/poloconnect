@@ -2,6 +2,8 @@
 
 Front end funcional hecho con Expo, React Native, TypeScript y Expo Router.
 
+Incluye flujo visual de login y registro con autenticacion mock en memoria, listo para reemplazar por llamadas reales al back.
+
 ## Secciones
 
 - Inicio

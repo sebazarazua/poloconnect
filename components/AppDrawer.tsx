@@ -11,8 +11,9 @@ import {
   View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { Href, useRouter } from "expo-router";
 import { colors } from "@/constants/theme";
+import { useAuth } from "@/contexts/AuthContext";
 
 type AppDrawerContextValue = {
   openDrawer: () => void;
@@ -20,20 +21,19 @@ type AppDrawerContextValue = {
 
 const AppDrawerContext = createContext<AppDrawerContextValue | null>(null);
 
-type DrawerItem = { label: string; icon: keyof typeof Ionicons.glyphMap; route?: string };
+type DrawerItem = { label: string; icon: keyof typeof Ionicons.glyphMap; route?: Href };
 
 const drawerItems: Array<DrawerItem> = [
-  { label: "Mi perfil", icon: "person-outline" },
-  { label: "Favoritos", icon: "heart-outline" },
+  { label: "Mi perfil", icon: "person-outline", route: "/profile" },
+  { label: "Favoritos", icon: "heart-outline", route: "/favorites" },
   { label: "Partidos emitidos", icon: "play-circle-outline", route: "/broadcast" },
-  { label: "Anota a tu equipo", icon: "checkmark-circle-outline" },
+  { label: "Anota a tu equipo", icon: "checkmark-circle-outline", route: "/team-register" },
   { label: "Comunidad", icon: "people-outline", route: "/(tabs)/community" },
   { label: "Mercado", icon: "pricetag-outline", route: "/(tabs)/market" },
   { label: "Calendario", icon: "calendar-outline", route: "/(tabs)/tournaments" }
 ];
 
 const drawerFooterItems: Array<{ label: string; icon: keyof typeof Ionicons.glyphMap }> = [
-  { label: "Invitar amigos", icon: "person-add-outline" },
   { label: "Configuración", icon: "settings-outline" },
   { label: "Centro de ayuda", icon: "help-circle-outline" }
 ];
@@ -52,6 +52,7 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const router = useRouter();
+  const { signOut, user } = useAuth();
   const drawerProgress = useRef(new Animated.Value(0)).current;
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const drawerWidth = Math.min(width * 0.78, 340);
@@ -189,8 +190,8 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
                   </Pressable>
                 </View>
 
-                <Text style={styles.drawerName}>Adrián</Text>
-                <Text style={styles.drawerHandle}>@polo.connect</Text>
+                <Text style={styles.drawerName}>{user?.firstName ?? "Adrian"}</Text>
+                <Text style={styles.drawerHandle}>@{user?.username ?? "polo.connect"}</Text>
 
                 <View style={styles.drawerStats}>
                   <Text style={styles.drawerStatStrong}>12</Text>
@@ -205,36 +206,53 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
                 contentContainerStyle={styles.drawerScrollContent}
                 showsVerticalScrollIndicator={false}
               >
-                <View style={styles.drawerMenu}>
-                  {drawerItems.map((item) => (
+                <View style={styles.drawerContent}>
+                  <View>
+                    <View style={styles.drawerMenu}>
+                      {drawerItems.map((item) => (
+                        <Pressable
+                          key={item.label}
+                          style={styles.drawerItem}
+                          onPress={() => {
+                            if (item.route) {
+                              closeDrawer();
+                              router.push(item.route);
+                            }
+                          }}
+                        >
+                          <Ionicons name={item.icon} size={25} color="#f7fbff" />
+                          <Text style={styles.drawerItemText}>{item.label}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+
+                    <View style={styles.drawerDivider} />
+
+                    {drawerFooterItems.map((item) => (
+                      <Pressable key={item.label} style={styles.drawerFooterItem}>
+                        <Ionicons name={item.icon} size={21} color="#dbe9f7" />
+                        <Text style={styles.drawerFooterText}>{item.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  <View style={styles.drawerBottom}>
+                    <View style={styles.drawerAppInfo}>
+                      <Text style={styles.drawerAppTitle}>Polo Connect</Text>
+                      <Text style={styles.drawerAppText}>Partidos, clubes y comunidad en un solo lugar.</Text>
+                    </View>
+
                     <Pressable
-                      key={item.label}
-                      style={styles.drawerItem}
+                      style={styles.drawerSignOutButton}
                       onPress={() => {
-                        if (item.route) {
-                          closeDrawer();
-                          router.push(item.route);
-                        }
+                        closeDrawer();
+                        signOut();
                       }}
                     >
-                      <Ionicons name={item.icon} size={25} color="#f7fbff" />
-                      <Text style={styles.drawerItemText}>{item.label}</Text>
+                      <Ionicons name="log-out-outline" size={21} color="#ff7b7b" />
+                      <Text style={styles.drawerSignOutText}>Cerrar sesión</Text>
                     </Pressable>
-                  ))}
-                </View>
-
-                <View style={styles.drawerDivider} />
-
-                {drawerFooterItems.map((item) => (
-                  <Pressable key={item.label} style={styles.drawerFooterItem}>
-                    <Ionicons name={item.icon} size={21} color="#dbe9f7" />
-                    <Text style={styles.drawerFooterText}>{item.label}</Text>
-                  </Pressable>
-                ))}
-
-                <View style={styles.drawerAppInfo}>
-                  <Text style={styles.drawerAppTitle}>Polo Connect</Text>
-                  <Text style={styles.drawerAppText}>Partidos, clubes y comunidad en un solo lugar.</Text>
+                  </View>
                 </View>
               </ScrollView>
             </Animated.View>
@@ -339,7 +357,12 @@ const styles = StyleSheet.create({
     flex: 1
   },
   drawerScrollContent: {
+    flexGrow: 1,
     paddingBottom: 26
+  },
+  drawerContent: {
+    flexGrow: 1,
+    justifyContent: "space-between"
   },
   drawerItem: {
     minHeight: 54,
@@ -372,6 +395,9 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 8
   },
+  drawerBottom: {
+    paddingTop: 18
+  },
   drawerAppTitle: {
     color: "#ffffff",
     fontSize: 15,
@@ -382,5 +408,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     marginTop: 5
+  },
+  drawerSignOutButton: {
+    minHeight: 46,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#2e1820"
+  },
+  drawerSignOutText: {
+    color: "#ff7b7b",
+    fontSize: 17,
+    fontWeight: "800"
   }
 });

@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Polo Club",
+    "slug": "polo-club",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "poloclub",
+    "userInterfaceStyle": "light",
+    "jsEngine": "jsc",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

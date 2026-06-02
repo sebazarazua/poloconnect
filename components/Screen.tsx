@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { PropsWithChildren, useRef } from "react";
 import {
   Animated,
+  Image,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
@@ -10,19 +11,25 @@ import {
   View,
   ViewStyle
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppDrawer } from "@/components/AppDrawer";
 import { colors } from "@/constants/theme";
 
 const topBarHeight = 68;
+const topBarGap = 4;
 
 type ScreenProps = PropsWithChildren<{
   eyebrow?: string;
   title: string;
   subtitle?: string;
   style?: ViewStyle;
+  showBackButton?: boolean;
+  onBackPress?: () => void;
 }>;
 
-export function Screen({ children, eyebrow, title, subtitle, style }: ScreenProps) {
+export function Screen({ children, eyebrow, title, subtitle, style, showBackButton, onBackPress }: ScreenProps) {
+  const insets = useSafeAreaInsets();
+  const { openDrawer } = useAppDrawer();
   const topBarTranslateY = useRef(new Animated.Value(0)).current;
   const lastScrollY = useRef(0);
   const isTopBarVisible = useRef(true);
@@ -35,7 +42,7 @@ export function Screen({ children, eyebrow, title, subtitle, style }: ScreenProp
     isTopBarVisible.current = visible;
 
     Animated.timing(topBarTranslateY, {
-      toValue: visible ? 0 : -topBarHeight,
+      toValue: visible ? 0 : -(topBarHeight + insets.top + topBarGap),
       duration: 180,
       useNativeDriver: true
     }).start();
@@ -57,19 +64,45 @@ export function Screen({ children, eyebrow, title, subtitle, style }: ScreenProp
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={[]}>
+      <View style={[styles.statusAreaCover, { height: insets.top + topBarGap }]} />
+
       <Animated.View
-        style={[styles.topBar, { transform: [{ translateY: topBarTranslateY }] }]}
+        style={[
+          styles.topBar,
+          {
+            top: insets.top + topBarGap,
+            transform: [{ translateY: topBarTranslateY }]
+          }
+        ]}
       >
-        <Pressable style={styles.profileButton} accessibilityLabel="Perfil del usuario">
-          <Ionicons name="person" size={22} color={colors.primaryDark} />
-        </Pressable>
+        {showBackButton ? (
+          <Pressable
+            style={styles.profileButton}
+            accessibilityLabel="Volver"
+            onPress={onBackPress}
+          >
+            <Ionicons name="chevron-back" size={28} color={colors.primaryDark} />
+          </Pressable>
+        ) : (
+          <Pressable
+            style={styles.profileButton}
+            accessibilityLabel="Abrir menu de usuario"
+            onPress={() => {
+              setTopBarVisible(true);
+              openDrawer();
+            }}
+          >
+            <Ionicons name="person" size={22} color={colors.primaryDark} />
+          </Pressable>
+        )}
 
         <View style={styles.appLogo}>
-          <View style={styles.logoMark}>
-            <Text style={styles.logoMarkText}>PC</Text>
-          </View>
-          <Text style={styles.logoText}>Polo Connect</Text>
+          <Image
+            source={require("@/assets/logo.png")}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </View>
 
         <Pressable style={styles.notificationButton} accessibilityLabel="Notificaciones">
@@ -80,7 +113,11 @@ export function Screen({ children, eyebrow, title, subtitle, style }: ScreenProp
 
       <Animated.ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.content, style]}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + topBarGap + topBarHeight + 12 },
+          style
+        ]}
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
@@ -101,15 +138,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background
   },
-  topBar: {
+  statusAreaCover: {
     position: "absolute",
     top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    backgroundColor: "#ffffff"
+  },
+  topBar: {
+    position: "absolute",
     left: 0,
     right: 0,
     zIndex: 10,
     height: topBarHeight,
     paddingHorizontal: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.97)",
+    backgroundColor: "#ffffff",
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     flexDirection: "row",
@@ -129,27 +173,11 @@ const styles = StyleSheet.create({
   appLogo: {
     flex: 1,
     alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 8
-  },
-  logoMark: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
-    backgroundColor: colors.primary,
-    alignItems: "center",
     justifyContent: "center"
   },
-  logoMarkText: {
-    color: "#ffffff",
-    fontSize: 11,
-    fontWeight: "900"
-  },
-  logoText: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: "900"
+  logoImage: {
+    width: 165,
+    height: 54
   },
   notificationButton: {
     width: 42,
@@ -178,19 +206,16 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 20,
-    paddingTop: topBarHeight + 12,
     paddingBottom: 108
   },
   header: {
     marginBottom: 18
   },
   eyebrow: {
-    color: colors.primary,
-    fontSize: 13,
+    color: colors.muted,
+    fontSize: 14,
     fontWeight: "700",
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-    marginBottom: 8
+    marginBottom: 6
   },
   title: {
     color: colors.text,

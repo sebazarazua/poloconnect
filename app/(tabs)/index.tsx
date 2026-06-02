@@ -1,8 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -34,10 +36,21 @@ const ads = [
 ];
 
 export default function HomeScreen() {
+  const router = useRouter();
   const carouselRef = useRef<ScrollView>(null);
   const [activeAd, setActiveAd] = useState(0);
   const { width } = useWindowDimensions();
   const bannerWidth = Math.max(width - screenHorizontalPadding, 280);
+
+  const handleQuickAccessPress = (label: string) => {
+    if (label === "Calendario") {
+      router.push("/(tabs)/tournaments");
+    } else if (label === "Partidos emitidos") {
+      router.push("/broadcast");
+    } else if (label === "Noticias") {
+      // Navigate to news section
+    }
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -62,11 +75,7 @@ export default function HomeScreen() {
   };
 
   return (
-    <Screen
-      eyebrow="Polo Club"
-      title="Tu jornada de polo"
-      subtitle="Partidos, torneos y movimiento del mercado en una experiencia simple."
-    >
+    <Screen eyebrow="Lunes, 1 de junio de 2026" title="¡Bienvenido, Adrián!">
       <Card style={styles.hero}>
         <View>
           <Badge label="Hoy" />
@@ -116,28 +125,29 @@ export default function HomeScreen() {
       <View style={styles.quickGrid}>
         {[
           ["Calendario", "calendar-outline"],
-          ["Ranking", "podium-outline"],
-          ["Equipos", "shield-outline"],
+          ["Anota a tu equipo", "person-add-outline"],
+          ["Partidos emitidos", "play-circle-outline"],
           ["Noticias", "newspaper-outline"]
         ].map(([label, icon]) => (
-          <View key={label} style={styles.quickItem}>
-            <Ionicons
-              name={icon as keyof typeof Ionicons.glyphMap}
-              size={23}
-              color={colors.primary}
-            />
+          <Pressable
+            key={label}
+            style={({ pressed }) => [
+              styles.quickItem,
+              pressed && styles.quickItemPressed
+            ]}
+            onPress={() => handleQuickAccessPress(label)}
+          >
+            <View>
+              <Ionicons
+                name={icon as keyof typeof Ionicons.glyphMap}
+                size={23}
+                color={colors.primary}
+              />
+            </View>
             <Text style={styles.quickText}>{label}</Text>
-          </View>
+          </Pressable>
         ))}
       </View>
-
-      <SectionTitle title="Destacado" action="Ver todo" />
-      <Card>
-        <Text style={styles.cardTitle}>Abierto de Palermo</Text>
-        <Text style={styles.cardText}>
-          Se confirmaron los cruces de semifinales con cuatro equipos de alto handicap.
-        </Text>
-      </Card>
     </Screen>
   );
 }
@@ -242,6 +252,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: 14,
     justifyContent: "space-between"
+  },
+  quickItemPressed: {
+    backgroundColor: colors.surfaceStrong,
+    opacity: 0.8
   },
   quickText: {
     color: colors.text,

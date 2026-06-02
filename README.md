@@ -1,4 +1,4 @@
-# Polo Club App
+# poloconnect
 
 Front end funcional hecho con Expo, React Native, TypeScript y Expo Router.
 
@@ -10,13 +10,13 @@ Front end funcional hecho con Expo, React Native, TypeScript y Expo Router.
 - Mercado
 - Comunidad
 
-## Cómo correr
+## Como correr
 
 ```bash
 npm install
 npm run start -- --clear
 ```
 
-Después podés abrirlo en Expo Go, iOS Simulator, Android Emulator o web.
+Despues podes abrirlo en Expo Go, iOS Simulator, Android Emulator o web.
 
-Si Expo Go muestra una versión vieja, cerrá el servidor, borrá `node_modules` y volvé a ejecutar `npm install`.
+Si Expo Go muestra una version vieja, cerra el servidor, borra `node_modules` y volve a ejecutar `npm install`.

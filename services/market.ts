@@ -3,6 +3,7 @@ export type ProductStatus = "Nuevo" | "Usado" | "Reacondicionado";
 
 export type Product = {
   id: string;
+  ownerId?: string;
   name: string;
   price: number;
   category: Exclude<MarketCategory, "todos">;
@@ -14,6 +15,7 @@ export type Product = {
 export const MARKET_PRODUCTS: Product[] = [
   {
     id: "1",
+    ownerId: undefined,
     name: "Silla Butet\nUsada",
     price: 3200,
     category: "equipamiento",
@@ -23,6 +25,7 @@ export const MARKET_PRODUCTS: Product[] = [
   },
   {
     id: "2",
+    ownerId: undefined,
     name: "Casco Kep\nItalia",
     price: 980,
     category: "equipamiento",
@@ -32,6 +35,7 @@ export const MARKET_PRODUCTS: Product[] = [
   },
   {
     id: "3",
+    ownerId: undefined,
     name: "Camisa La Martina\nOficial",
     price: 120,
     category: "indumentaria",
@@ -41,6 +45,7 @@ export const MARKET_PRODUCTS: Product[] = [
   },
   {
     id: "4",
+    ownerId: undefined,
     name: "Botas de Polo\nPremium",
     price: 350,
     category: "equipamiento",
@@ -50,6 +55,7 @@ export const MARKET_PRODUCTS: Product[] = [
   },
   {
     id: "5",
+    ownerId: undefined,
     name: "Vehiculo Transporte",
     price: 15000,
     category: "vehiculos",
@@ -59,6 +65,7 @@ export const MARKET_PRODUCTS: Product[] = [
   },
   {
     id: "6",
+    ownerId: undefined,
     name: "Set de Tacos\nProfesional",
     price: 450,
     category: "equipamiento",

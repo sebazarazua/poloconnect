@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
-import { PropsWithChildren, useRef } from "react";
+import { PropsWithChildren, ReactNode, useRef } from "react";
 import {
   Animated,
   Image,
@@ -26,9 +26,10 @@ type ScreenProps = PropsWithChildren<{
   style?: ViewStyle;
   showBackButton?: boolean;
   onBackPress?: () => void;
+  headerRight?: ReactNode;
 }>;
 
-export function Screen({ children, eyebrow, title, subtitle, style, showBackButton, onBackPress }: ScreenProps) {
+export function Screen({ children, eyebrow, title, subtitle, style, showBackButton, onBackPress, headerRight }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const pathname = usePathname();
@@ -137,6 +138,7 @@ export function Screen({ children, eyebrow, title, subtitle, style, showBackButt
       >
         <View style={styles.header}>
           {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+          {headerRight ? <View style={styles.headerRight}>{headerRight}</View> : null}
           <Text style={styles.title}>{title}</Text>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
@@ -222,7 +224,14 @@ const styles = StyleSheet.create({
     paddingBottom: 108
   },
   header: {
-    marginBottom: 18
+    marginBottom: 18,
+    position: "relative"
+  },
+  headerRight: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    zIndex: 1
   },
   eyebrow: {
     color: colors.muted,

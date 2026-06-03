@@ -65,74 +65,83 @@ export default function MarketScreen() {
       eyebrow="Mercado"
       title="Compra y venta"
       subtitle="Equipamiento, caballos y servicios para jugadores y clubes."
+      headerRight={
+        <Pressable style={styles.favoritesFloatingButton} onPress={() => router.push("/favorites")}>
+          <Ionicons name="heart" size={17} color="#ffffff" />
+          {favoriteIds.size > 0 ? (
+            <View style={styles.counterBadgeFloating}>
+              <Text style={styles.counterBadgeText}>{favoriteIds.size}</Text>
+            </View>
+          ) : null}
+        </Pressable>
+      }
     >
-      <View style={styles.actionRow}>
-        <Pressable style={styles.secondaryAction} onPress={() => router.push("/favorites")}>
-          <Ionicons name="heart-outline" size={18} color={colors.primaryDark} />
-          <Text style={styles.secondaryActionText}>Favoritos</Text>
-          <View style={styles.counterBadge}>
-            <Text style={styles.counterBadgeText}>{favoriteIds.size}</Text>
-          </View>
-        </Pressable>
-
-        <Pressable style={styles.primaryAction} onPress={() => router.push("/market-publish")}>
-          <Ionicons name="add" size={18} color="#ffffff" />
-          <Text style={styles.primaryActionText}>Publicar</Text>
-        </Pressable>
-      </View>
-
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={colors.muted} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar productos"
-          placeholderTextColor={colors.muted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
-
-      {/* Category Tabs */}
-      <View style={styles.categoriesContainer}>
-        {(["todos", "equipamiento", "indumentaria", "vehiculos"] as const).map((category) => (
-          <Pressable
-            key={category}
-            style={[
-              styles.categoryTab,
-              selectedCategory === category && styles.categoryTabActive
-            ]}
-            onPress={() => setSelectedCategory(category)}
-          >
-            <Text
-              style={[
-                styles.categoryTabText,
-                selectedCategory === category && styles.categoryTabTextActive
-              ]}
-            >
-              {category.toUpperCase()}
-            </Text>
+      <View style={styles.marketShell}>
+        <View style={styles.actionRow}>
+          <Pressable style={styles.secondaryAction} onPress={() => router.push("/market-my-posts")}>
+            <Ionicons name="albums-outline" size={18} color={colors.primaryDark} />
+            <Text style={styles.secondaryActionText}>Mis publicaciones</Text>
           </Pressable>
-        ))}
-      </View>
 
-      {/* Products Grid */}
-      <FlatList
-        data={filteredProducts}
-        renderItem={renderProductCard}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        columnWrapperStyle={styles.columnWrapper}
-        scrollEnabled={false}
-        contentContainerStyle={styles.gridContainer}
-      />
-
-      {filteredProducts.length === 0 && (
-        <View style={styles.emptyState}>
-          <Ionicons name="search-outline" size={48} color={colors.muted} />
-          <Text style={styles.emptyText}>No hay productos</Text>
+          <Pressable style={styles.primaryAction} onPress={() => router.push("/market-publish")}>
+            <Ionicons name="add" size={18} color="#ffffff" />
+            <Text style={styles.primaryActionText}>Publicar</Text>
+          </Pressable>
         </View>
-      )}
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={colors.muted} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar productos"
+            placeholderTextColor={colors.muted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+
+        {/* Category Tabs */}
+        <View style={styles.categoriesContainer}>
+          {(["todos", "equipamiento", "indumentaria", "vehiculos"] as const).map((category) => (
+            <Pressable
+              key={category}
+              style={[
+                styles.categoryTab,
+                selectedCategory === category && styles.categoryTabActive
+              ]}
+              onPress={() => setSelectedCategory(category)}
+            >
+              <Text
+                style={[
+                  styles.categoryTabText,
+                  selectedCategory === category && styles.categoryTabTextActive
+                ]}
+              >
+                {category.toUpperCase()}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Products Grid */}
+        <FlatList
+          data={filteredProducts}
+          renderItem={renderProductCard}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.columnWrapper}
+          scrollEnabled={false}
+          contentContainerStyle={styles.gridContainer}
+        />
+
+        {filteredProducts.length === 0 && (
+          <View style={styles.emptyState}>
+            <Ionicons name="search-outline" size={48} color={colors.muted} />
+            <Text style={styles.emptyText}>No hay productos</Text>
+          </View>
+        )}
+      </View>
     </Screen>
   );
 }
@@ -142,6 +151,34 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     marginBottom: 16
+  },
+  marketShell: {},
+  favoritesFloatingButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 4
+  },
+  counterBadgeFloating: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    paddingHorizontal: 4
   },
   secondaryAction: {
     flex: 1,

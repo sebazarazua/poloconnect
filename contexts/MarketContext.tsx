@@ -6,16 +6,19 @@ type MarketContextValue = {
   products: Product[];
   favoriteIds: Set<string>;
   favoriteProducts: Product[];
+  myProducts: Product[];
   isFavorite: (productId: string) => boolean;
   toggleFavorite: (productId: string) => void;
   clearFavorites: () => void;
-  addProduct: (product: Omit<Product, "id">) => void;
+  addProduct: (product: Omit<Product, "id" | "ownerId">) => void;
+  updateProduct: (productId: string, product: Omit<Product, "id" | "ownerId">) => void;
+  deleteProduct: (productId: string) => void;
 };
 
 const MarketContext = createContext<MarketContextValue | null>(null);
 
 export function MarketProvider({ children }: PropsWithChildren) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [products, setProducts] = useState<Product[]>(MARKET_PRODUCTS);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
 
@@ -29,10 +32,35 @@ export function MarketProvider({ children }: PropsWithChildren) {
     setProducts((currentProducts) => [
       {
         ...product,
-        id: Date.now().toString()
+        id: Date.now().toString(),
+        ownerId: user?.id
       },
       ...currentProducts
     ]);
+  };
+
+  const updateProduct = (productId: string, product: Omit<Product, "id" | "ownerId">) => {
+    setProducts((currentProducts) =>
+      currentProducts.map((currentProduct) =>
+        currentProduct.id === productId
+          ? {
+              ...currentProduct,
+              ...product,
+              id: productId,
+              ownerId: currentProduct.ownerId ?? user?.id
+            }
+          : currentProduct
+      )
+    );
+  };
+
+  const deleteProduct = (productId: string) => {
+    setProducts((currentProducts) => currentProducts.filter((product) => product.id !== productId));
+    setFavoriteIds((currentIds) => {
+      const nextIds = new Set(currentIds);
+      nextIds.delete(productId);
+      return nextIds;
+    });
   };
 
   const toggleFavorite = (productId: string) => {
@@ -54,17 +82,25 @@ export function MarketProvider({ children }: PropsWithChildren) {
     [favoriteIds, products]
   );
 
+  const myProducts = useMemo(
+    () => products.filter((product) => product.ownerId === user?.id),
+    [products, user?.id]
+  );
+
   const value = useMemo(
     () => ({
       products,
       favoriteIds,
       favoriteProducts,
+      myProducts,
       isFavorite: (productId: string) => favoriteIds.has(productId),
       toggleFavorite,
       clearFavorites: () => setFavoriteIds(new Set()),
-      addProduct
+      addProduct,
+      updateProduct,
+      deleteProduct
     }),
-    [addProduct, favoriteIds, favoriteProducts, products]
+    [addProduct, deleteProduct, favoriteIds, favoriteProducts, myProducts, products, updateProduct]
   );
 
   return <MarketContext.Provider value={value}>{children}</MarketContext.Provider>;

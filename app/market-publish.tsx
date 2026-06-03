@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import {
   Image,
   Pressable,
@@ -27,13 +27,28 @@ const publishCategories: { value: PublishCategory; label: string }[] = [
 
 export default function MarketPublishScreen() {
   const router = useRouter();
-  const { addProduct } = useMarket();
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { products, addProduct, updateProduct, deleteProduct } = useMarket();
+  const existingProduct = useMemo(() => products.find((product) => product.id === id), [id, products]);
   const [imageUrl, setImageUrl] = useState("");
   const [name, setName] = useState("");
   const [selectedState, setSelectedState] = useState<ProductStatus>("Nuevo");
   const [selectedCategory, setSelectedCategory] = useState<PublishCategory>("equipamiento");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
+
+  useEffect(() => {
+    if (!existingProduct) {
+      return;
+    }
+
+    setImageUrl(existingProduct.image);
+    setName(existingProduct.name);
+    setSelectedState(existingProduct.status);
+    setSelectedCategory(existingProduct.category);
+    setPrice(String(existingProduct.price));
+    setDescription(existingProduct.description);
+  }, [existingProduct]);
 
   const normalizedPrice = Number(price.replace(/[^0-9.]/g, ""));
 
@@ -50,8 +65,12 @@ export default function MarketPublishScreen() {
   return (
     <Screen
       eyebrow="Mercado"
-      title="Publicar producto"
-      subtitle="Completa los datos, aboná la publicación y tu aviso quedará listo para revisión."
+      title={existingProduct ? "Editar publicación" : "Publicar producto"}
+      subtitle={
+        existingProduct
+          ? "Actualizá los datos de tu aviso propio."
+          : "Completa los datos, aboná la publicación y tu aviso quedará listo para revisión."
+      }
       showBackButton
       onBackPress={() => router.back()}
     >
@@ -61,9 +80,13 @@ export default function MarketPublishScreen() {
         </View>
 
         <View style={styles.paymentTextWrap}>
-          <Text style={styles.paymentTitle}>La publicación tiene costo</Text>
+          <Text style={styles.paymentTitle}>
+            {existingProduct ? "Editando publicación propia" : "La publicación tiene costo"}
+          </Text>
           <Text style={styles.paymentText}>
-            Antes de subir el aviso tenés que abonar la tarifa del mercado.
+            {existingProduct
+              ? "Podés ajustar el contenido y guardar los cambios."
+              : "Antes de subir el aviso tenés que abonar la tarifa del mercado."}
           </Text>
         </View>
 
@@ -180,21 +203,40 @@ export default function MarketPublishScreen() {
           style={[styles.publishButton, isSubmitDisabled && styles.publishButtonDisabled]}
           disabled={isSubmitDisabled}
           onPress={() => {
-            addProduct({
+            const payload = {
               image: imageUrl.trim(),
               name: name.trim(),
               price: normalizedPrice,
               status: selectedState,
               description: description.trim(),
               category: selectedCategory
-            });
+            };
+
+            if (existingProduct) {
+              updateProduct(existingProduct.id, payload);
+            } else {
+              addProduct(payload);
+            }
 
             router.back();
           }}
         >
           <Ionicons name="cash-outline" size={20} color="#ffffff" />
-          <Text style={styles.publishButtonText}>Publicar</Text>
+          <Text style={styles.publishButtonText}>{existingProduct ? "Guardar cambios" : "Publicar"}</Text>
         </Pressable>
+
+        {existingProduct ? (
+          <Pressable
+            style={styles.deleteOwnButton}
+            onPress={() => {
+              deleteProduct(existingProduct.id);
+              router.back();
+            }}
+          >
+            <Ionicons name="trash-outline" size={18} color="#b42318" />
+            <Text style={styles.deleteOwnButtonText}>Eliminar publicación</Text>
+          </Pressable>
+        ) : null}
 
         <Text style={styles.helperText}>
           El aviso se habilita solo después de confirmar el pago de publicación.
@@ -348,6 +390,23 @@ const styles = StyleSheet.create({
   },
   publishButtonText: {
     color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "800"
+  },
+  deleteOwnButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#ffd2cc",
+    backgroundColor: "#fff1ef",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 2
+  },
+  deleteOwnButtonText: {
+    color: "#b42318",
     fontSize: 15,
     fontWeight: "800"
   },

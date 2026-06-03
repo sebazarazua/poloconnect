@@ -67,3 +67,8 @@ export const MARKET_PRODUCTS: Product[] = [
     description: "Set profesional para entrenamiento y competencia."
   }
 ];
+
+export function getProductById(id?: string): Product | undefined {
+  if (!id) return undefined;
+  return MARKET_PRODUCTS.find((product) => product.id === id);
+}

@@ -54,8 +54,8 @@ export default function TabLayout() {
         })}
       >
         <Tabs.Screen name="index" options={{ title: "Inicio" }} />
-        <Tabs.Screen name="live" options={{ title: "En vivo" }} />
         <Tabs.Screen name="tournaments" options={{ title: "Torneos" }} />
+        <Tabs.Screen name="live" options={{ title: "En vivo" }} />
         <Tabs.Screen name="market" options={{ title: "Mercado" }} />
         <Tabs.Screen name="community" options={{ title: "Comunidad" }} />
       </Tabs>

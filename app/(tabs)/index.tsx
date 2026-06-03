@@ -2,6 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
+  Image,
+  ImageBackground,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
@@ -11,46 +13,51 @@ import {
   useWindowDimensions,
   View
 } from "react-native";
-import { Badge, Card, SectionTitle } from "@/components/Card";
+import { SectionTitle } from "@/components/Card";
 import { AdCarousel } from "@/components/AdCarousel";
 import { Screen } from "@/components/Screen";
 import { colors } from "@/constants/theme";
+import { formatHomeEyebrow } from "@/constants/i18n";
+import { useLocale } from "@/contexts/LocaleContext";
 
 const screenHorizontalPadding = 40;
+const featuredMatchBackground = require("../../assets/home-match-bg.png");
 
 const ads = [
-  {
-    title: "Sponsor Oficial",
-    text: "Banner 1 para marca o club",
-    tone: "#d8ecff"
-  },
-  {
-    title: "Equipamiento premium",
-    text: "Banner 2 para tienda de polo",
-    tone: "#eaf5ff"
-  },
-  {
-    title: "Torneos y eventos",
-    text: "Banner 3 para torneo destacado",
-    tone: "#cfe7ff"
-  }
+  require("../../assets/ads/home/hero-1.png"),
+  require("../../assets/ads/home/hero-2.png"),
+  require("../../assets/ads/home/hero-3.png")
+];
+
+const compactAds = [
+  require("../../assets/ads/home/compact-1.png"),
+  require("../../assets/ads/home/compact-2.png"),
+  require("../../assets/ads/home/compact-3.png")
 ];
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { locale, t } = useLocale();
   const carouselRef = useRef<ScrollView>(null);
   const [activeAd, setActiveAd] = useState(0);
   const { width } = useWindowDimensions();
   const bannerWidth = Math.max(width - screenHorizontalPadding, 280);
 
-  const handleQuickAccessPress = (label: string) => {
-    if (label === "Calendario") {
+  const quickAccessItems = [
+    { key: "calendar", label: t("home.calendar"), icon: "calendar-outline", route: "/(tabs)/tournaments" },
+    { key: "team-register", label: t("home.teamRegister"), icon: "person-add-outline", route: "/team-register" },
+    { key: "broadcast", label: t("home.broadcast"), icon: "play-circle-outline", route: "/broadcast" },
+    { key: "news", label: t("home.news"), icon: "newspaper-outline" }
+  ] as const;
+
+  const handleQuickAccessPress = (key: string) => {
+    if (key === "calendar") {
       router.push("/(tabs)/tournaments");
-    } else if (label === "Partidos emitidos") {
+    } else if (key === "broadcast") {
       router.push("/broadcast");
-    } else if (label === "Anota a tu equipo") {
+    } else if (key === "team-register") {
       router.push("/team-register");
-    } else if (label === "Noticias") {
+    } else if (key === "news") {
       // Navigate to news section
     }
   };
@@ -78,18 +85,70 @@ export default function HomeScreen() {
   };
 
   return (
-    <Screen eyebrow="Lunes, 1 de junio de 2026" title="¡Bienvenido, Adrián!">
-      <Card style={styles.hero}>
-        <View>
-          <Badge label="Hoy" />
-          <Text style={styles.heroTitle}>La Dolfina vs Ellerstina</Text>
-          <Text style={styles.heroText}>Final de zona, 16:30 hs</Text>
+    <Screen
+      eyebrow={formatHomeEyebrow(locale, new Date(2026, 5, 1))}
+      title={t("home.welcome", { name: "Adrián" })}
+    >
+      <ImageBackground
+        source={featuredMatchBackground}
+        style={styles.matchHero}
+        imageStyle={styles.matchHeroImage}
+        resizeMode="cover"
+      >
+        <View style={styles.matchOverlay}>
+          <View>
+            <View style={styles.liveBadge}>
+              <View style={styles.liveBadgeDot} />
+              <Text style={styles.liveBadgeText}>{t("home.live")}</Text>
+            </View>
+
+            <Text style={styles.matchTournament}>
+              129° ABIERTO ARGENTINO DE POLO
+            </Text>
+            <Text style={styles.matchChukker}>CHUKKER 3</Text>
+          </View>
+
+          <View>
+            <View style={styles.scoreRow}>
+              <View style={styles.teamBlock}>
+                <View style={styles.teamLogo}>
+                  <Text style={styles.teamLogoText}>LD</Text>
+                </View>
+                <Text style={styles.teamName} numberOfLines={1}>
+                  LA DOLFINA
+                </Text>
+              </View>
+
+              <Text style={styles.matchScore}>5 - 3</Text>
+
+              <View style={styles.teamBlock}>
+                <View style={styles.teamLogo}>
+                  <Text style={styles.teamLogoText}>E</Text>
+                </View>
+                <Text style={styles.teamName} numberOfLines={1}>
+                  ELLERSTINA
+                </Text>
+              </View>
+            </View>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.watchButton,
+                pressed && styles.watchButtonPressed
+              ]}
+              onPress={() =>
+                router.push({
+                  pathname: "/match-detail",
+                  params: { id: "2-1" }
+                })
+              }
+            >
+              <Text style={styles.watchButtonText}>{t("home.watchLive")}</Text>
+              <Ionicons name="play" size={14} color="#ffffff" />
+            </Pressable>
+          </View>
         </View>
-        <View style={styles.scoreBox}>
-          <Text style={styles.score}>8 - 7</Text>
-          <Text style={styles.scoreLabel}>3er chukker</Text>
-        </View>
-      </Card>
+      </ImageBackground>
 
       <ScrollView
         ref={carouselRef}
@@ -103,42 +162,32 @@ export default function HomeScreen() {
       >
         {ads.map((ad, index) => (
           <View
-            key={ad.title}
-            style={[styles.adBanner, { width: bannerWidth, backgroundColor: ad.tone }]}
+            key={`home-hero-${index}`}
+            style={[styles.adBanner, { width: bannerWidth }]}
           >
-            <Ionicons name="image-outline" size={30} color={colors.primary} />
-            <View style={styles.adContent}>
-              <Text style={styles.placeholderText}>Placeholder {index + 1}</Text>
-              <Text style={styles.adTitle}>{ad.title}</Text>
-              <Text style={styles.adText}>{ad.text}</Text>
-            </View>
+            <Image source={ad} style={styles.adImage} resizeMode="cover" />
           </View>
         ))}
       </ScrollView>
       <View style={styles.dots}>
-        {ads.map((ad, index) => (
+        {ads.map((_, index) => (
           <View
-            key={ad.title}
+            key={`home-hero-dot-${index}`}
             style={[styles.dot, index === activeAd ? styles.activeDot : null]}
           />
         ))}
       </View>
 
-      <SectionTitle title="Accesos rapidos" />
+      <SectionTitle title={t("home.quickAccess")} />
       <View style={styles.quickGrid}>
-        {[
-          ["Calendario", "calendar-outline"],
-          ["Anota a tu equipo", "person-add-outline"],
-          ["Partidos emitidos", "play-circle-outline"],
-          ["Noticias", "newspaper-outline"]
-        ].map(([label, icon]) => (
+        {quickAccessItems.map(({ key, label, icon }) => (
           <Pressable
-            key={label}
+            key={key}
             style={({ pressed }) => [
               styles.quickItem,
               pressed && styles.quickItemPressed
             ]}
-            onPress={() => handleQuickAccessPress(label)}
+            onPress={() => handleQuickAccessPress(key)}
           >
             <View>
               <Ionicons
@@ -151,77 +200,133 @@ export default function HomeScreen() {
           </Pressable>
         ))}
       </View>
-      <AdCarousel height={90} />    </Screen>
+      <AdCarousel images={compactAds} height={90} />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: {
-    backgroundColor: colors.surfaceStrong
+  matchHero: {
+    minHeight: 220,
+    borderRadius: 18,
+    overflow: "hidden",
+    marginBottom: 14,
+    backgroundColor: colors.primaryDark
   },
-  heroTitle: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: "800",
-    marginTop: 14
+  matchHeroImage: {
+    borderRadius: 18
   },
-  heroText: {
-    color: colors.muted,
-    fontSize: 15,
-    marginTop: 6
+  matchOverlay: {
+    flex: 1,
+    justifyContent: "space-between",
+    padding: 16,
+    backgroundColor: "rgba(5, 15, 28, 0.58)"
   },
-  scoreBox: {
-    marginTop: 18,
-    padding: 14,
-    borderRadius: 16,
-    backgroundColor: "#ffffff",
-    alignItems: "center"
+  liveBadge: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 6,
+    backgroundColor: "#e21f2f",
+    paddingHorizontal: 10,
+    paddingVertical: 6
   },
-  score: {
-    color: colors.primaryDark,
-    fontSize: 28,
+  liveBadgeDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "#ffffff"
+  },
+  liveBadgeText: {
+    color: "#ffffff",
+    fontSize: 11,
     fontWeight: "900"
   },
-  scoreLabel: {
-    color: colors.muted,
+  matchTournament: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0,
+    marginTop: 12
+  },
+  matchChukker: {
+    color: "#7dc7ff",
     fontSize: 13,
+    fontWeight: "900",
     marginTop: 2
+  },
+  scoreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 12
+  },
+  teamBlock: {
+    width: 88,
+    alignItems: "center",
+    gap: 7
+  },
+  teamLogo: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.94)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.7)"
+  },
+  teamLogoText: {
+    color: colors.primaryDark,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  teamName: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "900",
+    textAlign: "center"
+  },
+  matchScore: {
+    flex: 1,
+    color: "#ffffff",
+    fontSize: 33,
+    fontWeight: "900",
+    textAlign: "center"
+  },
+  watchButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 7,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 17,
+    paddingVertical: 12,
+    marginTop: 16
+  },
+  watchButtonPressed: {
+    opacity: 0.82
+  },
+  watchButtonText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "900"
   },
   adsTrack: {
     marginBottom: 8
   },
   adBanner: {
-    minHeight: 146,
+    height: 146,
     borderRadius: 18,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: colors.border,
-    padding: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14
+    backgroundColor: colors.surfaceStrong,
+    overflow: "hidden"
   },
-  placeholderText: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase"
-  },
-  adContent: {
-    flex: 1,
-    justifyContent: "center"
-  },
-  adTitle: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: "900",
-    marginTop: 7
-  },
-  adText: {
-    color: colors.muted,
-    fontSize: 14,
-    lineHeight: 19,
-    marginTop: 4
+  adImage: {
+    width: "100%",
+    height: "100%"
   },
   dots: {
     flexDirection: "row",

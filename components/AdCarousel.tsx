@@ -1,65 +1,47 @@
-import { Ionicons } from "@expo/vector-icons";
-import { useRef, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  Image,
+  ImageSourcePropType,
   NativeScrollEvent,
   NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
-  Text,
   useWindowDimensions,
   View
 } from "react-native";
 import { colors } from "@/constants/theme";
 
 interface AdCarouselProps {
+  images: ImageSourcePropType[];
   height?: number;
 }
 
-const ads = [
-  {
-    title: "Sponsor",
-    text: "Descubrí nuestras promociones",
-    tone: "#d8ecff"
-  },
-  {
-    title: "Equipamiento",
-    text: "Mirá el mejor gear disponible",
-    tone: "#eaf5ff"
-  },
-  {
-    title: "Eventos",
-    text: "Próximos torneos y competencias",
-    tone: "#cfe7ff"
-  }
-];
-
-export function AdCarousel({ height = 100 }: AdCarouselProps) {
+export function AdCarousel({ images, height = 100 }: AdCarouselProps) {
   const carouselRef = useRef<ScrollView>(null);
-  const [activeAd, setActiveAd] = useState(0);
+  const [activeItem, setActiveItem] = useState(0);
   const { width } = useWindowDimensions();
-  const screenHorizontalPadding = 40;
-  const bannerWidth = Math.max(width - screenHorizontalPadding, 280);
+  const bannerWidth = Math.max(width - 40, 280);
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setActiveAd((currentAd) => {
-        const nextAd = (currentAd + 1) % ads.length;
+      setActiveItem((currentItem) => {
+        const nextItem = (currentItem + 1) % images.length;
 
         carouselRef.current?.scrollTo({
-          x: nextAd * bannerWidth,
+          x: nextItem * bannerWidth,
           animated: true
         });
 
-        return nextAd;
+        return nextItem;
       });
     }, 4000);
 
     return () => clearInterval(timer);
-  }, [bannerWidth]);
+  }, [bannerWidth, images.length]);
 
-  const handleAdMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const nextAd = Math.round(event.nativeEvent.contentOffset.x / bannerWidth);
-    setActiveAd(nextAd);
+  const handleMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const nextItem = Math.round(event.nativeEvent.contentOffset.x / bannerWidth);
+    setActiveItem(nextItem);
   };
 
   return (
@@ -71,35 +53,27 @@ export function AdCarousel({ height = 100 }: AdCarouselProps) {
         pagingEnabled
         snapToInterval={bannerWidth}
         decelerationRate="fast"
-        onMomentumScrollEnd={handleAdMomentumEnd}
+        onMomentumScrollEnd={handleMomentumEnd}
         contentContainerStyle={styles.track}
       >
-        {ads.map((ad) => (
+        {images.map((image, index) => (
           <View
-            key={ad.title}
+            key={`ad-slide-${index}`}
             style={[
               styles.banner,
-              { width: bannerWidth, height, backgroundColor: ad.tone }
+              { width: bannerWidth, height }
             ]}
           >
-            <Ionicons name="image-outline" size={18} color={colors.primary} />
-            <View style={styles.content}>
-              <Text style={styles.bannerTitle} numberOfLines={1}>
-                {ad.title}
-              </Text>
-              <Text style={styles.bannerText} numberOfLines={1}>
-                {ad.text}
-              </Text>
-            </View>
+            <Image source={image} style={styles.image} resizeMode="cover" />
           </View>
         ))}
       </ScrollView>
 
       <View style={styles.dots}>
-        {ads.map((ad, index) => (
+        {images.map((_, index) => (
           <View
-            key={ad.title}
-            style={[styles.dot, index === activeAd && styles.activeDot]}
+            key={`ad-dot-${index}`}
+            style={[styles.dot, index === activeItem && styles.activeDot]}
           />
         ))}
       </View>
@@ -113,27 +87,12 @@ const styles = StyleSheet.create({
   },
   banner: {
     borderRadius: 14,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: colors.border,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10
+    backgroundColor: colors.surfaceStrong,
+    overflow: "hidden"
   },
-  content: {
-    flex: 1
-  },
-  bannerTitle: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: "700"
-  },
-  bannerText: {
-    color: colors.muted,
-    fontSize: 11,
-    lineHeight: 15,
-    marginTop: 2
+  image: {
+    width: "100%",
+    height: "100%"
   },
   dots: {
     flexDirection: "row",

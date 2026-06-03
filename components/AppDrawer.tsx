@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Href, useRouter } from "expo-router";
 import { colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocale } from "@/contexts/LocaleContext";
 
 type AppDrawerContextValue = {
   openDrawer: () => void;
@@ -53,6 +54,7 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
   const { width } = useWindowDimensions();
   const router = useRouter();
   const { signOut, user } = useAuth();
+  const { locale, setLocale } = useLocale();
   const drawerProgress = useRef(new Animated.Value(0)).current;
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const drawerWidth = Math.min(width * 0.78, 340);
@@ -72,6 +74,9 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
     inputRange: [0, 1],
     outputRange: [0, 0.48]
   });
+
+  const nextLocale = locale === "es-AR" ? "en-US" : "es-AR";
+  const currentFlagId = locale === "es-AR" ? "ES" : "GB";
 
   const openDrawer = () => {
     setIsDrawerOpen(true);
@@ -185,8 +190,26 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
                   <View style={styles.drawerAvatar}>
                     <Ionicons name="person" size={28} color="#ffffff" />
                   </View>
-                  <Pressable style={styles.drawerAddButton} accessibilityLabel="Invitar contacto">
-                    <Ionicons name="person-add-outline" size={22} color="#ffffff" />
+                  <Pressable
+                    style={styles.drawerLanguageButton}
+                    onPress={() => setLocale(nextLocale)}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      locale === "es-AR" ? "Cambiar a inglés" : "Cambiar a español"
+                    }
+                  >
+                    {currentFlagId === "ES" ? (
+                      <View style={styles.flagEspana}>
+                        <View style={styles.flagSpainTop} />
+                        <View style={styles.flagSpainMiddle} />
+                        <View style={styles.flagSpainBottom} />
+                      </View>
+                    ) : (
+                      <View style={styles.flagEngland}>
+                        <View style={styles.flagEnglandVertical} />
+                        <View style={styles.flagEnglandHorizontal} />
+                      </View>
+                    )}
                   </Pressable>
                 </View>
 
@@ -315,14 +338,55 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center"
   },
-  drawerAddButton: {
+  drawerLanguageButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
     borderWidth: 1,
     borderColor: "#244360",
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    overflow: "hidden",
+    backgroundColor: "#ffffff"
+  },
+  flagEspana: {
+    width: 42,
+    height: 42,
+    overflow: "hidden"
+  },
+  flagSpainTop: {
+    height: 11,
+    backgroundColor: "#c60b1e"
+  },
+  flagSpainMiddle: {
+    height: 20,
+    backgroundColor: "#ffc400"
+  },
+  flagSpainBottom: {
+    height: 11,
+    backgroundColor: "#c60b1e"
+  },
+  flagEngland: {
+    width: 42,
+    height: 42,
+    backgroundColor: "#ffffff",
+    overflow: "hidden"
+  },
+  flagEnglandVertical: {
+    position: "absolute",
+    left: 16,
+    top: 0,
+    width: 10,
+    height: 42,
+    backgroundColor: "#cf142b"
+  },
+  flagEnglandHorizontal: {
+    position: "absolute",
+    top: 16,
+    left: 0,
+    width: 42,
+    height: 10,
+    backgroundColor: "#cf142b"
   },
   drawerName: {
     color: "#ffffff",

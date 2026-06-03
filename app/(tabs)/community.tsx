@@ -4,68 +4,77 @@ import { Card, SectionTitle } from "@/components/Card";
 import { Screen } from "@/components/Screen";
 import { AdCarousel } from "@/components/AdCarousel";
 import { colors } from "@/constants/theme";
+import { useLocale } from "@/contexts/LocaleContext";
 
-const joinedChats = [
-  {
-    title: "Abierto de Palermo 2026",
-    description: "Fixture, resultados y conversación oficial del torneo.",
-    members: "1.8k miembros",
-    unread: 6,
-    icon: "trophy-outline" as const,
-    tone: "#d8ecff"
-  },
-  {
-    title: "La Dolfina vs Ellerstina",
-    description: "Chat activo por el partido destacado de la semana.",
-    members: "842 miembros",
-    unread: 2,
-    icon: "radio-outline" as const,
-    tone: "#e8f7f4"
-  },
-  {
-    title: "Mercado de jugadores",
-    description: "Altas, bajas y rumores confirmados por Polo Connect.",
-    members: "526 miembros",
-    unread: 0,
-    icon: "swap-horizontal-outline" as const,
-    tone: "#fff4dc"
-  }
-];
-
-const recommendedChats = [
-  {
-    title: "Hurlingham Open",
-    description: "Cobertura oficial, cruces y debate del campeonato.",
-    members: "Disponible ahora",
-    icon: "calendar-outline" as const,
-    tone: "#eaf5ff"
-  },
-  {
-    title: "Noticias del alto handicap",
-    description: "Un chat para seguir novedades importantes del circuito.",
-    members: "Nuevo",
-    icon: "newspaper-outline" as const,
-    tone: "#eef8e8"
-  },
-  {
-    title: "Tortugas Country Club",
-    description: "Comunidad temporal para partidos, horarios y resultados.",
-    members: "Próximo torneo",
-    icon: "shield-outline" as const,
-    tone: "#f1edff"
-  }
+const communityAds = [
+  require("../../assets/ads/community/slide-1.png"),
+  require("../../assets/ads/community/slide-2.png"),
+  require("../../assets/ads/community/slide-3.png")
 ];
 
 export default function CommunityScreen() {
+  const { t } = useLocale();
+
+  const joinedChats = [
+    {
+      title: "Abierto de Palermo 2026",
+      description: t("community.joinedDescriptions.palermo"),
+      members: `1.8k ${t("community.members")}`,
+      unread: 6,
+      icon: "trophy-outline" as const,
+      tone: "#d8ecff"
+    },
+    {
+      title: "La Dolfina vs Ellerstina",
+      description: t("community.joinedDescriptions.match"),
+      members: `842 ${t("community.members")}`,
+      unread: 2,
+      icon: "radio-outline" as const,
+      tone: "#e8f7f4"
+    },
+    {
+      title: "Mercado de jugadores",
+      description: t("community.joinedDescriptions.market"),
+      members: `526 ${t("community.members")}`,
+      unread: 0,
+      icon: "swap-horizontal-outline" as const,
+      tone: "#fff4dc"
+    }
+  ];
+
+  const recommendedChats = [
+    {
+      title: "Hurlingham Open",
+      description: t("community.recommendedDescriptions.hurlingham"),
+      members: t("community.availableNow"),
+      icon: "calendar-outline" as const,
+      tone: "#eaf5ff"
+    },
+    {
+      title: "Noticias del alto handicap",
+      description: t("community.recommendedDescriptions.news"),
+      members: t("community.new"),
+      icon: "newspaper-outline" as const,
+      tone: "#eef8e8"
+    },
+    {
+      title: "Tortugas Country Club",
+      description: t("community.recommendedDescriptions.tortugas"),
+      members: t("community.nextTournament"),
+      icon: "shield-outline" as const,
+      tone: "#f1edff"
+    }
+  ];
+
   return (
     <Screen
-      eyebrow="Chats oficiales"
-      title="Comunidades"
-      subtitle="Espacios creados por Polo Connect para torneos, noticias y equipos. Unite, hablá o abandoná cuando quieras."
+      eyebrow={t("community.eyebrow")}
+      title={t("community.title")}
+      subtitle={t("community.subtitle")}
     >
-      <AdCarousel height={92} />
+      <AdCarousel images={communityAds} height={92} />
 
-      <SectionTitle title="Tus comunidades" />
+      <SectionTitle title={t("community.joined")} />
       {joinedChats.map((chat) => (
         <Pressable
           key={chat.title}
@@ -101,7 +110,7 @@ export default function CommunityScreen() {
         </Pressable>
       ))}
 
-      <SectionTitle title="Recomendaciones" />
+      <SectionTitle title={t("community.recommended")} />
       {recommendedChats.map((chat) => (
         <Card key={chat.title} style={styles.recommendationCard}>
           <View style={styles.chatRow}>
@@ -118,7 +127,7 @@ export default function CommunityScreen() {
             </View>
 
             <Pressable style={styles.joinButton}>
-              <Text style={styles.joinButtonText}>Unirse</Text>
+              <Text style={styles.joinButtonText}>{t("community.join")}</Text>
             </Pressable>
           </View>
         </Card>

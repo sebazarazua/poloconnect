@@ -31,7 +31,10 @@ export default function MarketScreen() {
 
   const renderProductCard = ({ item }: { item: Product }) => (
     <View style={styles.productCardContainer}>
-      <Pressable style={styles.productCard}>
+      <Pressable 
+        style={styles.productCard}
+        onPress={() => router.push(`/product-detail?id=${item.id}`)}
+      >
         <View style={styles.imageContainer}>
           <Image
             source={{ uri: item.image }}
@@ -50,7 +53,7 @@ export default function MarketScreen() {
         </View>
 
         <View style={styles.productInfo}>
-          <Text style={styles.productName}>{item.name}</Text>
+          <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
           <Text style={styles.productPrice}>USD {item.price.toLocaleString()}</Text>
         </View>
       </Pressable>
@@ -252,7 +255,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: colors.border
+    borderColor: colors.border,
+    flex: 1,
+    minHeight: 280
   },
   imageContainer: {
     position: "relative",

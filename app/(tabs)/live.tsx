@@ -7,10 +7,13 @@ import {
   View
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { SectionTitle } from "@/components/Card";
 import { AdCarousel } from "@/components/AdCarousel";
 import { Screen } from "@/components/Screen";
 import { colors } from "@/constants/theme";
+import { formatLiveDate } from "@/constants/i18n";
+import { useLocale } from "@/contexts/LocaleContext";
 
 interface Match {
   id: string;
@@ -145,7 +148,15 @@ const MATCHES: Match[] = [
 
 const TODAY = new Date(2026, 5, 2); // June 2, 2026
 
+const liveAds = [
+  require("../../assets/ads/live/slide-1.png"),
+  require("../../assets/ads/live/slide-2.png"),
+  require("../../assets/ads/live/slide-3.png")
+];
+
 export default function LiveScreen() {
+  const router = useRouter();
+  const { locale, t } = useLocale();
   const [filterTab, setFilterTab] = useState<"todos" | "vivo">("todos");
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const date = new Date(TODAY);
@@ -186,11 +197,11 @@ export default function LiveScreen() {
 
   return (
     <Screen
-      eyebrow="En vivo"
-      title="Transmisiones en vivo"
-      subtitle="Sigue los partidos en tiempo real."
+      eyebrow={t("live.eyebrow")}
+      title={t("live.title")}
+      subtitle={t("live.subtitle")}
     >
-      <AdCarousel height={95} />
+      <AdCarousel images={liveAds} height={95} />
 
       {/* Header con navegación de fechas */}
       <View style={styles.dateHeaderContainer}>
@@ -208,14 +219,10 @@ export default function LiveScreen() {
 
           <View style={styles.dateDisplay}>
             <Text style={styles.dateDisplayText}>
-              {selectedDate.toLocaleDateString("es-ES", {
-                weekday: "short",
-                day: "numeric",
-                month: "short"
-              }).toUpperCase()}
+              {formatLiveDate(locale, selectedDate).toUpperCase()}
             </Text>
             {selectedDate.getTime() === TODAY.getTime() && (
-              <Text style={styles.todayLabel}>HOY</Text>
+              <Text style={styles.todayLabel}>{t("live.today").toUpperCase()}</Text>
             )}
           </View>
 
@@ -246,7 +253,7 @@ export default function LiveScreen() {
                 filterTab === "todos" && styles.filterTabTextActive
               ]}
             >
-              TODOS
+                {t("live.all").toUpperCase()}
             </Text>
           </Pressable>
 
@@ -263,7 +270,7 @@ export default function LiveScreen() {
                 filterTab === "vivo" && styles.filterTabTextActive
               ]}
             >
-              VIVO ({liveCount})
+                {t("live.liveOnly", { count: liveCount }).toUpperCase()}
             </Text>
           </Pressable>
         </View>
@@ -277,13 +284,25 @@ export default function LiveScreen() {
               <View key={competition}>
                 <SectionTitle title={competition} />
                 {matches.map((match) => (
-                  <Pressable key={match.id} style={styles.matchCard}>
+                  <Pressable
+                    key={match.id}
+                    style={({ pressed }) => [
+                      styles.matchCard,
+                      pressed && styles.matchCardPressed
+                    ]}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/match-detail",
+                        params: { id: match.id }
+                      })
+                    }
+                  >
                     <View style={styles.matchHeader}>
                       <Text style={styles.time}>{match.time}</Text>
                       {match.status === "live" && (
                         <View style={styles.liveIndicator}>
                           <View style={styles.liveDot} />
-                          <Text style={styles.liveText}>EN VIVO</Text>
+                          <Text style={styles.liveText}>{t("live.liveBadge")}</Text>
                         </View>
                       )}
                     </View>
@@ -394,6 +413,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 12
+  },
+  matchCardPressed: {
+    backgroundColor: colors.surfaceStrong,
+    opacity: 0.86
   },
   matchHeader: {
     flexDirection: "row",

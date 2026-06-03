@@ -29,18 +29,10 @@ export function AuthScaffold({ children, title, subtitle, footerText }: AuthScaf
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.card}>
-            <View style={styles.brandRow}>
-              <View style={styles.logoBadge}>
-                <Image
-                  source={require("@/assets/logo.png")}
-                  style={styles.logoBadgeImage}
-                  resizeMode="contain"
-                />
-              </View>
-
+            <View style={styles.logoContainer}>
               <Image
-                source={require("@/assets/logo.png")}
-                style={styles.wordmark}
+                source={require("@/assets/logo-login.png")}
+                style={styles.horizontalLogo}
                 resizeMode="contain"
               />
             </View>
@@ -86,30 +78,14 @@ const styles = StyleSheet.create({
     shadowRadius: 28,
     elevation: 16
   },
-  brandRow: {
-    flexDirection: "row",
+  logoContainer: {
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 14,
-    gap: 14
+    marginBottom: 20
   },
-  logoBadge: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
-    borderWidth: 1,
-    borderColor: "#1c78d8",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#08101d"
-  },
-  logoBadgeImage: {
-    width: 42,
-    height: 42
-  },
-  wordmark: {
-    width: 150,
-    height: 44
+  horizontalLogo: {
+    width: 200,
+    height: 60
   },
   title: {
     color: "#ffffff",

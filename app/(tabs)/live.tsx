@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +14,7 @@ import { AdCarousel } from "@/components/AdCarousel";
 import { Screen } from "@/components/Screen";
 import { colors } from "@/constants/theme";
 import { formatLiveDate } from "@/constants/i18n";
+import { getTeamLogoSource } from "@/constants/teamLogos";
 import { useLocale } from "@/contexts/LocaleContext";
 
 interface Match {
@@ -147,6 +149,16 @@ const MATCHES: Match[] = [
 ];
 
 const TODAY = new Date(2026, 5, 2); // June 2, 2026
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+}
 
 const liveAds = [
   require("../../assets/ads/live/slide-1.png"),
@@ -308,21 +320,35 @@ export default function LiveScreen() {
                     </View>
 
                     <View style={styles.matchContent}>
-                      <View style={styles.teamSection}>
-                        <Text style={styles.teamName}>{match.team1}</Text>
-                        <Text style={styles.score}>{match.score1}</Text>
+                      <View style={styles.teamBlock}>
+                        <View style={styles.teamLogoPlaceholder}>
+                          <Image
+                            source={getTeamLogoSource(match.team1)}
+                            style={styles.teamLogoImg}
+                            resizeMode="cover"
+                          />
+                        </View>
+                        <Text style={styles.teamName} numberOfLines={2}>{match.team1}</Text>
                       </View>
 
-                      <View style={styles.vs}>
-                        <Text style={styles.vsText}>-</Text>
+                      <View style={styles.scoreBlock}>
+                        <Text style={styles.score}>
+                          {match.score1} - {match.score2}
+                        </Text>
                         {match.status === "live" && match.chukker && (
                           <Text style={styles.chukker}>{match.chukker}</Text>
                         )}
                       </View>
 
-                      <View style={styles.teamSection}>
-                        <Text style={styles.teamName}>{match.team2}</Text>
-                        <Text style={styles.score}>{match.score2}</Text>
+                      <View style={styles.teamBlock}>
+                        <View style={styles.teamLogoPlaceholder}>
+                          <Image
+                            source={getTeamLogoSource(match.team2)}
+                            style={styles.teamLogoImg}
+                            resizeMode="cover"
+                          />
+                        </View>
+                        <Text style={styles.teamName} numberOfLines={2}>{match.team2}</Text>
                       </View>
                     </View>
 
@@ -455,30 +481,41 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 12
   },
-  teamSection: {
-    flex: 1,
-    alignItems: "center"
+  teamBlock: {
+    width: 84,
+    alignItems: "center",
+    gap: 8
+  },
+  teamLogoPlaceholder: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceStrong,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden"
+  },
+  teamLogoImg: {
+    width: 56,
+    height: 56
   },
   teamName: {
     color: colors.text,
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 6
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center"
   },
-  score: {
-    color: colors.primary,
-    fontSize: 28,
-    fontWeight: "900"
-  },
-  vs: {
+  scoreBlock: {
+    flex: 1,
     alignItems: "center",
-    justifyContent: "center",
     gap: 4
   },
-  vsText: {
-    color: colors.muted,
-    fontSize: 16,
-    fontWeight: "600"
+  score: {
+    color: colors.primaryDark,
+    fontSize: 28,
+    fontWeight: "900"
   },
   chukker: {
     color: colors.muted,

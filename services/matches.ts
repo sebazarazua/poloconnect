@@ -131,3 +131,29 @@ export function getMatchById(id?: string | string[]) {
   const normalizedId = Array.isArray(id) ? id[0] : id;
   return MATCHES.find((match) => match.id === normalizedId) ?? MATCHES[2];
 }
+
+// Colores primarios de cada equipo para el placeholder
+const TEAM_COLORS: Record<string, { bg: string; text: string }> = {
+  "La Dolfina":         { bg: "0a2240", text: "ffffff" },
+  "Ellerstina":         { bg: "1a5276", text: "ffffff" },
+  "Coronel Suarez":     { bg: "7b241c", text: "ffffff" },
+  "Indios Chapaleufu":  { bg: "1e8449", text: "ffffff" },
+  "Monterrico":         { bg: "6e2fa0", text: "ffffff" },
+  "Las Acacias":        { bg: "b7950b", text: "ffffff" },
+  "Santa Maria":        { bg: "c0392b", text: "ffffff" },
+  "Sancaleta":          { bg: "117a65", text: "ffffff" },
+  "Palermo":            { bg: "1a237e", text: "ffffff" },
+  "Pilar":              { bg: "4a235a", text: "ffffff" },
+  "Chapaleufu":         { bg: "1e8449", text: "ffffff" },
+  "Flores":             { bg: "d35400", text: "ffffff" },
+  "Zona Norte":         { bg: "154360", text: "ffffff" },
+  "La Herminia":        { bg: "922b21", text: "ffffff" }
+};
+
+const DEFAULT_TEAM_COLOR = { bg: "244360", text: "ffffff" };
+
+export function getTeamLogoUrl(teamName: string, size = 128): string {
+  const color = TEAM_COLORS[teamName] ?? DEFAULT_TEAM_COLOR;
+  const encoded = encodeURIComponent(teamName);
+  return `https://ui-avatars.com/api/?name=${encoded}&background=${color.bg}&color=${color.text}&bold=true&size=${size}&font-size=0.40&rounded=false`;
+}

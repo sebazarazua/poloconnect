@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useRef, useState } from "react";
 import {
+  Image,
   ImageBackground,
   PanResponder,
   Pressable,
@@ -11,6 +12,7 @@ import {
 } from "react-native";
 import { Screen } from "@/components/Screen";
 import { colors } from "@/constants/theme";
+import { getTeamLogoSource } from "@/constants/teamLogos";
 import { getMatchById } from "@/services/matches";
 
 const videoPreview = require("../assets/home-match-bg.png");
@@ -157,7 +159,11 @@ function TeamSummary({ name, initials }: { name: string; initials: string }) {
   return (
     <View style={styles.teamSummary}>
       <View style={styles.teamLogo}>
-        <Text style={styles.teamLogoText}>{initials}</Text>
+        <Image
+          source={getTeamLogoSource(name, 116)}
+          style={styles.teamLogoImg}
+          resizeMode="cover"
+        />
       </View>
       <Text style={styles.teamName} numberOfLines={1}>
         {name.toUpperCase()}
@@ -372,12 +378,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: colors.border
+    borderColor: colors.border,
+    overflow: "hidden"
   },
-  teamLogoText: {
-    color: colors.primaryDark,
-    fontSize: 18,
-    fontWeight: "900"
+  teamLogoImg: {
+    width: 58,
+    height: 58
   },
   teamName: {
     color: colors.text,

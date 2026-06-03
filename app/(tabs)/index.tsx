@@ -17,8 +17,10 @@ import { SectionTitle } from "@/components/Card";
 import { AdCarousel } from "@/components/AdCarousel";
 import { Screen } from "@/components/Screen";
 import { colors } from "@/constants/theme";
+import { getTeamLogoSource } from "@/constants/teamLogos";
 import { formatHomeEyebrow } from "@/constants/i18n";
 import { useLocale } from "@/contexts/LocaleContext";
+import { getTeamLogoUrl } from "@/services/matches";
 
 const screenHorizontalPadding = 40;
 const featuredMatchBackground = require("../../assets/home-match-bg.png");
@@ -112,7 +114,11 @@ export default function HomeScreen() {
             <View style={styles.scoreRow}>
               <View style={styles.teamBlock}>
                 <View style={styles.teamLogo}>
-                  <Text style={styles.teamLogoText}>LD</Text>
+                  <Image
+                    source={getTeamLogoSource("La Dolfina", 92)}
+                    style={styles.teamLogoImg}
+                    resizeMode="cover"
+                  />
                 </View>
                 <Text style={styles.teamName} numberOfLines={1}>
                   LA DOLFINA
@@ -123,7 +129,11 @@ export default function HomeScreen() {
 
               <View style={styles.teamBlock}>
                 <View style={styles.teamLogo}>
-                  <Text style={styles.teamLogoText}>E</Text>
+                  <Image
+                    source={getTeamLogoSource("Ellerstina", 92)}
+                    style={styles.teamLogoImg}
+                    resizeMode="cover"
+                  />
                 </View>
                 <Text style={styles.teamName} numberOfLines={1}>
                   ELLERSTINA
@@ -132,7 +142,7 @@ export default function HomeScreen() {
             </View>
 
             <Pressable
-              style={({ pressed }) => [
+              style={({ pressed }: { pressed: boolean }) => [
                 styles.watchButton,
                 pressed && styles.watchButtonPressed
               ]}
@@ -276,12 +286,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(255, 255, 255, 0.94)",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.7)"
+    borderColor: "rgba(255, 255, 255, 0.7)",
+    overflow: "hidden"
   },
-  teamLogoText: {
-    color: colors.primaryDark,
-    fontSize: 15,
-    fontWeight: "900"
+  teamLogoImg: {
+    width: 46,
+    height: 46
   },
   teamName: {
     color: "#ffffff",

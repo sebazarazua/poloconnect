@@ -26,7 +26,7 @@ const translations = {
     "home.quickAccess": "Accesos rápidos",
     "home.calendar": "Calendario",
     "home.teamRegister": "Anota tu equipo",
-    "home.broadcast": "Transmitir partido",
+    "home.broadcast": "Partidos Emitidos",
     "home.news": "Noticias",
     "live.eyebrow": "Partidos",
     "live.title": "En vivo",

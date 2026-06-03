@@ -4,6 +4,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { LocaleProvider } from "@/contexts/LocaleContext";
 import { MarketProvider } from "@/contexts/MarketContext";
+import { CommunityProvider } from "@/contexts/CommunityContext";
 
 export default function RootLayout() {
   return (
@@ -11,8 +12,10 @@ export default function RootLayout() {
       <AuthProvider>
         <LocaleProvider>
           <MarketProvider>
-            <StatusBar style="dark" backgroundColor="#ffffff" />
-            <RootNavigator />
+            <CommunityProvider>
+              <StatusBar style="dark" backgroundColor="#ffffff" />
+              <RootNavigator />
+            </CommunityProvider>
           </MarketProvider>
         </LocaleProvider>
       </AuthProvider>
@@ -40,6 +43,7 @@ function RootNavigator() {
         <Stack.Screen name="notifications" />
         <Stack.Screen name="profile" />
         <Stack.Screen name="team-register" />
+        <Stack.Screen name="group-chat" />
       </Stack.Protected>
     </Stack>
   );

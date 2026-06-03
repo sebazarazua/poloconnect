@@ -20,7 +20,6 @@ import { colors } from "@/constants/theme";
 import { getTeamLogoSource } from "@/constants/teamLogos";
 import { formatHomeEyebrow } from "@/constants/i18n";
 import { useLocale } from "@/contexts/LocaleContext";
-import { getTeamLogoUrl } from "@/services/matches";
 
 const screenHorizontalPadding = 40;
 const featuredMatchBackground = require("../../assets/home-match-bg.png");
@@ -42,6 +41,8 @@ export default function HomeScreen() {
   const { locale, t } = useLocale();
   const carouselRef = useRef<ScrollView>(null);
   const [activeAd, setActiveAd] = useState(0);
+  const heroCarouselRef = useRef<ScrollView>(null);
+  const [activeHero, setActiveHero] = useState(0);
   const { width } = useWindowDimensions();
   const bannerWidth = Math.max(width - screenHorizontalPadding, 280);
 
@@ -51,6 +52,73 @@ export default function HomeScreen() {
     { key: "broadcast", label: t("home.broadcast"), icon: "play-circle-outline", route: "/broadcast" },
     { key: "news", label: t("home.news"), icon: "newspaper-outline" }
   ] as const;
+
+  type HeroItem =
+    | { type: "match" }
+    | {
+        type: "news";
+        source: string;
+        category: string;
+        title: string;
+        summary: string;
+        time: string;
+        accent: string;
+        background: string;
+        panel: string;
+        glow: string;
+      };
+
+  const heroItems: HeroItem[] = [
+    { type: "match" },
+    {
+      type: "news",
+      source: "Polo Hub",
+      category: "FICHAJE",
+      title: "Cambiaso renueva con La Dolfina por dos temporadas más",
+      summary: "El mejor polista del mundo firmó su continuidad en el equipo hasta el 2028.",
+      time: "Hace 2 horas",
+      accent: "#f7c66b",
+      background: "#0d4f8c",
+      panel: "rgba(255, 255, 255, 0.10)",
+      glow: "rgba(247, 198, 107, 0.22)"
+    },
+    {
+      type: "news",
+      source: "AAP Noticias",
+      category: "TORNEO",
+      title: "El Abierto de Palermo 2026 ya tiene fixture completo",
+      summary: "La Asociación Argentina de Polo publicó el calendario oficial del torneo más importante del mundo.",
+      time: "Hace 4 horas",
+      accent: "#53d6b5",
+      background: "#0a5a78",
+      panel: "rgba(255, 255, 255, 0.10)",
+      glow: "rgba(83, 214, 181, 0.20)"
+    },
+    {
+      type: "news",
+      source: "Polo Line",
+      category: "INTERNACIONAL",
+      title: "Argentina domina el ranking mundial con 8 jugadores en el top 10",
+      summary: "La FIP publicó la nueva clasificación donde Argentina sigue siendo la potencia del polo mundial.",
+      time: "Ayer",
+      accent: "#8dc2ff",
+      background: "#153f78",
+      panel: "rgba(255, 255, 255, 0.09)",
+      glow: "rgba(141, 194, 255, 0.18)"
+    },
+    {
+      type: "news",
+      source: "Equine Network",
+      category: "BIENESTAR",
+      title: "Nuevos protocolos de bienestar equino en torneos de alto handicap",
+      summary: "La FIP aprobó medidas más estrictas para el cuidado de los caballos durante competencias.",
+      time: "Ayer",
+      accent: "#ff9f7a",
+      background: "#6b3f63",
+      panel: "rgba(255, 255, 255, 0.10)",
+      glow: "rgba(255, 159, 122, 0.18)"
+    }
+  ];
 
   const handleQuickAccessPress = (key: string) => {
     if (key === "calendar") {
@@ -63,6 +131,17 @@ export default function HomeScreen() {
       // Navigate to news section
     }
   };
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveHero((current) => {
+        const next = (current + 1) % heroItems.length;
+        heroCarouselRef.current?.scrollTo({ x: next * bannerWidth, animated: true });
+        return next;
+      });
+    }, 4500);
+    return () => clearInterval(timer);
+  }, [bannerWidth]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -81,6 +160,11 @@ export default function HomeScreen() {
     return () => clearInterval(timer);
   }, [bannerWidth]);
 
+  const handleHeroMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const next = Math.round(event.nativeEvent.contentOffset.x / bannerWidth);
+    setActiveHero(next);
+  };
+
   const handleAdMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const nextAd = Math.round(event.nativeEvent.contentOffset.x / bannerWidth);
     setActiveAd(nextAd);
@@ -91,74 +175,159 @@ export default function HomeScreen() {
       eyebrow={formatHomeEyebrow(locale, new Date(2026, 5, 1))}
       title={t("home.welcome", { name: "Adrián" })}
     >
-      <ImageBackground
-        source={featuredMatchBackground}
-        style={styles.matchHero}
-        imageStyle={styles.matchHeroImage}
-        resizeMode="cover"
+      {/* ── Hero carousel: live match + news ── */}
+      <ScrollView
+        ref={heroCarouselRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        pagingEnabled
+        snapToInterval={bannerWidth}
+        decelerationRate="fast"
+        onMomentumScrollEnd={handleHeroMomentumEnd}
+        contentContainerStyle={styles.heroTrack}
+        style={{ width: bannerWidth }}
       >
-        <View style={styles.matchOverlay}>
-          <View>
-            <View style={styles.liveBadge}>
-              <View style={styles.liveBadgeDot} />
-              <Text style={styles.liveBadgeText}>{t("home.live")}</Text>
-            </View>
-
-            <Text style={styles.matchTournament}>
-              129° ABIERTO ARGENTINO DE POLO
-            </Text>
-            <Text style={styles.matchChukker}>CHUKKER 3</Text>
-          </View>
-
-          <View>
-            <View style={styles.scoreRow}>
-              <View style={styles.teamBlock}>
-                <View style={styles.teamLogo}>
-                  <Image
-                    source={getTeamLogoSource("La Dolfina", 92)}
-                    style={styles.teamLogoImg}
-                    resizeMode="cover"
-                  />
-                </View>
-                <Text style={styles.teamName} numberOfLines={1}>
-                  LA DOLFINA
-                </Text>
-              </View>
-
-              <Text style={styles.matchScore}>5 - 3</Text>
-
-              <View style={styles.teamBlock}>
-                <View style={styles.teamLogo}>
-                  <Image
-                    source={getTeamLogoSource("Ellerstina", 92)}
-                    style={styles.teamLogoImg}
-                    resizeMode="cover"
-                  />
-                </View>
-                <Text style={styles.teamName} numberOfLines={1}>
-                  ELLERSTINA
-                </Text>
-              </View>
-            </View>
-
-            <Pressable
-              style={({ pressed }: { pressed: boolean }) => [
-                styles.watchButton,
-                pressed && styles.watchButtonPressed
-              ]}
-              onPress={() =>
-                router.push({
-                  pathname: "/match-detail",
-                  params: { id: "2-1" }
-                })
-              }
+        {heroItems.map((item, index) =>
+          item.type === "match" ? (
+            <ImageBackground
+              key={index}
+              source={featuredMatchBackground}
+              style={[styles.matchHero, { width: bannerWidth }]}
+              imageStyle={styles.matchHeroImage}
+              resizeMode="cover"
             >
-              <Text style={styles.watchButtonText}>{t("home.watchLive")}</Text>
-              <Ionicons name="play" size={14} color="#ffffff" />
-            </Pressable>
-          </View>
-        </View>
-      </ImageBackground>
+              <View style={styles.matchOverlay}>
+                <View>
+                  <View style={styles.liveBadge}>
+                    <View style={styles.liveBadgeDot} />
+                    <Text style={styles.liveBadgeText}>{t("home.live")}</Text>
+                  </View>
+
+                  <Text style={styles.matchTournament}>
+                    129° ABIERTO ARGENTINO DE POLO
+                  </Text>
+                  <Text style={styles.matchChukker}>CHUKKER 3</Text>
+                </View>
+
+                <View>
+                  <View style={styles.scoreRow}>
+                    <View style={styles.teamBlock}>
+                      <View style={styles.teamLogo}>
+                        <Image
+                          source={getTeamLogoSource("La Dolfina", 92)}
+                          style={styles.teamLogoImg}
+                          resizeMode="cover"
+                        />
+                      </View>
+                      <Text style={styles.teamName} numberOfLines={1}>
+                        LA DOLFINA
+                      </Text>
+                    </View>
+
+                    <Text style={styles.matchScore}>5 - 3</Text>
+
+                    <View style={styles.teamBlock}>
+                      <View style={styles.teamLogo}>
+                        <Image
+                          source={getTeamLogoSource("Ellerstina", 92)}
+                          style={styles.teamLogoImg}
+                          resizeMode="cover"
+                        />
+                      </View>
+                      <Text style={styles.teamName} numberOfLines={1}>
+                        ELLERSTINA
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Pressable
+                    style={({ pressed }: { pressed: boolean }) => [
+                      styles.watchButton,
+                      pressed && styles.watchButtonPressed
+                    ]}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/match-detail",
+                        params: { id: "2-1" }
+                      })
+                    }
+                  >
+                    <Text style={styles.watchButtonText}>{t("home.watchLive")}</Text>
+                    <Ionicons name="play" size={14} color="#ffffff" />
+                  </Pressable>
+                </View>
+              </View>
+            </ImageBackground>
+          ) : (
+            <View
+              key={index}
+              style={[
+                styles.matchHero,
+                styles.newsHero,
+                { width: bannerWidth, backgroundColor: item.background }
+              ]}
+            >
+              <View style={styles.newsBackdrop}>
+                <View
+                  style={[
+                    styles.newsGlowPrimary,
+                    { backgroundColor: item.glow }
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.newsGlowSecondary,
+                    { borderColor: `${item.accent}55` }
+                  ]}
+                />
+              </View>
+
+              <View style={styles.newsOverlay}>
+                <View
+                  style={[
+                    styles.newsKickerLine,
+                    { backgroundColor: item.accent }
+                  ]}
+                />
+
+                <View
+                  style={[
+                    styles.newsContentPanel,
+                    { backgroundColor: item.panel }
+                  ]}
+                >
+                  <View style={styles.newsSourceRow}>
+                    <View
+                      style={[
+                        styles.newsCategoryBadge,
+                        { backgroundColor: item.accent }
+                      ]}
+                    >
+                      <Text style={styles.newsCategoryText}>{item.category}</Text>
+                    </View>
+                    <Text style={styles.newsSourceText}>{item.source}</Text>
+                    <Text style={styles.newsTime}>{item.time}</Text>
+                  </View>
+
+                  <View style={styles.newsBody}>
+                    <Text style={styles.newsTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.newsSummary} numberOfLines={2}>
+                      {item.summary}
+                    </Text>
+                    <Pressable style={styles.readMoreButton}>
+                      <Text style={styles.readMoreText}>Leer más</Text>
+                      <Ionicons name="arrow-forward" size={13} color="#ffffff" />
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            </View>
+          )
+        )}
+      </ScrollView>
+
 
       <ScrollView
         ref={carouselRef}
@@ -217,7 +386,7 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   matchHero: {
-    minHeight: 220,
+    height: 220,
     borderRadius: 18,
     overflow: "hidden",
     marginBottom: 14,
@@ -312,10 +481,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     borderRadius: 7,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 17,
-    paddingVertical: 12,
-    marginTop: 16
+    marginTop: 16,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)"
   },
   watchButtonPressed: {
     opacity: 0.82
@@ -390,5 +561,133 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     marginTop: 8
+  },
+
+  // Hero carousel
+  heroTrack: {
+    marginBottom: 0
+  },
+  heroDots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 10,
+    marginBottom: 14
+  },
+
+  // News slide
+  newsHero: {
+    borderWidth: 1,
+    borderColor: "rgba(217, 233, 247, 0.35)",
+    position: "relative"
+  },
+  newsBackdrop: {
+    ...StyleSheet.absoluteFillObject
+  },
+  newsOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    gap: 0,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 12
+  },
+  newsGlowPrimary: {
+    position: "absolute",
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    top: -72,
+    right: -42
+  },
+  newsGlowSecondary: {
+    position: "absolute",
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    bottom: -32,
+    left: -26,
+    borderWidth: 1,
+    backgroundColor: "rgba(255,255,255,0.03)"
+  },
+  newsKickerLine: {
+    width: 42,
+    height: 4,
+    borderRadius: 999,
+    marginBottom: 8,
+    marginLeft: 4
+  },
+  newsContentPanel: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.16)",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: "#04172b",
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6
+  },
+  newsSourceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8
+  },
+  newsCategoryBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5
+  },
+  newsCategoryText: {
+    color: "#102235",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.8
+  },
+  newsSourceText: {
+    color: "rgba(255,255,255,0.82)",
+    fontSize: 11,
+    fontWeight: "700",
+    flex: 1
+  },
+  newsTime: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 10,
+    fontWeight: "700"
+  },
+  newsBody: {
+    gap: 6
+  },
+  newsTitle: {
+    color: "#ffffff",
+    fontSize: 18,
+    fontWeight: "900",
+    lineHeight: 22,
+    letterSpacing: -0.3
+  },
+  newsSummary: {
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 12,
+    lineHeight: 16
+  },
+  readMoreButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)"
+  },
+  readMoreText: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "800"
   }
 });

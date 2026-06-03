@@ -1,10 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Card, SectionTitle } from "@/components/Card";
 import { Screen } from "@/components/Screen";
 import { AdCarousel } from "@/components/AdCarousel";
 import { colors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
+import { useCommunity } from "@/contexts/CommunityContext";
+import type { ChatItem } from "@/contexts/CommunityContext";
 
 const communityAds = [
   require("../../assets/ads/community/slide-1.png"),
@@ -14,57 +17,8 @@ const communityAds = [
 
 export default function CommunityScreen() {
   const { t } = useLocale();
-
-  const joinedChats = [
-    {
-      title: "Abierto de Palermo 2026",
-      description: t("community.joinedDescriptions.palermo"),
-      members: `1.8k ${t("community.members")}`,
-      unread: 6,
-      icon: "trophy-outline" as const,
-      tone: "#d8ecff"
-    },
-    {
-      title: "La Dolfina vs Ellerstina",
-      description: t("community.joinedDescriptions.match"),
-      members: `842 ${t("community.members")}`,
-      unread: 2,
-      icon: "radio-outline" as const,
-      tone: "#e8f7f4"
-    },
-    {
-      title: "Mercado de jugadores",
-      description: t("community.joinedDescriptions.market"),
-      members: `526 ${t("community.members")}`,
-      unread: 0,
-      icon: "swap-horizontal-outline" as const,
-      tone: "#fff4dc"
-    }
-  ];
-
-  const recommendedChats = [
-    {
-      title: "Hurlingham Open",
-      description: t("community.recommendedDescriptions.hurlingham"),
-      members: t("community.availableNow"),
-      icon: "calendar-outline" as const,
-      tone: "#eaf5ff"
-    },
-    {
-      title: "Noticias del alto handicap",
-      description: t("community.recommendedDescriptions.news"),
-      members: t("community.new"),
-      icon: "newspaper-outline" as const,
-      tone: "#eef8e8"
-    },
-    {
-      title: "Tortugas Country Club",
-      description: t("community.recommendedDescriptions.tortugas"),
-      members: t("community.nextTournament"),
-      icon: "shield-outline" as const,
-      tone: "#f1edff"
-    }
-  ];
+  const router = useRouter();
+  const { joinedChats, recommendedChats, joinChat } = useCommunity();
 
   return (
     <Screen
@@ -75,17 +29,16 @@ export default function CommunityScreen() {
       <AdCarousel images={communityAds} height={92} />
 
       <SectionTitle title={t("community.joined")} />
-      {joinedChats.map((chat) => (
+      {joinedChats.map((chat: ChatItem) => (
         <Pressable
-          key={chat.title}
+          key={chat.id}
           style={({ pressed }) => [
             styles.chatCard,
             pressed && styles.chatCardPressed
           ]}
-          onPress={() => {
-            // Navigate to chat
-            console.log("Entering chat:", chat.title);
-          }}
+          onPress={() =>
+            router.push({ pathname: "/group-chat", params: { chatId: chat.id } })
+          }
         >
           <View style={styles.chatRow}>
             <View style={[styles.chatIcon, { backgroundColor: chat.tone }]}>
@@ -106,13 +59,23 @@ export default function CommunityScreen() {
               </Text>
               <Text style={styles.chatMeta}>{chat.members}</Text>
             </View>
+
+            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
           </View>
         </Pressable>
       ))}
 
+      {joinedChats.length === 0 && (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>
+            Todavía no te uniste a ningún chat. ¡Explorá los recomendados!
+          </Text>
+        </View>
+      )}
+
       <SectionTitle title={t("community.recommended")} />
-      {recommendedChats.map((chat) => (
-        <Card key={chat.title} style={styles.recommendationCard}>
+      {recommendedChats.map((chat: ChatItem) => (
+        <Card key={chat.id} style={styles.recommendationCard}>
           <View style={styles.chatRow}>
             <View style={[styles.chatIcon, { backgroundColor: chat.tone }]}>
               <Ionicons name={chat.icon} size={25} color={colors.primaryDark} />
@@ -123,15 +86,29 @@ export default function CommunityScreen() {
               <Text style={styles.chatDescription} numberOfLines={2}>
                 {chat.description}
               </Text>
-              <Text style={styles.chatMeta}>{chat.members}</Text>
+              <Text style={styles.chatMeta}>{chat.recommendedLabel}</Text>
             </View>
 
-            <Pressable style={styles.joinButton}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.joinButton,
+                pressed && { opacity: 0.75 }
+              ]}
+              onPress={() => joinChat(chat.id)}
+            >
               <Text style={styles.joinButtonText}>{t("community.join")}</Text>
             </Pressable>
           </View>
         </Card>
       ))}
+
+      {recommendedChats.length === 0 && (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>
+            Ya estás en todos los grupos recomendados 🎉
+          </Text>
+        </View>
+      )}
     </Screen>
   );
 }
@@ -216,5 +193,16 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 13,
     fontWeight: "900"
+  },
+  emptyState: {
+    paddingVertical: 20,
+    paddingHorizontal: 8,
+    alignItems: "center"
+  },
+  emptyStateText: {
+    color: colors.muted,
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20
   }
 });

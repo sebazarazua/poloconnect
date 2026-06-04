@@ -13,7 +13,7 @@ import {
   View
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors } from "@/constants/theme";
+import { AppColors, useThemeColors } from "@/constants/theme";
 import { useCommunity } from "@/contexts/CommunityContext";
 import type { ChatIconName } from "@/contexts/CommunityContext";
 
@@ -32,51 +32,36 @@ interface Message {
 
 const CHAT_MESSAGES: Record<string, Message[]> = {
   palermo: [
-    { id: "1", userId: "santi", userName: "Santiago Pérez", text: "¿Alguien sabe quién enfrenta a La Dolfina en cuartos?", time: "09:12", isMe: false },
-    { id: "2", userId: "maria", userName: "María Fernández", text: "Creo que juegan contra Ellerstina el sábado a las 15:00", time: "09:14", isMe: false },
-    { id: "3", userId: "me", userName: "Vos", text: "Vi en el fixture oficial que es el domingo a las 16:30", time: "09:15", isMe: true },
-    { id: "4", userId: "carlos", userName: "Carlos Ibáñez", text: "Cambiaso viene con todo este año, hizo 4 goles ayer en la prueba 🔥", time: "09:18", isMe: false },
-    { id: "5", userId: "santi", userName: "Santiago Pérez", text: "El nivel esta temporada está increíble. ¿Tienen link para ver el partido?", time: "09:20", isMe: false },
-    { id: "6", userId: "maria", userName: "María Fernández", text: "Lo están transmitiendo por PoloTV y también en YouTube de la AAP", time: "09:21", isMe: false },
-    { id: "7", userId: "me", userName: "Vos", text: "Gracias María! 👍", time: "09:22", isMe: true },
-    { id: "8", userId: "carlos", userName: "Carlos Ibáñez", text: "¿Alguien va en persona al campo de palermo este fin de semana?", time: "09:45", isMe: false },
-    { id: "9", userId: "santi", userName: "Santiago Pérez", text: "Yo voy el sábado con mi familia. Las entradas en la AAP", time: "09:47", isMe: false },
-    { id: "10", userId: "me", userName: "Vos", text: "Yo también voy el sábado, nos cruzamos ahí!", time: "09:50", isMe: true },
-    { id: "11", userId: "maria", userName: "María Fernández", text: "Qué envidia, yo lo miro desde casa jaja 😂", time: "09:51", isMe: false },
-    { id: "12", userId: "carlos", userName: "Carlos Ibáñez", text: "El ambiente en Palermo es único, van a disfrutar 🏆", time: "09:53", isMe: false }
+    { id: "1", userId: "martin", userName: "Martín", text: "¿Alguien sabe cuándo hay práctica de polo arena en Roldán?", time: "20:58", isMe: false },
+    { id: "2", userId: "me", userName: "Vos", text: "El martes a las 21 hs. Confirmaron la cancha techada.", time: "21:00", isMe: true },
+    { id: "3", userId: "lucas", userName: "Lucas", text: "¿La convocatoria es para nivel inicial o intermedio?", time: "21:03", isMe: false },
+    { id: "4", userId: "me", userName: "Vos", text: "Intermedio. Están organizando una práctica con rotación por chukkers.", time: "21:05", isMe: true },
+    { id: "5", userId: "sofia", userName: "Sofía", text: "Puedo sumarme si necesitan completar una posición.", time: "21:08", isMe: false },
+    { id: "6", userId: "martin", userName: "Martín", text: "Perfecto, lo consulto con la organización y aviso por acá.", time: "21:10", isMe: false }
   ],
   dolfina: [
-    { id: "1", userId: "rodri", userName: "Rodrigo Salas", text: "Ese gol de Pieres en el tercer chukker fue de otro nivel 🔥", time: "15:02", isMe: false },
-    { id: "2", userId: "ana", userName: "Ana Gutiérrez", text: "La Dolfina está dominando pero Ellerstina sigue en partido", time: "15:04", isMe: false },
-    { id: "3", userId: "me", userName: "Vos", text: "El marcador es 6-4, todavía hay partido!", time: "15:05", isMe: true },
-    { id: "4", userId: "pedro", userName: "Pedro Montes", text: "Falta un chukker y medio, puede cambiar todo", time: "15:07", isMe: false },
-    { id: "5", userId: "rodri", userName: "Rodrigo Salas", text: "Cambiaso está jugando de memoria hoy, impresionante", time: "15:10", isMe: false },
-    { id: "6", userId: "ana", userName: "Ana Gutiérrez", text: "El ambiente está increíble según los que están en vivo", time: "15:12", isMe: false },
-    { id: "7", userId: "me", userName: "Vos", text: "Alguien tiene el stream? El canal no me está andando", time: "15:14", isMe: true },
-    { id: "8", userId: "pedro", userName: "Pedro Montes", text: "Probá con el canal oficial de AAP en YouTube", time: "15:15", isMe: false },
-    { id: "9", userId: "rodri", userName: "Rodrigo Salas", text: "GOL! La Dolfina 7 - Ellerstina 4 👏", time: "15:22", isMe: false },
-    { id: "10", userId: "ana", userName: "Ana Gutiérrez", text: "Ya está, se cerró el partido. ¡Vamos La Dolfina!", time: "15:30", isMe: false }
+    { id: "1", userId: "jose", userName: "José", text: "Voy a Córdoba y tengo lugar para 2 caballos.", time: "08:12", isMe: false },
+    { id: "2", userId: "pedro", userName: "Pedro", text: "Tengo que llevar 2 yeguas a Córdoba capital.", time: "08:15", isMe: false },
+    { id: "3", userId: "jose", userName: "José", text: "Llámame al 234556677.", time: "08:17", isMe: false },
+    { id: "4", userId: "mariana", userName: "Mariana", text: "¿Salís desde Pilar o desde zona norte?", time: "08:19", isMe: false },
+    { id: "5", userId: "jose", userName: "José", text: "Salgo desde Pilar el viernes a la tarde.", time: "08:21", isMe: false },
+    { id: "6", userId: "pedro", userName: "Pedro", text: "Perfecto, te llamo y coordinamos documentación, horario y punto de carga.", time: "08:25", isMe: false }
   ],
   mercado: [
-    { id: "1", userId: "lucia", userName: "Lucía Torres", text: "Confirman que Facundo Pieres no renueva con Ellerstina", time: "11:00", isMe: false },
-    { id: "2", userId: "hernan", userName: "Hernán Díaz", text: "¿A qué equipo se va? ¿Tienen info?", time: "11:02", isMe: false },
-    { id: "3", userId: "me", userName: "Vos", text: "Escuché que hay interés fuerte de La Natividad", time: "11:04", isMe: true },
-    { id: "4", userId: "vale", userName: "Valentina Ruiz", text: "El agente de Pieres no confirmó nada todavía", time: "11:06", isMe: false },
-    { id: "5", userId: "lucia", userName: "Lucía Torres", text: "También dicen que Pablo Mac Donough busca equipo para la próxima", time: "11:09", isMe: false },
-    { id: "6", userId: "hernan", userName: "Hernán Díaz", text: "Son los dos mejores en el mercado ahora mismo", time: "11:11", isMe: false },
-    { id: "7", userId: "me", userName: "Vos", text: "Con Mac Donough libre cualquier equipo top va a quererlo", time: "11:13", isMe: true },
-    { id: "8", userId: "vale", userName: "Valentina Ruiz", text: "Palermo sin esos dos va a ser muy diferente este año", time: "11:15", isMe: false },
-    { id: "9", userId: "lucia", userName: "Lucía Torres", text: "Esperen el anuncio oficial de la AAP para la semana que viene 🎯", time: "11:20", isMe: false }
+    { id: "1", userId: "fernando", userName: "Fernando", text: "¿Dónde se juega el próximo torneo de roda?", time: "12:02", isMe: false },
+    { id: "2", userId: "julian", userName: "Julián", text: "Necesito comprar una rueda para entrenamiento. ¿Alguna recomendación?", time: "12:06", isMe: false },
+    { id: "3", userId: "pedro", userName: "Pedro", text: "Hoy hay práctica en Ellerstina a las 17 hs, con cupos limitados.", time: "12:12", isMe: false },
+    { id: "4", userId: "fernando", userName: "Fernando", text: "Me interesa participar. ¿Puedo confirmar asistencia?", time: "12:16", isMe: false },
+    { id: "5", userId: "pedro", userName: "Pedro", text: "Sí, hay un cupo disponible. Lleva casco y equipo completo.", time: "12:18", isMe: false },
+    { id: "6", userId: "julian", userName: "Julián", text: "Después pasen contacto del proveedor de ruedas, por favor.", time: "12:21", isMe: false }
   ],
   hurlingham: [
-    { id: "1", userId: "diego", userName: "Diego Alvarado", text: "¡Bienvenidos al chat oficial del Hurlingham Open! 🏇", time: "10:00", isMe: false },
-    { id: "2", userId: "flor", userName: "Florencia Paz", text: "El fixture ya está disponible en la web del club", time: "10:02", isMe: false },
-    { id: "3", userId: "me", userName: "Vos", text: "¿Cuándo arranca el torneo?", time: "10:05", isMe: true },
-    { id: "4", userId: "matias", userName: "Matías Castro", text: "El 15 de junio es el partido inaugural!", time: "10:06", isMe: false },
-    { id: "5", userId: "diego", userName: "Diego Alvarado", text: "Los equipos confirmados son La Dolfina, Ellerstina, La Natividad y otros 5 más", time: "10:08", isMe: false },
-    { id: "6", userId: "flor", userName: "Florencia Paz", text: "El nivel este año promete ser histórico 💪", time: "10:10", isMe: false },
-    { id: "7", userId: "me", userName: "Vos", text: "Va a estar increíble! Me anoto", time: "10:12", isMe: true },
-    { id: "8", userId: "matias", userName: "Matías Castro", text: "Las entradas salen el próximo lunes en Ticketek", time: "10:15", isMe: false }
+    { id: "1", userId: "nico", userName: "Nico", text: "¿Dónde hay una práctica en Luján esta tarde?", time: "14:47", isMe: false },
+    { id: "2", userId: "me", userName: "Vos", text: "En La Ensenada hay cupo para tres jugadores a las 15 hs.", time: "14:50", isMe: true },
+    { id: "3", userId: "cata", userName: "Cata", text: "¿De cuántos goles es la práctica?", time: "14:52", isMe: false },
+    { id: "4", userId: "me", userName: "Vos", text: "Bajo handicap, ideal para 0 a 4 goles.", time: "14:54", isMe: true },
+    { id: "5", userId: "nico", userName: "Nico", text: "Me sirve. Confirmo mi asistencia si todavía hay disponibilidad.", time: "14:56", isMe: false },
+    { id: "6", userId: "cata", userName: "Cata", text: "Avísenme si queda un cupo, estoy cerca de Luján.", time: "14:59", isMe: false }
   ],
   noticias: [
     { id: "1", userId: "gonza", userName: "Gonzalo Reyes", text: "Nueva clasificación de handicap publicada por la AAP 📋", time: "08:30", isMe: false },
@@ -111,7 +96,24 @@ const USER_COLORS = [
   "#0f766e"
 ];
 
+const USER_COLOR_BY_ID: Record<string, string> = {
+  martin: "#064f99",
+  lucas: "#147d6f",
+  sofia: "#b7791f",
+  jose: "#7c3aed",
+  pedro: "#be185d",
+  mariana: "#0f766e",
+  fernando: "#1d4ed8",
+  julian: "#047857",
+  nico: "#9333ea",
+  cata: "#c2410c"
+};
+
 function getUserColor(userId: string): string {
+  if (USER_COLOR_BY_ID[userId]) {
+    return USER_COLOR_BY_ID[userId];
+  }
+
   let hash = 0;
   for (let i = 0; i < userId.length; i++) {
     hash = userId.charCodeAt(i) + ((hash << 5) - hash);
@@ -134,6 +136,9 @@ function MessageBubble({
   msg: Message;
   showName: boolean;
 }) {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
+
   if (msg.isMe) {
     return (
       <View style={styles.rowMe}>
@@ -174,6 +179,8 @@ function MessageBubble({
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
 export default function GroupChatScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -310,10 +317,10 @@ export default function GroupChatScreen() {
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#ffffff"
+    backgroundColor: colors.background
   },
   flex: {
     flex: 1
@@ -327,7 +334,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.background,
     gap: 10
   },
   backBtn: {
@@ -365,7 +372,7 @@ const styles = StyleSheet.create({
   // Messages list
   messagesList: {
     flex: 1,
-    backgroundColor: "#dce8f5"
+    backgroundColor: colors.surfaceStrong
   },
   messagesContent: {
     paddingHorizontal: 12,
@@ -407,7 +414,7 @@ const styles = StyleSheet.create({
     marginLeft: 12
   },
   bubbleOther: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.background,
     borderRadius: 18,
     borderBottomLeftRadius: 4,
     paddingHorizontal: 13,
@@ -461,7 +468,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     paddingHorizontal: 12,
     paddingTop: 10,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.background,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     gap: 10

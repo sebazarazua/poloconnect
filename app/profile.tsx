@@ -10,10 +10,12 @@ import {
   View
 } from "react-native";
 import { Screen } from "@/components/Screen";
-import { colors } from "@/constants/theme";
+import { AppColors, useThemeColors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function ProfileScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const router = useRouter();
   const { user } = useAuth();
 
@@ -214,8 +216,8 @@ export default function ProfileScreen() {
         <Text style={styles.sectionTitle}>Mis accesos</Text>
 
         <Pressable style={styles.linkRow} onPress={() => router.push("/favorites")}>
-          <View style={[styles.linkIcon, { backgroundColor: "#ffeaea" }]}>
-            <Ionicons name="heart" size={17} color="#df4b4b" />
+          <View style={[styles.linkIcon, { backgroundColor: colors.dangerSoft }]}>
+            <Ionicons name="heart" size={17} color={colors.danger} />
           </View>
           <Text style={styles.linkText}>Mis productos favoritos</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.muted} />
@@ -225,7 +227,7 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   avatarSection: {
     alignItems: "center",
     marginBottom: 24,
@@ -331,7 +333,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 14,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.background,
     overflow: "hidden"
   },
   input: {

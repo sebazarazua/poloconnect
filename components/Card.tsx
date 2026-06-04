@@ -1,16 +1,22 @@
 import { PropsWithChildren } from "react";
 import { StyleSheet, Text, View, ViewStyle } from "react-native";
-import { colors, radius } from "@/constants/theme";
+import { AppColors, radius, useThemeColors } from "@/constants/theme";
 
 type CardProps = PropsWithChildren<{
   style?: ViewStyle;
 }>;
 
 export function Card({ children, style }: CardProps) {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
+
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
 export function SectionTitle({ title, action }: { title: string; action?: string }) {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
+
   return (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -20,6 +26,9 @@ export function SectionTitle({ title, action }: { title: string; action?: string
 }
 
 export function Badge({ label }: { label: string }) {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
+
   return (
     <View style={styles.badge}>
       <Text style={styles.badgeText}>{label}</Text>
@@ -27,7 +36,7 @@ export function Badge({ label }: { label: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderColor: colors.border,

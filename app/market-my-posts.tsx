@@ -2,10 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/components/Screen";
-import { colors } from "@/constants/theme";
+import { AppColors, useThemeColors } from "@/constants/theme";
 import { useMarket } from "@/contexts/MarketContext";
 
 export default function MarketMyPostsScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const router = useRouter();
   const { myProducts, deleteProduct } = useMarket();
 
@@ -48,7 +50,7 @@ export default function MarketMyPostsScreen() {
                     style={[styles.actionButton, styles.deleteButton]}
                     onPress={() => deleteProduct(product.id)}
                   >
-                    <Ionicons name="trash-outline" size={16} color="#b42318" />
+                    <Ionicons name="trash-outline" size={16} color={colors.danger} />
                     <Text style={[styles.actionText, styles.deleteText]}>Eliminar</Text>
                   </Pressable>
                 </View>
@@ -61,7 +63,7 @@ export default function MarketMyPostsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   list: {
     gap: 12,
     paddingBottom: 8
@@ -116,7 +118,7 @@ const styles = StyleSheet.create({
     borderColor: "#cfe2f5"
   },
   deleteButton: {
-    backgroundColor: "#fff1ef",
+    backgroundColor: colors.dangerSoft,
     borderWidth: 1,
     borderColor: "#ffd2cc"
   },
@@ -126,7 +128,7 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   deleteText: {
-    color: "#b42318"
+    color: colors.danger
   },
   emptyState: {
     alignItems: "center",

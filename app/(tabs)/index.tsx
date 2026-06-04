@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Image,
   ImageBackground,
+  Linking,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
@@ -16,13 +17,16 @@ import {
 import { SectionTitle } from "@/components/Card";
 import { AdCarousel } from "@/components/AdCarousel";
 import { Screen } from "@/components/Screen";
-import { colors } from "@/constants/theme";
+import { useAppDrawer } from "@/components/AppDrawer";
+import { AppColors, useThemeColors } from "@/constants/theme";
 import { getTeamLogoSource } from "@/constants/teamLogos";
 import { formatHomeEyebrow } from "@/constants/i18n";
 import { useLocale } from "@/contexts/LocaleContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 const screenHorizontalPadding = 40;
 const featuredMatchBackground = require("../../assets/home-match-bg.png");
+const poloHubUrl = "https://polohub.net/";
 
 const ads = [
   require("../../assets/ads/home/hero-1.png"),
@@ -37,18 +41,34 @@ const compactAds = [
 ];
 
 export default function HomeScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const router = useRouter();
+  const { setDrawerGestureBlocked } = useAppDrawer();
   const { locale, t } = useLocale();
+  const { user } = useAuth();
   const carouselRef = useRef<ScrollView>(null);
   const [activeAd, setActiveAd] = useState(0);
   const heroCarouselRef = useRef<ScrollView>(null);
   const [activeHero, setActiveHero] = useState(0);
   const { width } = useWindowDimensions();
   const bannerWidth = Math.max(width - screenHorizontalPadding, 280);
+  const welcomeName = user?.firstName?.trim() || "Adrian";
+
+  const openPoloHub = () => {
+    Linking.openURL(poloHubUrl);
+  };
+
+  const openFeaturedMatch = () => {
+    router.push({
+      pathname: "/match-detail",
+      params: { id: "2-1" }
+    });
+  };
 
   const quickAccessItems = [
     { key: "calendar", label: t("home.calendar"), icon: "calendar-outline", route: "/(tabs)/tournaments" },
-    { key: "team-register", label: t("home.teamRegister"), icon: "person-add-outline", route: "/team-register" },
+    { key: "community", label: "Comunidades", icon: "people-outline", route: "/(tabs)/community" },
     { key: "broadcast", label: t("home.broadcast"), icon: "play-circle-outline", route: "/broadcast" },
     { key: "news", label: t("home.news"), icon: "newspaper-outline" }
   ] as const;
@@ -125,10 +145,10 @@ export default function HomeScreen() {
       router.push("/(tabs)/tournaments");
     } else if (key === "broadcast") {
       router.push("/broadcast");
-    } else if (key === "team-register") {
-      router.push("/team-register");
+    } else if (key === "community") {
+      router.push("/(tabs)/community");
     } else if (key === "news") {
-      // Navigate to news section
+      openPoloHub();
     }
   };
 
@@ -163,17 +183,19 @@ export default function HomeScreen() {
   const handleHeroMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = Math.round(event.nativeEvent.contentOffset.x / bannerWidth);
     setActiveHero(next);
+    setDrawerGestureBlocked(false);
   };
 
   const handleAdMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const nextAd = Math.round(event.nativeEvent.contentOffset.x / bannerWidth);
     setActiveAd(nextAd);
+    setDrawerGestureBlocked(false);
   };
 
   return (
     <Screen
       eyebrow={formatHomeEyebrow(locale, new Date(2026, 5, 1))}
-      title={t("home.welcome", { name: "Adrián" })}
+      title={t("home.welcome", { name: welcomeName })}
     >
       {/* ── Hero carousel: live match + news ── */}
       <ScrollView
@@ -183,19 +205,29 @@ export default function HomeScreen() {
         pagingEnabled
         snapToInterval={bannerWidth}
         decelerationRate="fast"
+        onTouchStart={() => setDrawerGestureBlocked(true)}
+        onTouchEnd={() => setDrawerGestureBlocked(false)}
+        onTouchCancel={() => setDrawerGestureBlocked(false)}
+        onScrollBeginDrag={() => setDrawerGestureBlocked(true)}
+        onScrollEndDrag={() => setDrawerGestureBlocked(false)}
         onMomentumScrollEnd={handleHeroMomentumEnd}
+        onMomentumScrollBegin={() => setDrawerGestureBlocked(true)}
         contentContainerStyle={styles.heroTrack}
         style={{ width: bannerWidth }}
       >
         {heroItems.map((item, index) =>
           item.type === "match" ? (
-            <ImageBackground
+            <Pressable
               key={index}
-              source={featuredMatchBackground}
               style={[styles.matchHero, { width: bannerWidth }]}
-              imageStyle={styles.matchHeroImage}
-              resizeMode="cover"
+              onPress={openFeaturedMatch}
             >
+              <ImageBackground
+                source={featuredMatchBackground}
+                style={styles.matchHeroFill}
+                imageStyle={styles.matchHeroImage}
+                resizeMode="cover"
+              >
               <View style={styles.matchOverlay}>
                 <View>
                   <View style={styles.liveBadge}>
@@ -209,7 +241,7 @@ export default function HomeScreen() {
                   <Text style={styles.matchChukker}>CHUKKER 3</Text>
                 </View>
 
-                <View>
+                <View style={styles.matchBottom}>
                   <View style={styles.scoreRow}>
                     <View style={styles.teamBlock}>
                       <View style={styles.teamLogo}>
@@ -239,33 +271,19 @@ export default function HomeScreen() {
                       </Text>
                     </View>
                   </View>
-
-                  <Pressable
-                    style={({ pressed }: { pressed: boolean }) => [
-                      styles.watchButton,
-                      pressed && styles.watchButtonPressed
-                    ]}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/match-detail",
-                        params: { id: "2-1" }
-                      })
-                    }
-                  >
-                    <Text style={styles.watchButtonText}>{t("home.watchLive")}</Text>
-                    <Ionicons name="play" size={14} color="#ffffff" />
-                  </Pressable>
                 </View>
               </View>
-            </ImageBackground>
+              </ImageBackground>
+            </Pressable>
           ) : (
-            <View
+            <Pressable
               key={index}
               style={[
                 styles.matchHero,
                 styles.newsHero,
                 { width: bannerWidth, backgroundColor: item.background }
               ]}
+              onPress={openPoloHub}
             >
               <View style={styles.newsBackdrop}>
                 <View
@@ -316,14 +334,14 @@ export default function HomeScreen() {
                     <Text style={styles.newsSummary} numberOfLines={2}>
                       {item.summary}
                     </Text>
-                    <Pressable style={styles.readMoreButton}>
+                    <View style={styles.readMoreButton}>
                       <Text style={styles.readMoreText}>Leer más</Text>
                       <Ionicons name="arrow-forward" size={13} color="#ffffff" />
-                    </Pressable>
+                    </View>
                   </View>
                 </View>
               </View>
-            </View>
+            </Pressable>
           )
         )}
       </ScrollView>
@@ -336,6 +354,12 @@ export default function HomeScreen() {
         pagingEnabled
         snapToInterval={bannerWidth}
         decelerationRate="fast"
+        onTouchStart={() => setDrawerGestureBlocked(true)}
+        onTouchEnd={() => setDrawerGestureBlocked(false)}
+        onTouchCancel={() => setDrawerGestureBlocked(false)}
+        onScrollBeginDrag={() => setDrawerGestureBlocked(true)}
+        onScrollEndDrag={() => setDrawerGestureBlocked(false)}
+        onMomentumScrollBegin={() => setDrawerGestureBlocked(true)}
         onMomentumScrollEnd={handleAdMomentumEnd}
         contentContainerStyle={styles.adsTrack}
       >
@@ -384,7 +408,7 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   matchHero: {
     height: 220,
     borderRadius: 18,
@@ -395,10 +419,15 @@ const styles = StyleSheet.create({
   matchHeroImage: {
     borderRadius: 18
   },
+  matchHeroFill: {
+    flex: 1
+  },
   matchOverlay: {
     flex: 1,
     justifyContent: "space-between",
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 22,
     backgroundColor: "rgba(5, 15, 28, 0.58)"
   },
   liveBadge: {
@@ -415,7 +444,7 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: "#ffffff"
+    backgroundColor: colors.background
   },
   liveBadgeText: {
     color: "#ffffff",
@@ -475,26 +504,8 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textAlign: "center"
   },
-  watchButton: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 7,
-    marginTop: 16,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)"
-  },
-  watchButtonPressed: {
-    opacity: 0.82
-  },
-  watchButtonText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "900"
+  matchBottom: {
+    paddingBottom: 2
   },
   adsTrack: {
     marginBottom: 8

@@ -2,10 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/components/Screen";
-import { colors } from "@/constants/theme";
+import { AppColors, useThemeColors } from "@/constants/theme";
 import { useMarket } from "@/contexts/MarketContext";
 
 export default function FavoritesScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const router = useRouter();
   const { favoriteProducts, toggleFavorite } = useMarket();
 
@@ -32,7 +34,7 @@ export default function FavoritesScreen() {
               onPress={() => toggleFavorite(product.id)}
               accessibilityLabel={`Quitar ${product.name} de favoritos`}
             >
-              <Ionicons name="heart" size={20} color="#df4b4b" />
+              <Ionicons name="heart" size={20} color={colors.danger} />
             </Pressable>
           </View>
         ))}
@@ -49,7 +51,7 @@ export default function FavoritesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   list: {
     gap: 12
   },
@@ -88,7 +90,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#fff3f3",
+    backgroundColor: colors.dangerSoft,
     alignItems: "center",
     justifyContent: "center"
   },

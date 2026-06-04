@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/components/Screen";
-import { colors } from "@/constants/theme";
+import { AppColors, useThemeColors } from "@/constants/theme";
 
 type NotificationKind = "match" | "market" | "tournament" | "message" | "system";
 
@@ -83,6 +83,8 @@ const notifications: AppNotification[] = [
 ];
 
 export default function NotificationsScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const router = useRouter();
 
   return (
@@ -127,7 +129,7 @@ export default function NotificationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   card: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -141,7 +143,7 @@ const styles = StyleSheet.create({
     position: "relative"
   },
   cardUnread: {
-    backgroundColor: "#f0f8ff",
+    backgroundColor: colors.surfaceStrong,
     borderColor: "#bfd8f0"
   },
   iconWrap: {

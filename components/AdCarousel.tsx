@@ -9,7 +9,8 @@ import {
   useWindowDimensions,
   View
 } from "react-native";
-import { colors } from "@/constants/theme";
+import { useAppDrawer } from "@/components/AppDrawer";
+import { AppColors, useThemeColors } from "@/constants/theme";
 
 interface AdCarouselProps {
   images: ImageSourcePropType[];
@@ -17,6 +18,9 @@ interface AdCarouselProps {
 }
 
 export function AdCarousel({ images, height = 100 }: AdCarouselProps) {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
+  const { setDrawerGestureBlocked } = useAppDrawer();
   const carouselRef = useRef<ScrollView>(null);
   const [activeItem, setActiveItem] = useState(0);
   const { width } = useWindowDimensions();
@@ -42,6 +46,7 @@ export function AdCarousel({ images, height = 100 }: AdCarouselProps) {
   const handleMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const nextItem = Math.round(event.nativeEvent.contentOffset.x / bannerWidth);
     setActiveItem(nextItem);
+    setDrawerGestureBlocked(false);
   };
 
   return (
@@ -53,6 +58,12 @@ export function AdCarousel({ images, height = 100 }: AdCarouselProps) {
         pagingEnabled
         snapToInterval={bannerWidth}
         decelerationRate="fast"
+        onTouchStart={() => setDrawerGestureBlocked(true)}
+        onTouchEnd={() => setDrawerGestureBlocked(false)}
+        onTouchCancel={() => setDrawerGestureBlocked(false)}
+        onScrollBeginDrag={() => setDrawerGestureBlocked(true)}
+        onScrollEndDrag={() => setDrawerGestureBlocked(false)}
+        onMomentumScrollBegin={() => setDrawerGestureBlocked(true)}
         onMomentumScrollEnd={handleMomentumEnd}
         contentContainerStyle={styles.track}
       >
@@ -81,7 +92,7 @@ export function AdCarousel({ images, height = 100 }: AdCarouselProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   track: {
     marginBottom: 6
   },

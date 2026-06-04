@@ -10,7 +10,7 @@ import {
   View
 } from "react-native";
 import { Screen } from "@/components/Screen";
-import { colors } from "@/constants/theme";
+import { AppColors, useThemeColors } from "@/constants/theme";
 import { type ProductStatus, type MarketCategory } from "@/services/market";
 import { useMarket } from "@/contexts/MarketContext";
 
@@ -26,6 +26,8 @@ const publishCategories: { value: PublishCategory; label: string }[] = [
 ];
 
 export default function MarketPublishScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { products, addProduct, updateProduct, deleteProduct } = useMarket();
@@ -233,7 +235,7 @@ export default function MarketPublishScreen() {
               router.back();
             }}
           >
-            <Ionicons name="trash-outline" size={18} color="#b42318" />
+            <Ionicons name="trash-outline" size={18} color={colors.danger} />
             <Text style={styles.deleteOwnButtonText}>Eliminar publicación</Text>
           </Pressable>
         ) : null}
@@ -246,7 +248,7 @@ export default function MarketPublishScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   paymentBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -254,7 +256,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "#cfe2f5",
-    backgroundColor: "#eef6ff",
+    backgroundColor: colors.surfaceStrong,
     padding: 14,
     marginBottom: 18
   },
@@ -286,7 +288,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.background,
     alignItems: "center",
     justifyContent: "center"
   },
@@ -316,7 +318,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#bfd6eb",
     borderStyle: "dashed",
-    backgroundColor: "#f9fcff",
+    backgroundColor: colors.background,
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
@@ -338,7 +340,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.background,
     color: colors.text,
     fontSize: 14,
     paddingHorizontal: 14,
@@ -359,7 +361,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.background,
     alignItems: "center",
     justifyContent: "center"
   },
@@ -398,7 +400,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#ffd2cc",
-    backgroundColor: "#fff1ef",
+    backgroundColor: colors.dangerSoft,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -406,7 +408,7 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   deleteOwnButtonText: {
-    color: "#b42318",
+    color: colors.danger,
     fontSize: 15,
     fontWeight: "800"
   },

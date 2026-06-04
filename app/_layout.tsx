@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { LocaleProvider } from "@/contexts/LocaleContext";
 import { MarketProvider } from "@/contexts/MarketContext";
 import { CommunityProvider } from "@/contexts/CommunityContext";
+import { ThemeProvider, useTheme } from "@/constants/theme";
 
 export default function RootLayout() {
   return (
@@ -13,13 +14,26 @@ export default function RootLayout() {
         <LocaleProvider>
           <MarketProvider>
             <CommunityProvider>
-              <StatusBar style="dark" backgroundColor="#ffffff" />
-              <RootNavigator />
+              <ThemeProvider>
+                <ThemedStatusBar />
+                <RootNavigator />
+              </ThemeProvider>
             </CommunityProvider>
           </MarketProvider>
         </LocaleProvider>
       </AuthProvider>
     </SafeAreaProvider>
+  );
+}
+
+function ThemedStatusBar() {
+  const { colors, mode } = useTheme();
+
+  return (
+    <StatusBar
+      style={mode === "dark" ? "light" : "dark"}
+      backgroundColor={colors.background}
+    />
   );
 }
 
@@ -42,6 +56,7 @@ function RootNavigator() {
         <Stack.Screen name="product-detail" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="profile" />
+        <Stack.Screen name="settings" />
         <Stack.Screen name="team-register" />
         <Stack.Screen name="group-chat" />
       </Stack.Protected>

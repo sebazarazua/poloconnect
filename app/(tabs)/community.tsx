@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Card, SectionTitle } from "@/components/Card";
 import { Screen } from "@/components/Screen";
 import { AdCarousel } from "@/components/AdCarousel";
-import { colors } from "@/constants/theme";
+import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useCommunity } from "@/contexts/CommunityContext";
 import type { ChatItem } from "@/contexts/CommunityContext";
@@ -16,6 +16,8 @@ const communityAds = [
 ];
 
 export default function CommunityScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const { t } = useLocale();
   const router = useRouter();
   const { joinedChats, recommendedChats, joinChat } = useCommunity();
@@ -113,9 +115,9 @@ export default function CommunityScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   chatCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.background,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.border,

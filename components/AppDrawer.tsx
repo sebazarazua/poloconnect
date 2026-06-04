@@ -12,12 +12,13 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Href, useRouter } from "expo-router";
-import { colors } from "@/constants/theme";
+import { AppColors, useThemeColors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocale } from "@/contexts/LocaleContext";
 
 type AppDrawerContextValue = {
   openDrawer: () => void;
+  setDrawerGestureBlocked: (blocked: boolean) => void;
 };
 
 const AppDrawerContext = createContext<AppDrawerContextValue | null>(null);
@@ -34,8 +35,8 @@ const drawerItems: Array<DrawerItem> = [
   { label: "Calendario", icon: "calendar-outline", route: "/(tabs)/tournaments" }
 ];
 
-const drawerFooterItems: Array<{ label: string; icon: keyof typeof Ionicons.glyphMap }> = [
-  { label: "Configuración", icon: "settings-outline" },
+const drawerFooterItems: Array<DrawerItem> = [
+  { label: "Configuración", icon: "settings-outline", route: "/settings" },
   { label: "Centro de ayuda", icon: "help-circle-outline" }
 ];
 
@@ -43,13 +44,18 @@ export function useAppDrawer() {
   const context = useContext(AppDrawerContext);
 
   if (!context) {
-    return { openDrawer: () => undefined };
+    return {
+      openDrawer: () => undefined,
+      setDrawerGestureBlocked: () => undefined
+    };
   }
 
   return context;
 }
 
 export function AppDrawerProvider({ children }: PropsWithChildren) {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const router = useRouter();
@@ -61,6 +67,7 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
   const isDrawerOpenRef = useRef(false);
   const drawerWidthRef = useRef(drawerWidth);
   const gestureStartProgress = useRef(0);
+  const isDrawerGestureBlockedRef = useRef(false);
 
   isDrawerOpenRef.current = isDrawerOpen;
   drawerWidthRef.current = drawerWidth;
@@ -100,7 +107,15 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
     });
   };
 
+  const setDrawerGestureBlocked = (blocked: boolean) => {
+    isDrawerGestureBlockedRef.current = blocked;
+  };
+
   const shouldHandleDrawerPan = (distanceX: number, distanceY: number) => {
+    if (!isDrawerOpenRef.current && isDrawerGestureBlockedRef.current) {
+      return false;
+    }
+
     const isHorizontal = Math.abs(distanceX) > Math.abs(distanceY) * 1.15;
     const isOpeningSwipe = !isDrawerOpenRef.current && distanceX > 6;
     const isClosingSwipe = isDrawerOpenRef.current && Math.abs(distanceX) > 6;
@@ -161,7 +176,7 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
   ).current;
 
   return (
-    <AppDrawerContext.Provider value={{ openDrawer }}>
+    <AppDrawerContext.Provider value={{ openDrawer, setDrawerGestureBlocked }}>
       <View collapsable={false} style={styles.host} {...panResponder.panHandlers}>
         <View style={styles.pageLayer}>
           {children}
@@ -252,7 +267,16 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
                     <View style={styles.drawerDivider} />
 
                     {drawerFooterItems.map((item) => (
-                      <Pressable key={item.label} style={styles.drawerFooterItem}>
+                      <Pressable
+                        key={item.label}
+                        style={styles.drawerFooterItem}
+                        onPress={() => {
+                          if (item.route) {
+                            closeDrawer();
+                            router.push(item.route);
+                          }
+                        }}
+                      >
                         <Ionicons name={item.icon} size={21} color="#dbe9f7" />
                         <Text style={styles.drawerFooterText}>{item.label}</Text>
                       </Pressable>
@@ -286,7 +310,7 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   host: {
     flex: 1,
     backgroundColor: colors.background

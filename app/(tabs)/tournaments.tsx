@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Card, SectionTitle } from "@/components/Card";
 import { Screen } from "@/components/Screen";
-import { colors } from "@/constants/theme";
+import { AppColors, useThemeColors } from "@/constants/theme";
 
 const tournaments = [
   {
@@ -106,6 +107,9 @@ const monthNames = [
 ];
 
 export default function TournamentsScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
+  const router = useRouter();
   const [calendarDate, setCalendarDate] = useState({ month: 5, year: 2026 });
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
@@ -236,6 +240,18 @@ export default function TournamentsScreen() {
               <Text style={styles.level}>{item.level}</Text>
               <Text style={styles.club}>{item.club}</Text>
             </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.registerButton,
+                pressed && styles.registerButtonPressed
+              ]}
+              onPress={() => router.push("/team-register")}
+              accessibilityRole="button"
+              accessibilityLabel={`Anotar equipo en ${item.name}`}
+            >
+              <Ionicons name="person-add-outline" size={16} color="#ffffff" />
+              <Text style={styles.registerButtonText}>Anotar</Text>
+            </Pressable>
           </View>
         </Card>
       ))}
@@ -249,9 +265,9 @@ export default function TournamentsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   calendarCard: {
-    backgroundColor: "#ffffff"
+    backgroundColor: colors.background
   },
   calendarHeader: {
     flexDirection: "row",
@@ -368,7 +384,8 @@ const styles = StyleSheet.create({
     textAlign: "center"
   },
   info: {
-    flex: 1
+    flex: 1,
+    minWidth: 0
   },
   name: {
     color: colors.text,
@@ -386,8 +403,27 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginTop: 6
   },
+  registerButton: {
+    minHeight: 38,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    flexShrink: 0
+  },
+  registerButtonPressed: {
+    opacity: 0.78
+  },
+  registerButtonText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "900"
+  },
   emptyCard: {
-    backgroundColor: "#ffffff"
+    backgroundColor: colors.background
   },
   emptyTitle: {
     color: colors.text,

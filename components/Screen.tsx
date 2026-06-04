@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppDrawer } from "@/components/AppDrawer";
-import { colors } from "@/constants/theme";
+import { AppColors, useTheme, useThemeColors } from "@/constants/theme";
 
 const topBarHeight = 68;
 const topBarGap = 4;
@@ -30,6 +30,9 @@ type ScreenProps = PropsWithChildren<{
 }>;
 
 export function Screen({ children, eyebrow, title, subtitle, style, showBackButton, onBackPress, headerRight }: ScreenProps) {
+  const colors = useThemeColors();
+  const { mode } = useTheme();
+  const styles = createStyles(colors);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const pathname = usePathname();
@@ -104,7 +107,7 @@ export function Screen({ children, eyebrow, title, subtitle, style, showBackButt
 
         <View style={styles.appLogo}>
           <Image
-            source={require("@/assets/logo.png")}
+            source={mode === "dark" ? require("@/assets/logo-login.png") : require("@/assets/logo.png")}
             style={styles.logoImage}
             resizeMode="contain"
           />
@@ -148,7 +151,7 @@ export function Screen({ children, eyebrow, title, subtitle, style, showBackButt
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.background
@@ -159,7 +162,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 20,
-    backgroundColor: "#ffffff"
+    backgroundColor: colors.background
   },
   topBar: {
     position: "absolute",
@@ -168,7 +171,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
     height: topBarHeight,
     paddingHorizontal: 20,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     flexDirection: "row",
@@ -213,7 +216,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: colors.warning,
     borderWidth: 1,
-    borderColor: "#ffffff"
+    borderColor: colors.background
   },
   scroll: {
     flex: 1,

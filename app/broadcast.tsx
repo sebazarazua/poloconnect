@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { SectionTitle } from "@/components/Card";
 import { Screen } from "@/components/Screen";
-import { colors } from "@/constants/theme";
+import { AppColors, useThemeColors } from "@/constants/theme";
 
 interface BroadcastMatch {
   id: string;
@@ -34,15 +34,15 @@ const broadcasts: BroadcastMatch[] = [
   // Today
   {
     id: "1",
-    team1: "San Martín",
-    team2: "Tandil",
+    team1: "Jockey Club Rosario",
+    team2: "Naimara",
     date: new Date(2026, 5, 2),
     dateLabel: "Lunes, 2 de junio",
     time: "14:00 hs",
     score1: 6,
     score2: 5,
-    youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    club: "Open"
+    youtubeUrl: "https://www.youtube.com/watch?v=T5qr_bwZKqI",
+    club: "Final CAIH"
   },
   // Yesterday
   {
@@ -54,20 +54,20 @@ const broadcasts: BroadcastMatch[] = [
     time: "15:00 hs",
     score1: 9,
     score2: 6,
-    youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    youtubeUrl: "https://www.youtube.com/live/zY3JUrfPtTo",
     club: "Open"
   },
   {
     id: "3",
-    team1: "Belgrano",
-    team2: "Monterrayo",
+    team1: "La Justina",
+    team2: "Cuarto Rincón",
     date: new Date(2026, 5, 1),
     dateLabel: "Domingo, 1 de junio",
     time: "16:30 hs",
     score1: 7,
     score2: 7,
-    youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    club: "Abierto"
+    youtubeUrl: "https://www.youtube.com/watch?v=vgPTaSUWNPM",
+    club: "Final Subsidiaria - Copa Roberto Cavanagh"
   },
   // Last week
   {
@@ -178,6 +178,8 @@ type TimeSegment =
   | string;
 
 export default function BroadcastScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const router = useRouter();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -396,7 +398,7 @@ export default function BroadcastScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   container: {
     flex: 1
   },

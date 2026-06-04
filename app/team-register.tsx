@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/components/Screen";
-import { colors } from "@/constants/theme";
+import { AppColors, useThemeColors } from "@/constants/theme";
 
 interface Tournament {
   id: string;
@@ -89,6 +89,8 @@ const tournaments: Tournament[] = [
 ];
 
 export default function TeamRegisterScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const router = useRouter();
 
   const callContact = (phone: string) => {
@@ -160,7 +162,7 @@ export default function TeamRegisterScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   infoBanner: {
     flexDirection: "row",
     alignItems: "center",

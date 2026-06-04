@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import {
   Image,
   ImageBackground,
+  Linking,
   PanResponder,
   Pressable,
   StyleSheet,
@@ -11,11 +12,12 @@ import {
   View
 } from "react-native";
 import { Screen } from "@/components/Screen";
-import { colors } from "@/constants/theme";
+import { AppColors, useThemeColors } from "@/constants/theme";
 import { getTeamLogoSource } from "@/constants/teamLogos";
 import { getMatchById } from "@/services/matches";
 
 const videoPreview = require("../assets/home-match-bg.png");
+const youtubeLiveUrl = "https://www.youtube.com/live/zY3JUrfPtTo";
 
 type MatchTab = "live" | "stats" | "lineups" | "comments";
 
@@ -84,6 +86,8 @@ const comments = [
 ];
 
 export default function MatchDetailScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const match = useMemo(() => getMatchById(id), [id]);
@@ -156,6 +160,9 @@ export default function MatchDetailScreen() {
 }
 
 function TeamSummary({ name, initials }: { name: string; initials: string }) {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
+
   return (
     <View style={styles.teamSummary}>
       <View style={styles.teamLogo}>
@@ -173,6 +180,9 @@ function TeamSummary({ name, initials }: { name: string; initials: string }) {
 }
 
 function LivePanel() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
+
   return (
     <View>
       <ImageBackground
@@ -182,9 +192,14 @@ function LivePanel() {
         resizeMode="cover"
       >
         <View style={styles.videoOverlay}>
-          <View style={styles.playButton}>
+          <Pressable
+            style={styles.playButton}
+            onPress={() => Linking.openURL(youtubeLiveUrl)}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir transmision en YouTube"
+          >
             <Ionicons name="play" size={38} color="#ffffff" />
-          </View>
+          </Pressable>
           <View style={styles.videoFooter}>
             <Text style={styles.liveVideoText}>LIVE</Text>
             <View style={styles.progressTrack}>
@@ -213,6 +228,9 @@ function LivePanel() {
 }
 
 function StatsPanel({ leftTeam, rightTeam }: { leftTeam: string; rightTeam: string }) {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
+
   return (
     <View style={styles.panel}>
       <Text style={styles.panelTitle}>Estadisticas del partido</Text>
@@ -242,6 +260,9 @@ function StatsPanel({ leftTeam, rightTeam }: { leftTeam: string; rightTeam: stri
 }
 
 function LineupsPanel({ leftTeam, rightTeam }: { leftTeam: string; rightTeam: string }) {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
+
   return (
     <View>
       <View style={styles.lineupsGrid}>
@@ -270,6 +291,9 @@ function LineupCard({
   team: string;
   players: { number: number; name: string; goals: string }[];
 }) {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
+
   return (
     <View style={styles.lineupCard}>
       <Text style={styles.lineupTeam}>{team.toUpperCase()}</Text>
@@ -286,6 +310,9 @@ function LineupCard({
 }
 
 function CommentsPanel() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
+
   return (
     <View style={styles.panel}>
       {comments.map((comment) => (
@@ -311,7 +338,7 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   container: {
     flex: 1
   },
@@ -376,7 +403,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
     overflow: "hidden"
@@ -483,7 +510,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: "#ffffff"
+    backgroundColor: colors.background
   },
   videoTime: {
     color: "#ffffff",
@@ -613,7 +640,7 @@ const styles = StyleSheet.create({
   },
   playerCard: {
     borderRadius: 10,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.background,
     padding: 10,
     marginBottom: 8
   },
@@ -663,7 +690,7 @@ const styles = StyleSheet.create({
   refereeItem: {
     flex: 1,
     borderRadius: 10,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.background,
     padding: 10,
     alignItems: "center"
   },

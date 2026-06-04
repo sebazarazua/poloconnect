@@ -11,11 +11,13 @@ import {
   View
 } from "react-native";
 import { Screen } from "@/components/Screen";
-import { colors } from "@/constants/theme";
+import { AppColors, useThemeColors } from "@/constants/theme";
 import { useMarket } from "@/contexts/MarketContext";
 import { type Product, type MarketCategory } from "@/services/market";
 
 export default function MarketScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const router = useRouter();
   const { products, favoriteIds, isFavorite, toggleFavorite } = useMarket();
   const [searchQuery, setSearchQuery] = useState("");
@@ -146,7 +148,7 @@ export default function MarketScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   actionRow: {
     flexDirection: "row",
     gap: 10,

@@ -12,7 +12,7 @@ import { useRouter } from "expo-router";
 import { SectionTitle } from "@/components/Card";
 import { AdCarousel } from "@/components/AdCarousel";
 import { Screen } from "@/components/Screen";
-import { colors } from "@/constants/theme";
+import { AppColors, useThemeColors } from "@/constants/theme";
 import { formatLiveDate } from "@/constants/i18n";
 import { getTeamLogoSource } from "@/constants/teamLogos";
 import { useLocale } from "@/contexts/LocaleContext";
@@ -167,6 +167,8 @@ const liveAds = [
 ];
 
 export default function LiveScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const router = useRouter();
   const { locale, t } = useLocale();
   const [filterTab, setFilterTab] = useState<"todos" | "vivo">("todos");
@@ -377,7 +379,7 @@ export default function LiveScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   dateHeaderContainer: {
     marginBottom: 16
   },

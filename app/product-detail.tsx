@@ -11,7 +11,7 @@ import {
   View
 } from "react-native";
 import { Screen } from "@/components/Screen";
-import { colors } from "@/constants/theme";
+import { AppColors, useThemeColors } from "@/constants/theme";
 import { useMarket } from "@/contexts/MarketContext";
 import { getProductById } from "@/services/market";
 
@@ -33,6 +33,8 @@ const mockVendor = {
 };
 
 export default function ProductDetailScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { isFavorite, toggleFavorite } = useMarket();
@@ -206,7 +208,7 @@ export default function ProductDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   container: {
     flex: 1
   },

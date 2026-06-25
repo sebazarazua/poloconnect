@@ -45,6 +45,7 @@ function RootNavigator() {
       <Stack.Protected guard={!isAuthenticated}>
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />
+        <Stack.Screen name="admin-login" />
       </Stack.Protected>
 
       <Stack.Protected guard={isAuthenticated}>
@@ -60,6 +61,7 @@ function RootNavigator() {
         <Stack.Screen name="settings" />
         <Stack.Screen name="team-register" />
         <Stack.Screen name="group-chat" />
+        <Stack.Screen name="admin-panel" />
       </Stack.Protected>
     </Stack>
   );

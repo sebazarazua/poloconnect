@@ -1,0 +1,580 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  active
+  disabled
+  pending_verification
+}
+
+enum ProductCondition {
+  Nuevo
+  Usado
+  Reacondicionado
+}
+
+enum ProductCategory {
+  equipamiento
+  indumentaria
+  vehiculos
+  inmueble
+}
+
+enum ProductPublicationStatus {
+  draft
+  pending_review
+  active
+  paused
+  sold
+  rejected
+}
+
+enum MatchStatus {
+  upcoming
+  live
+  finished
+  cancelled
+}
+
+enum NotificationKind {
+  match
+  market
+  tournament
+  message
+  system
+}
+
+enum AppContentType {
+  logo
+  ad
+  banner
+  news
+  generic
+}
+
+enum CommunityModerationActionType {
+  added
+  removed
+  banned
+  unbanned
+}
+
+model User {
+  id              String          @id @default(uuid()) @db.Uuid
+  firstName       String
+  lastName        String
+  email           String          @unique
+  username        String          @unique
+  phone           String?
+  avatarUrl       String?
+  handicap        Decimal?        @db.Decimal(4, 1)
+  status          UserStatus      @default(active)
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+  version         Int             @default(1)
+  credential      AuthCredential?
+  sessions        AuthSession[]
+  roles           UserRole[]
+  settings        UserSettings?
+  products        Product[]
+  favorites       ProductFavorite[]
+  memberships     ChatMembership[]
+  messages        ChatMessage[]
+  communityBans   CommunityBan[]
+  notifications   Notification[]
+  registrations   TournamentRegistration[]
+  pushTokens      PushToken[]
+
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model AuthCredential {
+  userId            String   @id @db.Uuid
+  passwordHash      String
+  passwordUpdatedAt DateTime @default(now())
+  failedLoginCount  Int      @default(0)
+  lockedUntil       DateTime?
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuthSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @db.Uuid
+  refreshTokenHash String    @unique
+  familyId         String    @db.Uuid
+  deviceId         String?
+  deviceName       String?
+  ipAddress        String?
+  userAgent        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([familyId])
+  @@index([revokedAt])
+}
+
+model Role {
+  id    String     @id @default(uuid()) @db.Uuid
+  code  String     @unique
+  name  String
+  users UserRole[]
+}
+
+model UserRole {
+  userId    String   @db.Uuid
+  roleId    String   @db.Uuid
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model UserSettings {
+  userId            String   @id @db.Uuid
+  locale            String   @default("es-AR")
+  theme             String   @default("light")
+  pushEnabled       Boolean  @default(true)
+  emailEnabled      Boolean  @default(true)
+  profileVisibility String   @default("public")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Club {
+  id           String       @id @default(uuid()) @db.Uuid
+  name         String       @unique
+  slug         String       @unique
+  location     String?
+  contactPhone String?
+  logoUrl      String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  deletedAt    DateTime?
+  teams        Team[]
+  matches      Match[]
+  tournaments  Tournament[]
+}
+
+model Team {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String
+  slug         String        @unique
+  clubId       String?       @db.Uuid
+  logoUrl      String?
+  primaryColor String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+  club         Club?         @relation(fields: [clubId], references: [id])
+  team1Matches Match[]       @relation("Team1Matches")
+  team2Matches Match[]       @relation("Team2Matches")
+  lineups      MatchLineup[]
+
+  @@index([clubId])
+}
+
+model Player {
+  id            String                         @id @default(uuid()) @db.Uuid
+  userId        String?                        @db.Uuid
+  displayName   String
+  handicap      Decimal?                       @db.Decimal(4, 1)
+  avatarUrl     String?
+  createdAt     DateTime                       @default(now())
+  updatedAt     DateTime                       @updatedAt
+  deletedAt     DateTime?
+  lineups       MatchLineup[]
+  registrations TournamentRegistrationPlayer[]
+}
+
+model Tournament {
+  id                 String                       @id @default(uuid()) @db.Uuid
+  name               String
+  slug               String                       @unique
+  clubId             String?                      @db.Uuid
+  startDate          DateTime
+  endDate            DateTime?
+  levelLabel         String?
+  minHandicap        Decimal?                     @db.Decimal(4, 1)
+  maxHandicap        Decimal?                     @db.Decimal(4, 1)
+  maxTeams           Int?
+  registrationStatus String                       @default("open")
+  status             String                       @default("scheduled")
+  contactName        String?
+  contactPhone       String?
+  createdBy          String?                      @db.Uuid
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+  deletedAt          DateTime?
+  version            Int                          @default(1)
+  club               Club?                        @relation(fields: [clubId], references: [id])
+  matches            Match[]
+  registrations      TournamentRegistration[]
+
+  @@index([startDate, status])
+  @@index([clubId, startDate])
+  @@index([registrationStatus])
+}
+
+model TournamentRegistration {
+  id            String                         @id @default(uuid()) @db.Uuid
+  tournamentId  String                         @db.Uuid
+  teamName      String
+  captainUserId String                         @db.Uuid
+  totalHandicap Decimal?                       @db.Decimal(4, 1)
+  status        String                         @default("pending")
+  contactPhone  String?
+  notes         String?
+  createdAt     DateTime                       @default(now())
+  updatedAt     DateTime                       @updatedAt
+  cancelledAt   DateTime?
+  version       Int                            @default(1)
+  tournament    Tournament                     @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  captain       User                           @relation(fields: [captainUserId], references: [id])
+  players       TournamentRegistrationPlayer[]
+
+  @@unique([tournamentId, teamName])
+  @@index([captainUserId])
+}
+
+model TournamentRegistrationPlayer {
+  registrationId String                 @db.Uuid
+  playerId       String                 @db.Uuid
+  position       Int
+  registration   TournamentRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  player         Player                 @relation(fields: [playerId], references: [id])
+
+  @@id([registrationId, playerId])
+}
+
+model Match {
+  id              String        @id @default(uuid()) @db.Uuid
+  externalCode    String?       @unique
+  tournamentId    String?       @db.Uuid
+  clubId          String?       @db.Uuid
+  team1Id         String        @db.Uuid
+  team2Id         String        @db.Uuid
+  scheduledAt     DateTime
+  status          MatchStatus   @default(upcoming)
+  score1          Int           @default(0)
+  score2          Int           @default(0)
+  currentChukker  Int?
+  totalChukkers   Int           @default(6)
+  competitionName String?
+  youtubeUrl      String?
+  videoPreviewUrl String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+  version         Int           @default(1)
+  tournament      Tournament?   @relation(fields: [tournamentId], references: [id])
+  club            Club?         @relation(fields: [clubId], references: [id])
+  team1           Team          @relation("Team1Matches", fields: [team1Id], references: [id])
+  team2           Team          @relation("Team2Matches", fields: [team2Id], references: [id])
+  lineups         MatchLineup[]
+  stats           MatchStat[]
+  events          MatchEvent[]
+
+  @@index([scheduledAt, status])
+  @@index([status, scheduledAt])
+  @@index([tournamentId])
+  @@index([clubId])
+}
+
+model MatchLineup {
+  id          String @id @default(uuid()) @db.Uuid
+  matchId     String @db.Uuid
+  teamId      String @db.Uuid
+  playerId    String @db.Uuid
+  position    Int
+  shirtNumber Int?
+  goalsLabel  String?
+  match       Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  team        Team   @relation(fields: [teamId], references: [id])
+  player      Player @relation(fields: [playerId], references: [id])
+
+  @@unique([matchId, teamId, position])
+}
+
+model MatchStat {
+  id           String   @id @default(uuid()) @db.Uuid
+  matchId      String   @db.Uuid
+  statKey      String
+  label        String
+  team1Value   String
+  team2Value   String
+  team1Percent Decimal? @db.Decimal(5, 2)
+  team2Percent Decimal? @db.Decimal(5, 2)
+  updatedAt    DateTime @updatedAt
+  match        Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, statKey])
+}
+
+model MatchEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  matchId     String   @db.Uuid
+  eventNumber BigInt
+  eventType   String
+  matchClock  String?
+  title       String
+  body        String
+  teamId      String?  @db.Uuid
+  playerId    String?  @db.Uuid
+  createdBy   String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  match       Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, eventNumber])
+  @@index([matchId, eventNumber])
+}
+
+model ChatRoom {
+  id            String           @id @default(uuid()) @db.Uuid
+  externalCode  String?          @unique
+  title         String
+  description   String?
+  kind          String
+  icon          String?
+  tone          String?
+  isRecommended Boolean          @default(false)
+  isPublic      Boolean          @default(true)
+  createdBy     String?          @db.Uuid
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  deletedAt     DateTime?
+  version       Int              @default(1)
+  memberships   ChatMembership[]
+  messages      ChatMessage[]
+  bans          CommunityBan[]
+  moderation    CommunityModerationAction[]
+
+  @@index([kind])
+  @@index([isRecommended])
+  @@index([deletedAt])
+}
+
+model ChatMembership {
+  roomId            String    @db.Uuid
+  userId            String    @db.Uuid
+  role              String    @default("member")
+  joinedAt          DateTime  @default(now())
+  leftAt            DateTime?
+  lastReadMessageId String?   @db.Uuid
+  lastReadAt        DateTime?
+  room              ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, userId])
+  @@index([userId, leftAt])
+  @@index([roomId, leftAt])
+}
+
+model ChatMessage {
+  id            String    @id @default(uuid()) @db.Uuid
+  roomId        String    @db.Uuid
+  userId        String    @db.Uuid
+  messageNumber BigInt
+  body          String
+  bodySanitized String
+  status        String    @default("sent")
+  createdAt     DateTime  @default(now())
+  editedAt      DateTime?
+  deletedAt     DateTime?
+  room          ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, messageNumber])
+  @@index([roomId, messageNumber])
+  @@index([roomId, createdAt])
+  @@index([userId])
+}
+
+model Product {
+  id              String                   @id @default(uuid()) @db.Uuid
+  sellerId        String                   @db.Uuid
+  title           String
+  description     String
+  category        ProductCategory
+  condition       ProductCondition
+  priceCents      Int
+  currency        String                   @default("USD")
+  status          ProductPublicationStatus @default(active)
+  location        String?
+  moderationNotes String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  deletedAt       DateTime?
+  version         Int                      @default(1)
+  seller          User                     @relation(fields: [sellerId], references: [id])
+  images          ProductImage[]
+  favorites       ProductFavorite[]
+  contacts        SellerContact[]
+
+  @@index([status, createdAt])
+  @@index([sellerId, status])
+  @@index([category])
+  @@index([deletedAt])
+}
+
+model ProductImage {
+  id         String   @id @default(uuid()) @db.Uuid
+  productId  String   @db.Uuid
+  url        String
+  storageKey String?
+  position   Int      @default(1)
+  createdAt  DateTime @default(now())
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, position])
+}
+
+model ProductFavorite {
+  userId    String   @db.Uuid
+  productId String   @db.Uuid
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([userId, productId])
+  @@index([userId, createdAt])
+  @@index([productId])
+}
+
+model SellerContact {
+  id          String   @id @default(uuid()) @db.Uuid
+  productId   String   @db.Uuid
+  buyerId     String   @db.Uuid
+  sellerId    String   @db.Uuid
+  contactType String
+  message     String?
+  createdAt   DateTime @default(now())
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId, createdAt])
+  @@index([buyerId, createdAt])
+  @@index([productId])
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @db.Uuid
+  kind      NotificationKind
+  title     String
+  body      String
+  data      Json             @default("{}")
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  expiresAt DateTime?
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@index([userId, createdAt])
+}
+
+model PushToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  platform   String
+  token      String   @unique
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  lastSeenAt DateTime?
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  actorUserId  String?  @db.Uuid
+  action       String
+  resourceType String
+  resourceId   String?  @db.Uuid
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now())
+
+  @@index([actorUserId, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([action])
+}
+
+model AppContentItem {
+  id          String         @id @default(uuid()) @db.Uuid
+  type        AppContentType
+  section     String
+  slot        String
+  title       String?
+  subtitle    String?
+  body        String?
+  imageUrl    String
+  storageKey  String?
+  targetUrl   String?
+  priority    Int            @default(0)
+  sortOrder   Int            @default(0)
+  isActive    Boolean        @default(true)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  metadata    Json           @default("{}")
+  createdBy   String?        @db.Uuid
+  updatedBy   String?        @db.Uuid
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  deletedAt   DateTime?
+
+  @@index([section, slot, isActive])
+  @@index([type, section])
+  @@index([startsAt, endsAt])
+  @@index([deletedAt])
+  @@unique([section, slot, type, sortOrder])
+}
+
+model CommunityBan {
+  id          String    @id @default(uuid()) @db.Uuid
+  roomId       String    @db.Uuid
+  userId       String    @db.Uuid
+  reason       String?
+  isPermanent  Boolean   @default(true)
+  expiresAt    DateTime?
+  createdBy    String?   @db.Uuid
+  revokedBy    String?   @db.Uuid
+  createdAt    DateTime  @default(now())
+  revokedAt    DateTime?
+  room         ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([roomId, revokedAt])
+  @@index([userId, revokedAt])
+}
+
+model CommunityModerationAction {
+  id          String                          @id @default(uuid()) @db.Uuid
+  roomId       String                          @db.Uuid
+  actorUserId  String?                         @db.Uuid
+  targetUserId String                          @db.Uuid
+  action       CommunityModerationActionType
+  reason       String?
+  metadata     Json                            @default("{}")
+  createdAt    DateTime                        @default(now())
+  room         ChatRoom                        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, createdAt])
+  @@index([targetUserId, createdAt])
+  @@index([action, createdAt])
+}

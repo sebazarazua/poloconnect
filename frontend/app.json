@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "Polo Club",
-    "slug": "polo-club",
+    "name": "Polo Connect",
+    "slug": "polo-connect",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "poloclub",
+    "scheme": "polo-connect",
     "userInterfaceStyle": "light",
     "jsEngine": "jsc",
     "assetBundlePatterns": [

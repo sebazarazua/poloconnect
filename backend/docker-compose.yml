@@ -1,7 +1,9 @@
+name: polo-connect
+
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: poloconnect-postgres
+    container_name: polo-connect-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: poloconnect
@@ -19,7 +21,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: poloconnect-redis
+    container_name: polo-connect-redis
     restart: unless-stopped
     ports:
       - "6379:6379"

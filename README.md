@@ -1,24 +1,24 @@
-# poloconnect
+# Polo Connect
 
-Front end funcional hecho con Expo, React Native, TypeScript y Expo Router.
+Workspace ordenado en dos partes:
 
-Incluye flujo visual de login y registro con autenticacion mock en memoria, listo para reemplazar por llamadas reales al back.
+- `frontend/`: app Expo / React Native / TypeScript con Expo Router.
+- `backend/`: API NestJS + Prisma + PostgreSQL, con Redis para soporte.
 
-## Secciones
-
-- Inicio
-- En vivo
-- Torneos
-- Mercado
-- Comunidad
+El front usa Contexts y datos mock en memoria para auth, market, community y matches. El back real vive en `backend/src` y ya tiene Docker para la base y Redis.
 
 ## Como correr
 
 ```bash
 npm install
-npm run start -- --clear
+npm run frontend:start
 ```
 
-Despues podes abrirlo en Expo Go, iOS Simulator, Android Emulator o web.
+Backend local:
 
-Si Expo Go muestra una version vieja, cerra el servidor, borra `node_modules` y volve a ejecutar `npm install`.
+```bash
+cd backend
+npm install
+docker compose up -d
+npm run dev
+```

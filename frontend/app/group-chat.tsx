@@ -3,8 +3,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
+  KeyboardEvent,
   Platform,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,20 +17,27 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppColors, useThemeColors } from "@/constants/theme";
+import { useAuth } from "@/contexts/AuthContext";
+import { useLocale } from "@/contexts/LocaleContext";
 import { useCommunity } from "@/contexts/CommunityContext";
 import type { ChatIconName } from "@/contexts/CommunityContext";
-import { listMessages, sendMessage } from "@/services/api/community";
+import { listMessages, sendMessage, subscribeToRoomMessages } from "@/services/api/community";
+import { resolveUploadedUrl } from "@/services/api/users";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface Message {
   id: string;
   userId: string;
+  avatarUrl?: string;
   userName: string;
   text: string;
   time: string;
+  createdAt?: string;
   isMe: boolean;
 }
+
+type IncomingMessage = Omit<Message, "isMe"> & { isMe?: boolean };
 
 // ─── Mock messages ───────────────────────────────────────────────────────────
 
@@ -152,13 +162,20 @@ function MessageBubble({
   }
 
   const nameColor = getUserColor(msg.userId);
+  const avatarSource = resolveUploadedUrl(msg.avatarUrl);
 
   return (
     <View style={styles.rowOther}>
       {showName ? (
-        <View style={[styles.avatarSmall, { backgroundColor: nameColor }]}>
-          <Text style={styles.avatarSmallText}>{getInitials(msg.userName)}</Text>
-        </View>
+        avatarSource ? (
+          <View style={styles.avatarSmall}>
+            <Image source={{ uri: avatarSource }} style={styles.avatarSmallImage} />
+          </View>
+        ) : (
+          <View style={[styles.avatarSmall, { backgroundColor: nameColor }]}> 
+            <Text style={styles.avatarSmallText}>{getInitials(msg.userName)}</Text>
+          </View>
+        )
       ) : (
         <View style={styles.avatarPlaceholder} />
       )}
@@ -185,52 +202,171 @@ export default function GroupChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useLocale();
+  const { user } = useAuth();
   const { joinedChats, leaveChat } = useCommunity();
   const scrollRef = useRef<ScrollView>(null);
+  const keyboardTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [inputText, setInputText] = useState("");
+  const [composerHeight, setComposerHeight] = useState(42);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   const chat = joinedChats.find(c => c.id === chatId);
+
+  const normalizeMessage = (message: IncomingMessage): Message => {
+    const isMe = user?.id ? message.userId === user.id : Boolean(message.isMe);
+    return {
+      ...message,
+      isMe,
+      userName: isMe ? t("chat.me") : message.userName
+    };
+  };
+
+  const dedupeById = (items: Message[]) => {
+    const seen = new Set<string>();
+    const deduped: Message[] = [];
+
+    for (const item of items) {
+      if (seen.has(item.id)) {
+        continue;
+      }
+
+      seen.add(item.id);
+      deduped.push(item);
+    }
+
+    return deduped;
+  };
+
+  const scrollToBottom = (animated: boolean) => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToEnd({ animated });
+    });
+  };
+
+  const clearKeyboardTimers = () => {
+    keyboardTimersRef.current.forEach(clearTimeout);
+    keyboardTimersRef.current = [];
+  };
+
+  const settleAfterKeyboardResize = () => {
+    clearKeyboardTimers();
+    scrollToBottom(false);
+    keyboardTimersRef.current = [
+      setTimeout(() => scrollToBottom(false), 24),
+      setTimeout(() => scrollToBottom(false), 90)
+    ];
+  };
 
   // Scroll to bottom on mount
   useEffect(() => {
     if (!chatId) return;
 
-    void listMessages(chatId).then(setMessages);
-  }, [chatId]);
+    let mounted = true;
+
+    void listMessages(chatId).then((initialMessages) => {
+      if (mounted) {
+        setMessages(dedupeById(initialMessages.map(normalizeMessage)));
+      }
+    });
+
+    const unsubscribe = subscribeToRoomMessages(chatId, (incomingMessage) => {
+      setMessages((previousMessages) => {
+        const normalizedIncoming = normalizeMessage(incomingMessage);
+
+        if (previousMessages.some((message) => message.id === normalizedIncoming.id)) {
+          return previousMessages;
+        }
+
+        return [...previousMessages, normalizedIncoming];
+      });
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, [chatId, t, user?.id]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      scrollRef.current?.scrollToEnd({ animated: false });
+      scrollToBottom(false);
     }, 120);
     return () => clearTimeout(timer);
   }, [messages.length]);
+
+  useEffect(() => {
+    if (Platform.OS !== "ios") {
+      return () => undefined;
+    }
+
+    const handleKeyboardShow = (_event: KeyboardEvent) => {
+      setIsKeyboardVisible(true);
+      settleAfterKeyboardResize();
+    };
+
+    const handleKeyboardShown = () => {
+      scrollToBottom(false);
+    };
+
+    const handleKeyboardHide = () => {
+      clearKeyboardTimers();
+      setIsKeyboardVisible(false);
+      setTimeout(() => scrollToBottom(false), 40);
+    };
+
+    const willShowSub = Keyboard.addListener("keyboardWillShow", handleKeyboardShow);
+    const didShowSub = Keyboard.addListener("keyboardDidShow", handleKeyboardShown);
+    const willHideSub = Keyboard.addListener("keyboardWillHide", handleKeyboardHide);
+
+    return () => {
+      clearKeyboardTimers();
+      willShowSub.remove();
+      didShowSub.remove();
+      willHideSub.remove();
+    };
+  }, []);
 
   function handleSend() {
     const text = inputText.trim();
     if (!text || !chatId) return;
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    const optimisticMessage = { id: `local-${Date.now()}`, userId: "me", userName: "Vos", text, time, isMe: true };
+    const optimisticMessage = {
+      id: `local-${Date.now()}`,
+      userId: user?.id ?? "me",
+      userName: t("chat.me"),
+      text,
+      time,
+      isMe: true
+    };
     setMessages(prev => [
       ...prev,
       optimisticMessage
     ]);
     setInputText("");
     void sendMessage(chatId, text).then((createdMessage) => {
-      setMessages(prev => prev.map((message) => message.id === optimisticMessage.id ? createdMessage : message));
+      const normalizedCreated = normalizeMessage(createdMessage);
+
+      setMessages((previousMessages) => {
+        const withoutOptimistic = previousMessages.map((message) => message.id === optimisticMessage.id ? normalizedCreated : message);
+        const alreadyExists = withoutOptimistic.some((message) => message.id === normalizedCreated.id);
+        const merged = alreadyExists ? withoutOptimistic : [...withoutOptimistic, normalizedCreated];
+        return dedupeById(merged);
+      });
     });
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
+    setTimeout(() => scrollToBottom(true), 60);
   }
 
   function handleAvatarPress() {
     Alert.alert(
-      chat?.title ?? "Grupo",
-      "¿Querés abandonar este chat?",
+      chat?.title ?? t("chat.leaveTitle"),
+      t("chat.leaveQuestion"),
       [
-        { text: "Cancelar", style: "cancel" },
+        { text: t("chat.leaveCancel"), style: "cancel" },
         {
-          text: "Abandonar grupo",
+          text: t("chat.leaveConfirm"),
           style: "destructive",
           onPress: () => {
             leaveChat(chatId ?? "");
@@ -248,6 +384,8 @@ export default function GroupChatScreen() {
     if (index === 0) return true;
     return messages[index - 1].userId !== messages[index].userId;
   }
+
+  const inputBottomPadding = Platform.OS === "ios" && !isKeyboardVisible ? Math.max(insets.bottom, 8) : 8;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -281,15 +419,17 @@ export default function GroupChatScreen() {
       {/* Messages + Input */}
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="height"
         keyboardVerticalOffset={0}
       >
         <ScrollView
           ref={scrollRef}
           style={styles.messagesList}
           contentContainerStyle={styles.messagesContent}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={() => scrollToBottom(false)}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          onScrollBeginDrag={Keyboard.dismiss}
         >
           {messages.map((msg, idx) => (
             <MessageBubble key={msg.id} msg={msg} showName={shouldShowName(idx)} />
@@ -297,15 +437,35 @@ export default function GroupChatScreen() {
         </ScrollView>
 
         {/* Input bar */}
-        <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+        <View
+          style={[
+            styles.inputBar,
+            {
+              paddingBottom: inputBottomPadding
+            }
+          ]}
+        >
           <TextInput
-            style={styles.textInput}
+            style={[styles.textInput, { height: composerHeight }]}
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Escribí un mensaje…"
+            placeholder={t("chat.placeholder")}
             placeholderTextColor={colors.muted}
             multiline
             maxLength={500}
+            blurOnSubmit={false}
+            onFocus={() => {
+              if (Platform.OS === "ios") {
+                scrollToBottom(false);
+                return;
+              }
+
+              setTimeout(() => scrollToBottom(true), 60);
+            }}
+            onContentSizeChange={(event) => {
+              const nextHeight = Math.min(Math.max(42, event.nativeEvent.contentSize.height + 2), 120);
+              setComposerHeight(nextHeight);
+            }}
             returnKeyType="send"
             onSubmitEditing={handleSend}
           />
@@ -403,7 +563,13 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
     marginBottom: 2
+  },
+  avatarSmallImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 15
   },
   avatarSmallText: {
     color: "#fff",

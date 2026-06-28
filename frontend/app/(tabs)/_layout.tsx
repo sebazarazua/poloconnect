@@ -4,6 +4,7 @@ import { Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppDrawerProvider } from "@/components/AppDrawer";
 import { useTheme } from "@/constants/theme";
+import { useLocale } from "@/contexts/LocaleContext";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -17,6 +18,7 @@ const icons: Record<string, { focused: IconName; default: IconName }> = {
 
 export default function TabLayout() {
   const { colors, mode } = useTheme();
+  const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const tabBarBottomPadding = Platform.OS === "ios" ? 22 : Math.max(insets.bottom, 28);
   const tabBarHeight = Platform.OS === "ios" ? 86 : 62 + tabBarBottomPadding;
@@ -57,11 +59,11 @@ export default function TabLayout() {
           }
         })}
       >
-        <Tabs.Screen name="index" options={{ title: "Inicio" }} />
-        <Tabs.Screen name="tournaments" options={{ title: "Torneos" }} />
-        <Tabs.Screen name="live" options={{ title: "En vivo" }} />
-        <Tabs.Screen name="market" options={{ title: "Mercado" }} />
-        <Tabs.Screen name="community" options={{ title: "Comunidad" }} />
+        <Tabs.Screen name="index" options={{ title: t("tabs.home") }} />
+        <Tabs.Screen name="tournaments" options={{ title: t("tabs.tournaments") }} />
+        <Tabs.Screen name="live" options={{ title: t("tabs.live") }} />
+        <Tabs.Screen name="market" options={{ title: t("tabs.market") }} />
+        <Tabs.Screen name="community" options={{ title: t("tabs.community") }} />
       </Tabs>
     </AppDrawerProvider>
   );

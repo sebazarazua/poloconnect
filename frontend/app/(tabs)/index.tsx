@@ -80,8 +80,8 @@ export default function HomeScreen() {
           heroAds: payload.heroAds.map((item) => item.imageUrl),
           compactAds: payload.compactAds.map((item) => item.imageUrl),
           news: payload.news.map((item) => ({
-            title: item.title ?? "Noticia",
-            subtitle: item.subtitle ?? "ACTUALIDAD",
+            title: item.title ?? t("home.fallbackNewsTitle"),
+            subtitle: item.subtitle ?? t("home.fallbackNewsCategory"),
             body: item.body ?? "",
             imageUrl: item.imageUrl,
             targetUrl: item.targetUrl ?? undefined
@@ -91,14 +91,14 @@ export default function HomeScreen() {
       .catch(() => {
         setHomeContent({ heroAds: [], compactAds: [], news: [] });
       });
-  }, []);
+  }, [t]);
 
   const ads = homeContent.heroAds.length > 0 ? homeContent.heroAds.map((uri) => resolveContentImageSource(uri)) : fallbackAds;
   const compactAds = homeContent.compactAds.length > 0 ? homeContent.compactAds.map((uri) => resolveContentImageSource(uri)) : fallbackCompactAds;
 
   const quickAccessItems = [
     { key: "calendar", label: t("home.calendar"), icon: "calendar-outline", route: "/(tabs)/tournaments" },
-    { key: "community", label: "Comunidades", icon: "people-outline", route: "/(tabs)/community" },
+    { key: "community", label: t("home.communities"), icon: "people-outline", route: "/(tabs)/community" },
     { key: "broadcast", label: t("home.broadcast"), icon: "play-circle-outline", route: "/broadcast" },
     { key: "news", label: t("home.news"), icon: "newspaper-outline" }
   ] as const;
@@ -173,10 +173,10 @@ export default function HomeScreen() {
   const remoteNewsItems: HeroItem[] = homeContent.news.map((entry, index) => ({
     type: "news",
     source: "Polo Connect",
-    category: entry.subtitle?.toUpperCase() || "ACTUALIDAD",
+    category: entry.subtitle?.toUpperCase() || t("home.fallbackNewsCategory"),
     title: entry.title,
     summary: entry.body || "",
-    time: "Ahora",
+    time: t("home.now"),
     targetUrl: entry.targetUrl,
     accent: ["#f7c66b", "#53d6b5", "#8dc2ff", "#ff9f7a"][index % 4],
     background: ["#0d4f8c", "#0a5a78", "#153f78", "#6b3f63"][index % 4],
@@ -381,7 +381,7 @@ export default function HomeScreen() {
                       {item.summary}
                     </Text>
                     <View style={styles.readMoreButton}>
-                      <Text style={styles.readMoreText}>Leer más</Text>
+                      <Text style={styles.readMoreText}>{t("home.readMore")}</Text>
                       <Ionicons name="arrow-forward" size={13} color="#ffffff" />
                     </View>
                   </View>

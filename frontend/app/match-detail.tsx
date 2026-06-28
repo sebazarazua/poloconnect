@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
+import { useLocale } from "@/contexts/LocaleContext";
 import { getTeamLogoSource } from "@/constants/teamLogos";
 import { getMatchById } from "@/services/matches";
 import { fetchMatch, type MatchDetail } from "@/services/api/matches";
@@ -21,13 +22,6 @@ const videoPreview = require("../assets/home-match-bg.png");
 const youtubeLiveUrl = "https://www.youtube.com/live/zY3JUrfPtTo";
 
 type MatchTab = "live" | "stats" | "lineups" | "comments";
-
-const tabs: { id: MatchTab; label: string }[] = [
-  { id: "live", label: "En vivo" },
-  { id: "stats", label: "Estadisticas" },
-  { id: "lineups", label: "Formaciones" },
-  { id: "comments", label: "Comentarios" }
-];
 
 const stats = [
   { label: "Goles", left: "5", right: "3", leftValue: 62, rightValue: 38 },
@@ -90,6 +84,7 @@ export default function MatchDetailScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const router = useRouter();
+  const { t } = useLocale();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const fallbackMatch = useMemo(() => getMatchById(id), [id]);
   const [match, setMatch] = useState<MatchDetail>(fallbackMatch);
@@ -115,7 +110,7 @@ export default function MatchDetailScreen() {
   return (
     <View style={styles.container} {...panResponder.panHandlers}>
       <Screen
-        title="Detalle del partido"
+        title={t("match.title")}
         subtitle={`${match.club} - ${match.time} hs`}
         showBackButton
         onBackPress={() => router.back()}
@@ -124,12 +119,12 @@ export default function MatchDetailScreen() {
           <View style={styles.scoreHeader}>
             <Text style={styles.competition}>{match.competition.toUpperCase()}</Text>
           </View>
-          <Text style={styles.chukker}>{match.chukker ?? "Por comenzar"}</Text>
+          <Text style={styles.chukker}>{match.chukker ?? t("match.upcoming")}</Text>
           {match.status === "live" ? (
             <View style={styles.liveBadgeWrap}>
               <View style={styles.liveBadge}>
                 <Ionicons name="play" size={10} color="#ffffff" />
-                <Text style={styles.liveBadgeText}>EN VIVO</Text>
+                <Text style={styles.liveBadgeText}>{t("match.live").toUpperCase()}</Text>
               </View>
             </View>
           ) : null}
@@ -144,7 +139,12 @@ export default function MatchDetailScreen() {
         </View>
 
         <View style={styles.tabs}>
-          {tabs.map((tab) => (
+          {([
+            { id: "live", label: t("match.tab.live") },
+            { id: "stats", label: t("match.tab.stats") },
+            { id: "lineups", label: t("match.tab.lineups") },
+            { id: "comments", label: t("match.tab.comments") }
+          ] as Array<{ id: MatchTab; label: string }>).map((tab) => (
             <Pressable
               key={tab.id}
               style={[styles.tab, activeTab === tab.id && styles.activeTab]}
@@ -169,6 +169,7 @@ export default function MatchDetailScreen() {
 function TeamSummary({ name, initials }: { name: string; initials: string }) {
   const colors = useThemeColors();
   const styles = createStyles(colors);
+  const { t } = useLocale();
 
   return (
     <View style={styles.teamSummary}>
@@ -189,6 +190,7 @@ function TeamSummary({ name, initials }: { name: string; initials: string }) {
 function LivePanel({ youtubeUrl = youtubeLiveUrl }: { youtubeUrl?: string }) {
   const colors = useThemeColors();
   const styles = createStyles(colors);
+  const { t } = useLocale();
 
   return (
     <View>
@@ -203,7 +205,7 @@ function LivePanel({ youtubeUrl = youtubeLiveUrl }: { youtubeUrl?: string }) {
             style={styles.playButton}
             onPress={() => Linking.openURL(youtubeUrl)}
             accessibilityRole="button"
-            accessibilityLabel="Abrir transmision en YouTube"
+            accessibilityLabel={t("match.openYoutube")}
           >
             <Ionicons name="play" size={38} color="#ffffff" />
           </Pressable>
@@ -218,7 +220,7 @@ function LivePanel({ youtubeUrl = youtubeLiveUrl }: { youtubeUrl?: string }) {
         </View>
       </ImageBackground>
 
-      <Text style={styles.panelTitle}>Chukkers</Text>
+      <Text style={styles.panelTitle}>{t("match.chukkers")}</Text>
       <View style={styles.chukkerTrack}>
         {[1, 2, 3, 4, 5, 6, 7].map((item) => (
           <View key={item} style={styles.chukkerStepWrap}>
@@ -237,10 +239,11 @@ function LivePanel({ youtubeUrl = youtubeLiveUrl }: { youtubeUrl?: string }) {
 function StatsPanel({ leftTeam, rightTeam, items }: { leftTeam: string; rightTeam: string; items: typeof stats }) {
   const colors = useThemeColors();
   const styles = createStyles(colors);
+  const { t } = useLocale();
 
   return (
     <View style={styles.panel}>
-      <Text style={styles.panelTitle}>Estadisticas del partido</Text>
+      <Text style={styles.panelTitle}>{t("match.statsTitle")}</Text>
       <View style={styles.statsTeams}>
         <Text style={styles.statsTeam}>{getInitials(leftTeam)}</Text>
         <Text style={styles.statsTeam}>{getInitials(rightTeam)}</Text>
@@ -269,6 +272,7 @@ function StatsPanel({ leftTeam, rightTeam, items }: { leftTeam: string; rightTea
 function LineupsPanel({ leftTeam, rightTeam, items }: { leftTeam: string; rightTeam: string; items: typeof lineups }) {
   const colors = useThemeColors();
   const styles = createStyles(colors);
+  const { t } = useLocale();
 
   return (
     <View>
@@ -277,11 +281,11 @@ function LineupsPanel({ leftTeam, rightTeam, items }: { leftTeam: string; rightT
         <LineupCard team={rightTeam} players={items.right} />
       </View>
       <View style={styles.refereeCard}>
-        <Text style={styles.refereeTitle}>Arbitros</Text>
+        <Text style={styles.refereeTitle}>{t("match.referees")}</Text>
         <View style={styles.refereeGrid}>
           {["Martin Pascual", "Esteban Ferrari", "Juan Bollini"].map((name) => (
             <View key={name} style={styles.refereeItem}>
-              <Text style={styles.refereeRole}>Campo</Text>
+              <Text style={styles.refereeRole}>{t("match.field")}</Text>
               <Text style={styles.refereeName}>{name}</Text>
             </View>
           ))}
@@ -300,18 +304,19 @@ function LineupCard({
 }) {
   const colors = useThemeColors();
   const styles = createStyles(colors);
+  const { t } = useLocale();
 
   return (
     <View style={styles.lineupCard}>
       <Text style={styles.lineupTeam}>{team.toUpperCase()}</Text>
       {players.map((player) => (
         <View key={player.name} style={styles.playerCard}>
-          <Text style={styles.playerNumber}>N° {player.number}</Text>
+          <Text style={styles.playerNumber}>{t("match.playerNumber", { number: player.number })}</Text>
           <Text style={styles.playerName}>{player.name}</Text>
           <Text style={styles.playerGoals}>{player.goals}</Text>
         </View>
       ))}
-      <Text style={styles.handicap}>Handicap total: 10</Text>
+      <Text style={styles.handicap}>{t("match.totalHandicap", { value: 10 })}</Text>
     </View>
   );
 }

@@ -23,6 +23,33 @@ Usuario seed:
 - identifier: `polo.connect` o `adrian@poloconnect.app`
 - password: `PoloConnect123!`
 
+## Recuperacion de contraseña (mail real)
+
+El endpoint `POST /api/v1/auth/password-reset/request` envia correo real solo si SMTP esta configurado.
+
+Variables requeridas en `.env`:
+
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_SECURE` (`true` para 465, `false` para 587 normalmente)
+- `SMTP_USER`
+- `SMTP_PASS`
+- `SMTP_FROM`
+
+Sin `SMTP_HOST`, el backend no envia correo y solo deja el codigo en logs para desarrollo.
+
+## Login social
+
+Apple requiere configurar en backend:
+
+- `APPLE_OAUTH_CLIENT_ID`
+
+Opcional para aceptar multiples audiencias (por ejemplo Expo Go + build real):
+
+- `APPLE_OAUTH_CLIENT_IDS` (lista separada por comas)
+
+Este valor debe coincidir con el `aud` del token de Apple (Service ID o Bundle ID segun configuracion en Apple Developer).
+
 ## Modulos incluidos
 
 - Auth con JWT access + refresh rotativo.

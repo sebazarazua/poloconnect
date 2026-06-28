@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Screen } from "@/components/Screen";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocale } from "@/contexts/LocaleContext";
 import { AppColors, useThemeColors } from "@/constants/theme";
 
 export default function AdminLoginScreen() {
@@ -10,21 +11,22 @@ export default function AdminLoginScreen() {
   const router = useRouter();
   const colors = useThemeColors();
   const styles = createStyles(colors);
+  const { t } = useLocale();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <Screen eyebrow="Admin" title="Acceso al Panel" subtitle="Solo administradores autorizados" showBackButton onBackPress={() => router.back()}>
+    <Screen eyebrow="Admin" title={t("adminLogin.title")} subtitle={t("adminLogin.subtitle")} showBackButton onBackPress={() => router.back()}>
       {Platform.OS !== "web" ? (
         <View style={styles.infoCard}>
-          <Text style={styles.infoText}>Este panel está pensado para uso web.</Text>
+          <Text style={styles.infoText}>{t("adminLogin.webOnly")}</Text>
         </View>
       ) : null}
 
       <View style={styles.formCard}>
-        <TextInput style={styles.input} value={identifier} onChangeText={setIdentifier} placeholder="Email o usuario admin" placeholderTextColor={colors.muted} autoCapitalize="none" />
-        <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="Contraseña" placeholderTextColor={colors.muted} secureTextEntry />
+        <TextInput style={styles.input} value={identifier} onChangeText={setIdentifier} placeholder={t("adminLogin.identifier")} placeholderTextColor={colors.muted} autoCapitalize="none" />
+        <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder={t("auth.login.password")} placeholderTextColor={colors.muted} secureTextEntry />
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -36,11 +38,11 @@ export default function AdminLoginScreen() {
               await signIn({ identifier, password });
               router.replace("/admin-panel");
             } catch (e) {
-              setError(e instanceof Error ? e.message : "No se pudo iniciar sesión.");
+              setError(e instanceof Error ? e.message : t("auth.login.error"));
             }
           }}
         >
-          <Text style={styles.buttonText}>Ingresar</Text>
+          <Text style={styles.buttonText}>{t("adminLogin.submit")}</Text>
         </Pressable>
       </View>
     </Screen>

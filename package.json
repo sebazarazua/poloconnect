@@ -14,5 +14,9 @@
     "typecheck:frontend": "npm --prefix frontend run typecheck",
     "typecheck:backend": "npm --prefix backend run typecheck",
     "typecheck:all": "npm run typecheck:frontend && npm run typecheck:backend"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.14",
+    "typescript": "~6.0.3"
   }
 }

@@ -18,7 +18,12 @@ function getDefaultApiUrl() {
   return host ? `http://${host}:4000/api/v1` : "http://localhost:4000/api/v1";
 }
 
-const apiUrl = (process.env.EXPO_PUBLIC_API_URL ?? getDefaultApiUrl()).replace(/\/$/, "");
+const envApiUrl = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "");
+const defaultApiUrl = getDefaultApiUrl().replace(/\/$/, "");
+const apiUrlCandidates = [envApiUrl, defaultApiUrl].filter(
+  (url, index, array): url is string => Boolean(url) && array.indexOf(url) === index
+);
+let apiUrl = apiUrlCandidates[0] ?? defaultApiUrl;
 
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
@@ -79,12 +84,28 @@ export function getApiUrl() {
   return apiUrl;
 }
 
+async function fetchWithApiFallback(path: string, init: RequestInit) {
+  let lastError: unknown = null;
+
+  for (const candidate of apiUrlCandidates) {
+    try {
+      const response = await fetch(`${candidate}${path}`, init);
+      apiUrl = candidate;
+      return response;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Network request failed");
+}
+
 async function refreshAccessToken() {
   if (!refreshToken) {
     throw new Error("No hay sesión activa.");
   }
 
-  const response = await fetch(`${apiUrl}/auth/refresh`, {
+  const response = await fetchWithApiFallback("/auth/refresh", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -137,7 +158,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, retry 
     }
   }
 
-  const response = await fetch(`${apiUrl}${path}`, { ...init, headers, credentials: "include" });
+  const response = await fetchWithApiFallback(path, { ...init, headers, credentials: "include" });
 
   if (response.status === 401 && refreshToken && retry) {
     refreshPromise ??= refreshAccessToken().finally(() => {

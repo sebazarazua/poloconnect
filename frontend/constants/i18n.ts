@@ -19,3 +19,13 @@ export function formatLiveDate(locale: Locale, date: Date) {
     .format(date)
     .replace(/^\w/, (letter) => letter.toUpperCase());
 }
+
+export function formatCalendarMonth(locale: Locale, month: number, year: number) {
+  const date = new Date(year, month, 1);
+  const formatter = new Intl.DateTimeFormat(locale, {
+    month: "long",
+    year: "numeric"
+  });
+
+  return formatter.format(date);
+}

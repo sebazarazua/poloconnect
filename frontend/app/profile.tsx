@@ -1,8 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
+  Linking,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -12,13 +15,19 @@ import {
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocale } from "@/contexts/LocaleContext";
+import { changeMyPassword, requestPasswordReset } from "@/services/api/auth";
+import { resolveUploadedUrl, updateMyProfile, uploadMyAvatar } from "@/services/api/users";
 
 export default function ProfileScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, updateUser, signOut } = useAuth();
+  const { t } = useLocale();
 
+  const [firstName, setFirstName] = useState(user?.firstName ?? "");
+  const [lastName, setLastName] = useState(user?.lastName ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -26,20 +35,148 @@ export default function ProfileScreen() {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPhoto, setSavingPhoto] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
 
+  useEffect(() => {
+    setFirstName(user?.firstName ?? "");
+    setLastName(user?.lastName ?? "");
+  }, [user?.id, user?.firstName, user?.lastName]);
+
+  const uploadSelectedAvatar = async (asset: ImagePicker.ImagePickerAsset) => {
+    if (!asset.uri) return;
+
+    setSavingPhoto(true);
+
+    try {
+      const extension = asset.uri.split(".").pop()?.split("?")[0] || "jpg";
+      const nextUser = await uploadMyAvatar({
+        uri: asset.uri,
+        fileName: asset.fileName || `avatar.${extension}`,
+        mimeType: asset.mimeType || `image/${extension === "jpg" ? "jpeg" : extension}`
+      });
+      updateUser(nextUser);
+      Alert.alert(t("profile.photoUpdatedTitle"), t("profile.photoUpdatedText"));
+    } catch (error) {
+      Alert.alert(t("profile.errorTitle"), error instanceof Error ? error.message : t("profile.photoError"));
+    } finally {
+      setSavingPhoto(false);
+    }
+  };
+
+  const pickAvatarFromCamera = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(t("profile.photoPermissionTitle"), t("profile.cameraPermissionText"), [
+        { text: t("common.cancel"), style: "cancel" },
+        { text: t("profile.openSettings"), onPress: () => void Linking.openSettings() }
+      ]);
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85
+    });
+
+    if (!result.canceled) {
+      await uploadSelectedAvatar(result.assets[0]);
+    }
+  };
+
+  const pickAvatarFromGallery = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(t("profile.photoPermissionTitle"), t("profile.galleryPermissionText"), [
+        { text: t("common.cancel"), style: "cancel" },
+        { text: t("profile.openSettings"), onPress: () => void Linking.openSettings() }
+      ]);
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85
+    });
+
+    if (!result.canceled) {
+      await uploadSelectedAvatar(result.assets[0]);
+    }
+  };
+
+  const handleChangePhoto = () => {
+    if (savingPhoto) return;
+
+    Alert.alert(t("profile.photoTitle"), t("profile.changePhoto"), [
+      { text: t("profile.takePhoto"), onPress: () => void pickAvatarFromCamera() },
+      { text: t("profile.chooseGallery"), onPress: () => void pickAvatarFromGallery() },
+      { text: t("common.cancel"), style: "cancel" }
+    ]);
+  };
+
+  const handleSaveProfile = async () => {
+    const trimmedFirstName = firstName.trim();
+    const trimmedLastName = lastName.trim();
+
+    if (trimmedFirstName.length < 2 || trimmedLastName.length < 2) {
+      Alert.alert(t("profile.errorTitle"), t("profile.nameRequired"));
+      return;
+    }
+
+    setSavingProfile(true);
+
+        setSaving(true);
+
+        try {
+          await changeMyPassword({ currentPassword, newPassword });
+          setCurrentPassword("");
+          setNewPassword("");
+          setConfirmPassword("");
+          Alert.alert(t("profile.passwordUpdatedTitle"), t("profile.passwordUpdatedText"));
+          signOut();
+          router.replace("/login");
+        } catch (error) {
+          Alert.alert(t("profile.errorTitle"), error instanceof Error ? error.message : t("profile.profileError"));
+        } finally {
+          setSaving(false);
+        }
+  };
+
+      const handleResetByEmailCode = async () => {
+        if (!user?.email) {
+          Alert.alert(t("profile.errorTitle"), t("profile.profileError"));
+          return;
+        }
+
+        setSendingCode(true);
+
+        try {
+          await requestPasswordReset(user.email);
+          router.push({ pathname: "/forgot-password", params: { mode: "in-app", email: user.email, stage: "confirm" } });
+        } catch (error) {
+          Alert.alert(t("profile.errorTitle"), error instanceof Error ? error.message : t("auth.reset.error"));
+        } finally {
+          setSendingCode(false);
+        }
+      };
   const handleChangePassword = async () => {
     if (!currentPassword.trim() || !newPassword.trim() || !confirmPassword.trim()) {
-      Alert.alert("Campos incompletos", "Completá los tres campos para cambiar la contraseña.");
+      Alert.alert(t("profile.incompleteTitle"), t("profile.incompleteText"));
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert("Error", "La contraseña nueva y la confirmación no coinciden.");
+      Alert.alert(t("profile.errorTitle"), t("profile.passwordMismatch"));
       return;
     }
 
     if (newPassword.length < 6) {
-      Alert.alert("Error", "La contraseña nueva debe tener al menos 6 caracteres.");
+      Alert.alert(t("profile.errorTitle"), t("profile.passwordTooShort"));
       return;
     }
 
@@ -51,51 +188,79 @@ export default function ProfileScreen() {
     setNewPassword("");
     setConfirmPassword("");
 
-    Alert.alert("Contraseña actualizada", "Tu contraseña fue cambiada con éxito.");
+    Alert.alert(t("profile.passwordUpdatedTitle"), t("profile.passwordUpdatedText"));
   };
 
-  const fullName = user ? `${user.firstName} ${user.lastName}` : "—";
+  const fullName = user ? `${firstName || user.firstName} ${lastName || user.lastName}` : "—";
   const email = user?.email ?? "—";
   const username = user?.username ?? "—";
+  const avatarSource = resolveUploadedUrl(user?.avatarUrl);
+  const profileHasChanges = firstName.trim() !== (user?.firstName ?? "") || lastName.trim() !== (user?.lastName ?? "");
 
   return (
     <Screen
-      eyebrow="Cuenta"
-      title="Mi perfil"
-      subtitle="Gestioná tu información y preferencias."
+      eyebrow={t("common.account")}
+      title={t("profile.title")}
+      subtitle={t("profile.subtitle")}
       showBackButton
       onBackPress={() => router.back()}
     >
       {/* Avatar */}
       <View style={styles.avatarSection}>
         <View style={styles.avatarWrap}>
-          <View style={styles.avatar}>
-            <Ionicons name="person" size={44} color="#ffffff" />
-          </View>
-          <Pressable style={styles.avatarEditBtn} accessibilityLabel="Cambiar foto de perfil">
-            <Ionicons name="camera" size={15} color="#ffffff" />
+          <Pressable style={styles.avatar} onPress={handleChangePhoto} accessibilityLabel={t("profile.changePhoto")}>
+            {avatarSource ? (
+              <Image source={{ uri: avatarSource }} style={styles.avatarImage} />
+            ) : (
+              <Ionicons name="person" size={44} color="#ffffff" />
+            )}
+          </Pressable>
+          <Pressable style={styles.avatarEditBtn} onPress={handleChangePhoto} accessibilityLabel={t("profile.changePhoto")} disabled={savingPhoto}>
+            <Ionicons name={savingPhoto ? "cloud-upload-outline" : "camera"} size={15} color="#ffffff" />
           </Pressable>
         </View>
         <Text style={styles.avatarName}>{fullName}</Text>
         <Text style={styles.avatarHandle}>@{username}</Text>
       </View>
 
-      {/* Datos inmutables */}
+      {/* Datos personales */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Datos personales</Text>
+        <Text style={styles.sectionTitle}>{t("profile.personalData")}</Text>
 
-        <View style={styles.fieldRow}>
-          <View style={styles.fieldIcon}>
-            <Ionicons name="person-outline" size={16} color={colors.muted} />
+        <View style={styles.editableGrid}>
+          <View style={styles.editableField}>
+            <Text style={styles.inputLabel}>{t("profile.firstName")}</Text>
+            <TextInput
+              style={styles.profileInput}
+              value={firstName}
+              onChangeText={setFirstName}
+              placeholder={t("profile.firstName")}
+              placeholderTextColor={colors.muted}
+              autoCapitalize="words"
+            />
           </View>
-          <View style={styles.fieldBody}>
-            <Text style={styles.fieldLabel}>Nombre completo</Text>
-            <Text style={styles.fieldValue}>{fullName}</Text>
-          </View>
-          <View style={styles.lockedBadge}>
-            <Ionicons name="lock-closed-outline" size={12} color={colors.muted} />
+
+          <View style={styles.editableField}>
+            <Text style={styles.inputLabel}>{t("profile.lastName")}</Text>
+            <TextInput
+              style={styles.profileInput}
+              value={lastName}
+              onChangeText={setLastName}
+              placeholder={t("profile.lastName")}
+              placeholderTextColor={colors.muted}
+              autoCapitalize="words"
+            />
           </View>
         </View>
+
+        <Pressable
+          style={[styles.saveBtn, (!profileHasChanges || savingProfile) && styles.saveBtnDisabled]}
+          onPress={handleSaveProfile}
+          disabled={!profileHasChanges || savingProfile}
+        >
+          <Ionicons name="checkmark-circle-outline" size={17} color="#ffffff" />
+          <Text style={styles.saveBtnText}>{savingProfile ? t("common.saving") : t("profile.saveProfile")}</Text>
+        </Pressable>
 
         <View style={styles.divider} />
 
@@ -104,7 +269,7 @@ export default function ProfileScreen() {
             <Ionicons name="mail-outline" size={16} color={colors.muted} />
           </View>
           <View style={styles.fieldBody}>
-            <Text style={styles.fieldLabel}>Email</Text>
+            <Text style={styles.fieldLabel}>{t("common.email")}</Text>
             <Text style={styles.fieldValue}>{email}</Text>
           </View>
           <View style={styles.lockedBadge}>
@@ -119,7 +284,7 @@ export default function ProfileScreen() {
             <Ionicons name="at-outline" size={16} color={colors.muted} />
           </View>
           <View style={styles.fieldBody}>
-            <Text style={styles.fieldLabel}>Usuario</Text>
+            <Text style={styles.fieldLabel}>{t("common.username")}</Text>
             <Text style={styles.fieldValue}>@{username}</Text>
           </View>
           <View style={styles.lockedBadge}>
@@ -130,12 +295,12 @@ export default function ProfileScreen() {
 
       {/* Cambiar contraseña */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Cambiar contraseña</Text>
+        <Text style={styles.sectionTitle}>{t("profile.changePassword")}</Text>
 
         <View style={styles.inputWrap}>
           <TextInput
             style={styles.input}
-            placeholder="Contraseña actual"
+            placeholder={t("profile.currentPassword")}
             placeholderTextColor={colors.muted}
             secureTextEntry={!showCurrent}
             value={currentPassword}
@@ -145,7 +310,7 @@ export default function ProfileScreen() {
           <Pressable
             style={styles.eyeBtn}
             onPress={() => setShowCurrent((v) => !v)}
-            accessibilityLabel={showCurrent ? "Ocultar contraseña actual" : "Mostrar contraseña actual"}
+            accessibilityLabel={showCurrent ? t("profile.hideCurrent") : t("profile.showCurrent")}
           >
             <Ionicons
               name={showCurrent ? "eye-off-outline" : "eye-outline"}
@@ -158,7 +323,7 @@ export default function ProfileScreen() {
         <View style={styles.inputWrap}>
           <TextInput
             style={styles.input}
-            placeholder="Contraseña nueva"
+            placeholder={t("profile.newPassword")}
             placeholderTextColor={colors.muted}
             secureTextEntry={!showNew}
             value={newPassword}
@@ -168,7 +333,7 @@ export default function ProfileScreen() {
           <Pressable
             style={styles.eyeBtn}
             onPress={() => setShowNew((v) => !v)}
-            accessibilityLabel={showNew ? "Ocultar contraseña nueva" : "Mostrar contraseña nueva"}
+            accessibilityLabel={showNew ? t("profile.hideNew") : t("profile.showNew")}
           >
             <Ionicons
               name={showNew ? "eye-off-outline" : "eye-outline"}
@@ -181,7 +346,7 @@ export default function ProfileScreen() {
         <View style={styles.inputWrap}>
           <TextInput
             style={styles.input}
-            placeholder="Confirmá la contraseña nueva"
+            placeholder={t("profile.confirmPassword")}
             placeholderTextColor={colors.muted}
             secureTextEntry={!showConfirm}
             value={confirmPassword}
@@ -191,7 +356,7 @@ export default function ProfileScreen() {
           <Pressable
             style={styles.eyeBtn}
             onPress={() => setShowConfirm((v) => !v)}
-            accessibilityLabel={showConfirm ? "Ocultar confirmación" : "Mostrar confirmación"}
+            accessibilityLabel={showConfirm ? t("profile.hideConfirm") : t("profile.showConfirm")}
           >
             <Ionicons
               name={showConfirm ? "eye-off-outline" : "eye-outline"}
@@ -207,19 +372,28 @@ export default function ProfileScreen() {
           disabled={saving}
         >
           <Ionicons name="shield-checkmark-outline" size={17} color="#ffffff" />
-          <Text style={styles.saveBtnText}>{saving ? "Guardando..." : "Guardar contraseña"}</Text>
+          <Text style={styles.saveBtnText}>{saving ? t("common.saving") : t("profile.savePassword")}</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.secondaryBtn, sendingCode && styles.saveBtnDisabled]}
+          onPress={handleResetByEmailCode}
+          disabled={sendingCode}
+        >
+          <Ionicons name="mail-outline" size={17} color={colors.primaryDark} />
+          <Text style={styles.secondaryBtnText}>{sendingCode ? t("common.saving") : t("profile.resetByCode")}</Text>
         </Pressable>
       </View>
 
       {/* Accesos rápidos */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Mis accesos</Text>
+        <Text style={styles.sectionTitle}>{t("profile.quickAccess")}</Text>
 
         <Pressable style={styles.linkRow} onPress={() => router.push("/favorites")}>
           <View style={[styles.linkIcon, { backgroundColor: colors.dangerSoft }]}>
             <Ionicons name="heart" size={17} color={colors.danger} />
           </View>
-          <Text style={styles.linkText}>Mis productos favoritos</Text>
+          <Text style={styles.linkText}>{t("profile.favoriteProducts")}</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.muted} />
         </Pressable>
       </View>
@@ -245,7 +419,12 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderWidth: 3,
     borderColor: colors.primarySoft,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    overflow: "hidden"
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%"
   },
   avatarEditBtn: {
     position: "absolute",
@@ -284,6 +463,31 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     marginBottom: 2
+  },
+  editableGrid: {
+    gap: 10
+  },
+  editableField: {
+    gap: 6
+  },
+  inputLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5
+  },
+  profileInput: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    backgroundColor: colors.background,
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "700",
+    paddingHorizontal: 14,
+    paddingVertical: 12
   },
   fieldRow: {
     flexDirection: "row",
@@ -367,6 +571,23 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     color: "#ffffff",
     fontSize: 14,
     fontWeight: "800"
+  },
+  secondaryBtn: {
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 2
+  },
+  secondaryBtnText: {
+    color: colors.primaryDark,
+    fontWeight: "800",
+    fontSize: 14
   },
   linkRow: {
     flexDirection: "row",

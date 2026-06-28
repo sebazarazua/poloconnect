@@ -5,28 +5,20 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Card, SectionTitle } from "@/components/Card";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
+import { useLocale } from "@/contexts/LocaleContext";
+import { formatCalendarMonth } from "@/constants/i18n";
 import { listTournaments, type Tournament } from "@/services/api/tournaments";
 
-const weekDays = ["L", "M", "X", "J", "V", "S", "D"];
-const monthNames = [
-  "Enero",
-  "Febrero",
-  "Marzo",
-  "Abril",
-  "Mayo",
-  "Junio",
-  "Julio",
-  "Agosto",
-  "Septiembre",
-  "Octubre",
-  "Noviembre",
-  "Diciembre"
-];
+const weekDays = {
+  "es-AR": ["L", "M", "X", "J", "V", "S", "D"],
+  "en-US": ["M", "Tu", "W", "Th", "F", "Sa", "Su"]
+} as const;
 
 export default function TournamentsScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const router = useRouter();
+  const { locale, t } = useLocale();
   const [calendarDate, setCalendarDate] = useState({ month: 5, year: 2026 });
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
@@ -78,17 +70,17 @@ export default function TournamentsScreen() {
 
   return (
     <Screen
-      eyebrow="Temporada"
-      title="Torneos"
-      subtitle="Calendario, categorías y estado de las competencias principales."
+      eyebrow={t("tournaments.eyebrow")}
+      title={t("tournaments.title")}
+      subtitle={t("tournaments.subtitle")}
     >
       <Card style={styles.calendarCard}>
         <View style={styles.calendarHeader}>
           <View>
             <Text style={styles.calendarMonth}>
-              {monthNames[calendarDate.month]} {calendarDate.year}
+              {formatCalendarMonth(locale, calendarDate.month, calendarDate.year)}
             </Text>
-            <Text style={styles.calendarHint}>Torneos marcados en azul</Text>
+            <Text style={styles.calendarHint}>{t("tournaments.calendarHint")}</Text>
           </View>
           <View style={styles.calendarActions}>
             <Pressable style={styles.monthButton} onPress={() => changeMonth(-1)}>
@@ -102,12 +94,12 @@ export default function TournamentsScreen() {
 
         <View style={styles.monthBadge}>
           <Text style={styles.monthBadgeText}>
-            {monthTournaments.length} {monthTournaments.length === 1 ? "evento" : "eventos"}
+            {monthTournaments.length} {monthTournaments.length === 1 ? t("tournaments.eventSingular") : t("tournaments.eventPlural")}
           </Text>
         </View>
 
         <View style={styles.weekGrid}>
-          {weekDays.map((day) => (
+          {weekDays[locale].map((day) => (
             <Text key={day} style={styles.weekDay}>{day}</Text>
           ))}
         </View>
@@ -147,7 +139,7 @@ export default function TournamentsScreen() {
         </View>
       </Card>
 
-      <SectionTitle title="Próximos torneos" />
+      <SectionTitle title={t("tournaments.upcoming")} />
       {monthTournaments.map((item) => (
         <Card
           key={item.name}
@@ -159,8 +151,8 @@ export default function TournamentsScreen() {
             </View>
             <View style={styles.info}>
               <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.level}>{item.level ?? "Inscripción abierta"}</Text>
-              <Text style={styles.club}>{item.club ?? "Club a confirmar"}</Text>
+              <Text style={styles.level}>{item.level ?? t("tournaments.openRegistration")}</Text>
+              <Text style={styles.club}>{item.club ?? t("tournaments.clubTbd")}</Text>
             </View>
             <Pressable
               style={({ pressed }) => [
@@ -169,18 +161,18 @@ export default function TournamentsScreen() {
               ]}
               onPress={() => router.push({ pathname: "/team-register", params: { tournamentId: item.id } })}
               accessibilityRole="button"
-              accessibilityLabel={`Anotar equipo en ${item.name}`}
+              accessibilityLabel={t("tournaments.registerA11y", { name: item.name })}
             >
               <Ionicons name="person-add-outline" size={16} color="#ffffff" />
-              <Text style={styles.registerButtonText}>Anotar</Text>
+              <Text style={styles.registerButtonText}>{t("tournaments.register")}</Text>
             </Pressable>
           </View>
         </Card>
       ))}
       {monthTournaments.length === 0 ? (
         <Card style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No hay torneos este mes</Text>
-          <Text style={styles.emptyText}>Probá navegando otro mes para ver el calendario completo.</Text>
+          <Text style={styles.emptyTitle}>{t("tournaments.emptyTitle")}</Text>
+          <Text style={styles.emptyText}>{t("tournaments.emptyText")}</Text>
         </Card>
       ) : null}
     </Screen>

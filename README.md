@@ -22,3 +22,33 @@ npm install
 docker compose up -d
 npm run dev
 ```
+
+## Auth real (mail + Google + Apple)
+
+1. Backend:
+
+```bash
+cd backend
+copy .env.example .env
+```
+
+Completar en `backend/.env`:
+
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
+- `APPLE_OAUTH_CLIENT_ID` (o `APPLE_OAUTH_CLIENT_IDS` separado por comas para Expo Go + build)
+
+2. Frontend:
+
+```bash
+cd frontend
+copy .env.example .env
+```
+
+Completar en `frontend/.env`:
+
+- `EXPO_PUBLIC_API_URL`
+- `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
+- `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`
+- `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`
+
+3. Levantar backend y frontend de nuevo para tomar variables.

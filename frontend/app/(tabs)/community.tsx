@@ -84,9 +84,7 @@ export default function CommunityScreen() {
 
       {joinedChats.length === 0 && (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>
-            Todavía no te uniste a ningún chat. ¡Explorá los recomendados!
-          </Text>
+          <Text style={styles.emptyStateText}>{t("community.emptyJoined")}</Text>
         </View>
       )}
 
@@ -121,9 +119,7 @@ export default function CommunityScreen() {
 
       {recommendedChats.length === 0 && (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>
-            Ya estás en todos los grupos recomendados 🎉
-          </Text>
+          <Text style={styles.emptyStateText}>{t("community.emptyRecommended")}</Text>
         </View>
       )}
     </Screen>

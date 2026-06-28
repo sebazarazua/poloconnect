@@ -1,5 +1,8 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useEffect } from "react";
+import Constants from "expo-constants";
+import { Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { LocaleProvider } from "@/contexts/LocaleContext";
@@ -9,20 +12,21 @@ import { ThemeProvider, useTheme } from "@/constants/theme";
 
 export default function RootLayout() {
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <LocaleProvider>
-          <MarketProvider>
-            <CommunityProvider>
-              <ThemeProvider>
+    <ThemeProvider>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <LocaleProvider>
+            <MarketProvider>
+              <CommunityProvider>
                 <ThemedStatusBar />
+                <PushTokenRegistrar />
                 <RootNavigator />
-              </ThemeProvider>
-            </CommunityProvider>
-          </MarketProvider>
-        </LocaleProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+              </CommunityProvider>
+            </MarketProvider>
+          </LocaleProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </ThemeProvider>
   );
 }
 
@@ -37,11 +41,32 @@ function ThemedStatusBar() {
   );
 }
 
+function PushTokenRegistrar() {
+  const { isAuthenticated, user } = useAuth();
+
+  useEffect(() => {
+    const isExpoGo = Constants.executionEnvironment === "storeClient" || Constants.appOwnership === "expo";
+
+    // On Android Expo Go, remote push token APIs are not supported.
+    if (Platform.OS === "android" && isExpoGo) {
+      return;
+    }
+
+    if (!isAuthenticated || !user) {
+      return;
+    }
+
+    void import("@/services/push-notifications").then((module) => module.registerDevicePushToken());
+  }, [isAuthenticated, user?.id]);
+
+  return null;
+}
+
 function RootNavigator() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack initialRouteName="login" screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={!isAuthenticated}>
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />
@@ -63,6 +88,8 @@ function RootNavigator() {
         <Stack.Screen name="group-chat" />
         <Stack.Screen name="admin-panel" />
       </Stack.Protected>
+
+      <Stack.Screen name="forgot-password" />
     </Stack>
   );
 }

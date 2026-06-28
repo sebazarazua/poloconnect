@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { PropsWithChildren, createContext, useContext, useRef, useState } from "react";
 import {
   Animated,
+  Image,
   PanResponder,
   Pressable,
   ScrollView,
@@ -15,6 +16,8 @@ import { Href, useRouter } from "expo-router";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocale } from "@/contexts/LocaleContext";
+import { useMarket } from "@/contexts/MarketContext";
+import { resolveUploadedUrl } from "@/services/api/users";
 
 type AppDrawerContextValue = {
   openDrawer: () => void;
@@ -24,21 +27,6 @@ type AppDrawerContextValue = {
 const AppDrawerContext = createContext<AppDrawerContextValue | null>(null);
 
 type DrawerItem = { label: string; icon: keyof typeof Ionicons.glyphMap; route?: Href };
-
-const drawerItems: Array<DrawerItem> = [
-  { label: "Mi perfil", icon: "person-outline", route: "/profile" },
-  { label: "Favoritos", icon: "heart-outline", route: "/favorites" },
-  { label: "Partidos emitidos", icon: "play-circle-outline", route: "/broadcast" },
-  { label: "Anota a tu equipo", icon: "checkmark-circle-outline", route: "/team-register" },
-  { label: "Comunidad", icon: "people-outline", route: "/(tabs)/community" },
-  { label: "Mercado", icon: "pricetag-outline", route: "/(tabs)/market" },
-  { label: "Calendario", icon: "calendar-outline", route: "/(tabs)/tournaments" }
-];
-
-const drawerFooterItems: Array<DrawerItem> = [
-  { label: "Configuración", icon: "settings-outline", route: "/settings" },
-  { label: "Centro de ayuda", icon: "help-circle-outline" }
-];
 
 export function useAppDrawer() {
   const context = useContext(AppDrawerContext);
@@ -60,7 +48,8 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
   const { width } = useWindowDimensions();
   const router = useRouter();
   const { signOut, user } = useAuth();
-  const { locale, setLocale } = useLocale();
+  const { locale, setLocale, t } = useLocale();
+  const { favoriteIds } = useMarket();
   const drawerProgress = useRef(new Animated.Value(0)).current;
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const drawerWidth = Math.min(width * 0.78, 340);
@@ -84,6 +73,21 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
 
   const nextLocale = locale === "es-AR" ? "en-US" : "es-AR";
   const currentFlagId = locale === "es-AR" ? "ES" : "GB";
+  const favoritesLabel = t("drawer.favorites").toLowerCase();
+  const drawerAvatarSource = resolveUploadedUrl(user?.avatarUrl);
+  const drawerItems: Array<DrawerItem> = [
+    { label: t("drawer.profile"), icon: "person-outline", route: "/profile" },
+    { label: t("drawer.favorites"), icon: "heart-outline", route: "/favorites" },
+    { label: t("drawer.broadcasts"), icon: "play-circle-outline", route: "/broadcast" },
+    { label: t("drawer.teamRegister"), icon: "checkmark-circle-outline", route: "/team-register" },
+    { label: t("drawer.community"), icon: "people-outline", route: "/(tabs)/community" },
+    { label: t("drawer.market"), icon: "pricetag-outline", route: "/(tabs)/market" },
+    { label: t("drawer.calendar"), icon: "calendar-outline", route: "/(tabs)/tournaments" }
+  ];
+  const drawerFooterItems: Array<DrawerItem> = [
+    { label: t("common.settings"), icon: "settings-outline", route: "/settings" },
+    { label: t("drawer.helpCenter"), icon: "help-circle-outline" }
+  ];
 
   const openDrawer = () => {
     setIsDrawerOpen(true);
@@ -203,15 +207,17 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
               <View style={styles.drawerFixedHeader}>
                 <View style={styles.drawerHeader}>
                   <View style={styles.drawerAvatar}>
-                    <Ionicons name="person" size={28} color="#ffffff" />
+                    {drawerAvatarSource ? (
+                      <Image source={{ uri: drawerAvatarSource }} style={styles.drawerAvatarImage} />
+                    ) : (
+                      <Ionicons name="person" size={28} color="#ffffff" />
+                    )}
                   </View>
                   <Pressable
                     style={styles.drawerLanguageButton}
                     onPress={() => setLocale(nextLocale)}
                     accessibilityRole="button"
-                    accessibilityLabel={
-                      locale === "es-AR" ? "Cambiar a inglés" : "Cambiar a español"
-                    }
+                    accessibilityLabel={locale === "es-AR" ? t("drawer.switchToEnglish") : t("drawer.switchToSpanish")}
                   >
                     {currentFlagId === "ES" ? (
                       <View style={styles.flagEspana}>
@@ -230,12 +236,9 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
 
                 <Text style={styles.drawerName}>{user?.firstName ?? "Adrian"}</Text>
                 <Text style={styles.drawerHandle}>@{user?.username ?? "polo.connect"}</Text>
-
                 <View style={styles.drawerStats}>
-                  <Text style={styles.drawerStatStrong}>12</Text>
-                  <Text style={styles.drawerStatText}> clubes</Text>
-                  <Text style={styles.drawerStatStrong}> 4</Text>
-                  <Text style={styles.drawerStatText}> torneos activos</Text>
+                  <Text style={styles.drawerStatStrong}>{favoriteIds.size}</Text>
+                  <Text style={styles.drawerStatText}> {favoritesLabel}</Text>
                 </View>
               </View>
 
@@ -286,7 +289,7 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
                   <View style={styles.drawerBottom}>
                     <View style={styles.drawerAppInfo}>
                       <Text style={styles.drawerAppTitle}>Polo Connect</Text>
-                      <Text style={styles.drawerAppText}>Partidos, clubes y comunidad en un solo lugar.</Text>
+                      <Text style={styles.drawerAppText}>{t("drawer.description")}</Text>
                     </View>
 
                     <Pressable
@@ -297,7 +300,7 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
                       }}
                     >
                       <Ionicons name="log-out-outline" size={21} color="#ff7b7b" />
-                      <Text style={styles.drawerSignOutText}>Cerrar sesión</Text>
+                      <Text style={styles.drawerSignOutText}>{t("drawer.signOut")}</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -360,7 +363,12 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderWidth: 2,
     borderColor: "#17395d",
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    overflow: "hidden"
+  },
+  drawerAvatarImage: {
+    width: "100%",
+    height: "100%"
   },
   drawerLanguageButton: {
     width: 42,
@@ -425,8 +433,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   drawerStats: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 18,
-    marginBottom: 22
+    marginTop: 12
   },
   drawerStatStrong: {
     color: "#ffffff",

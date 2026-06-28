@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
+import { useLocale } from "@/contexts/LocaleContext";
 import { fetchTournament, listTournaments, type Tournament } from "@/services/api/tournaments";
 
 export default function TeamRegisterScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const router = useRouter();
+  const { t } = useLocale();
   const { tournamentId } = useLocalSearchParams<{ tournamentId?: string }>();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
 
@@ -28,9 +30,9 @@ export default function TeamRegisterScreen() {
 
   return (
     <Screen
-      eyebrow="Torneo con inscripción abierta"
-      title="Anotá a tu equipo"
-      subtitle="Sumate a la competencia."
+      eyebrow={t("teamRegister.eyebrow")}
+      title={t("teamRegister.title")}
+      subtitle={t("teamRegister.subtitle")}
       showBackButton
       onBackPress={() => router.back()}
     >
@@ -40,45 +42,45 @@ export default function TeamRegisterScreen() {
           <Ionicons name="information-circle" size={20} color={colors.primaryDark} />
         </View>
         <Text style={styles.infoBannerText}>
-          Contactá directamente al responsable del torneo para inscribir tu equipo.
+          {t("teamRegister.info")}
         </Text>
       </View>
 
       {/* Section label */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionLabel}>TORNEOS DISPONIBLES</Text>
+        <Text style={styles.sectionLabel}>{t("teamRegister.available").toUpperCase()}</Text>
         <View style={styles.sectionCount}>
           <Text style={styles.sectionCountText}>{tournaments.length}</Text>
         </View>
       </View>
 
       <View style={styles.list}>
-        {tournaments.map((t) => (
-          <View key={t.id} style={styles.card}>
+        {tournaments.map((tournament) => (
+          <View key={tournament.id} style={styles.card}>
             {/* Left: club info */}
             <View style={styles.cardLeft}>
-              <Text style={styles.clubName}>{(t.club ?? t.name).toUpperCase()}</Text>
+              <Text style={styles.clubName}>{(tournament.club ?? tournament.name).toUpperCase()}</Text>
               <View style={styles.metaRow}>
                 <Ionicons name="bar-chart-outline" size={13} color={colors.muted} />
-                <Text style={styles.metaText}>{t.handicapRange ?? t.level ?? "Categoría a confirmar"}</Text>
+                <Text style={styles.metaText}>{tournament.handicapRange ?? tournament.level ?? t("teamRegister.categoryTbd")}</Text>
               </View>
               <View style={styles.metaRow}>
                 <Ionicons name="people-outline" size={13} color={colors.muted} />
-                <Text style={styles.metaText}>{t.teamCount} equipos{t.maxTeams ? ` / ${t.maxTeams}` : ""}</Text>
+                <Text style={styles.metaText}>{tournament.teamCount} {t("teamRegister.teams")}{tournament.maxTeams ? ` / ${tournament.maxTeams}` : ""}</Text>
               </View>
             </View>
 
             {/* Right: contact */}
             <Pressable
               style={styles.contactCol}
-              onPress={() => t.contactPhone ? callContact(t.contactPhone) : undefined}
-              accessibilityLabel={`Llamar a ${t.contactName ?? "contacto del torneo"}`}
+              onPress={() => tournament.contactPhone ? callContact(tournament.contactPhone) : undefined}
+              accessibilityLabel={t("teamRegister.callA11y", { name: tournament.contactName ?? t("teamRegister.tournamentContact") })}
             >
-              <Text style={styles.contactLabel}>CONTACTO</Text>
-              <Text style={styles.contactName}>{t.contactName ?? "A confirmar"}</Text>
+              <Text style={styles.contactLabel}>{t("teamRegister.contact").toUpperCase()}</Text>
+              <Text style={styles.contactName}>{tournament.contactName ?? t("teamRegister.contactTbd")}</Text>
               <View style={styles.phoneRow}>
                 <Ionicons name="call-outline" size={12} color={colors.primary} />
-                <Text style={styles.phoneText}>{t.contactPhone ?? "Sin teléfono"}</Text>
+                <Text style={styles.phoneText}>{tournament.contactPhone ?? t("teamRegister.noPhone")}</Text>
               </View>
               <View style={styles.chevron}>
                 <Ionicons name="chevron-forward" size={16} color={colors.primary} />

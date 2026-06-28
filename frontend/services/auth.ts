@@ -5,6 +5,7 @@ export type AuthUser = {
   email: string;
   username: string;
   phone?: string;
+  avatarUrl?: string;
   roles: string[];
 };
 
@@ -20,6 +21,17 @@ export type SignUpPayload = {
   username: string;
   password: string;
   phone?: string;
+};
+
+export type GoogleSignInPayload = {
+  accessToken: string;
+};
+
+export type AppleSignInPayload = {
+  identityToken: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
 };
 
 export async function authenticateWithPassword({ identifier, password }: SignInPayload) {
@@ -44,5 +56,22 @@ export async function registerWithPassword(payload: SignUpPayload) {
     email: payload.email.trim().toLowerCase(),
     username: payload.username.trim(),
     phone: payload.phone?.trim() || undefined
+  });
+}
+
+export async function authenticateWithGoogle({ accessToken }: GoogleSignInPayload) {
+  const { loginWithGoogle } = await import("@/services/api/auth");
+
+  return loginWithGoogle(accessToken.trim());
+}
+
+export async function authenticateWithApple(payload: AppleSignInPayload) {
+  const { loginWithApple } = await import("@/services/api/auth");
+
+  return loginWithApple({
+    identityToken: payload.identityToken.trim(),
+    email: payload.email?.trim() || undefined,
+    firstName: payload.firstName?.trim() || undefined,
+    lastName: payload.lastName?.trim() || undefined
   });
 }

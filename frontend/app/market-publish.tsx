@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Image,
+  Keyboard,
   Linking,
   Pressable,
   StyleSheet,
@@ -12,7 +13,8 @@ import {
   View
 } from "react-native";
 import { Screen } from "@/components/Screen";
-import { AppColors, useThemeColors } from "@/constants/theme";
+import { AppColors, useTheme, useThemeColors } from "@/constants/theme";
+import { useLocale } from "@/contexts/LocaleContext";
 import { type ProductStatus, type MarketCategory } from "@/services/market";
 import { useMarket } from "@/contexts/MarketContext";
 
@@ -20,17 +22,14 @@ const productStates: ProductStatus[] = ["Nuevo", "Usado", "Reacondicionado"];
 
 type PublishCategory = Exclude<MarketCategory, "todos">;
 
-const publishCategories: { value: PublishCategory; label: string }[] = [
-  { value: "equipamiento", label: "Equipamiento" },
-  { value: "indumentaria", label: "Indumentaria" },
-  { value: "vehiculos", label: "Vehículos" },
-  { value: "inmueble", label: "Inmueble" }
-];
+const publishCategories: PublishCategory[] = ["equipamiento", "indumentaria", "vehiculos", "inmueble"];
 
 export default function MarketPublishScreen() {
   const colors = useThemeColors();
+  const { mode } = useTheme();
   const styles = createStyles(colors);
   const router = useRouter();
+  const { t } = useLocale();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { products, addProduct, updateProduct, deleteProduct } = useMarket();
   const existingProduct = useMemo(() => products.find((product) => product.id === id), [id, products]);
@@ -40,6 +39,10 @@ export default function MarketPublishScreen() {
   const [selectedCategory, setSelectedCategory] = useState<PublishCategory>("equipamiento");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
+  const nameInputRef = useRef<TextInput>(null);
+  const priceInputRef = useRef<TextInput>(null);
+  const descriptionInputRef = useRef<TextInput>(null);
+  const screenScrollRef = useRef<any>(null);
 
   useEffect(() => {
     if (!existingProduct) {
@@ -68,15 +71,12 @@ export default function MarketPublishScreen() {
 
   return (
     <Screen
-      eyebrow="Mercado"
-      title={existingProduct ? "Editar publicación" : "Publicar producto"}
-      subtitle={
-        existingProduct
-          ? "Actualizá los datos de tu aviso propio."
-          : "Completa los datos para publicar. Si no sos admin, se abrirá Mercado Pago para abonar la publicación."
-      }
+      eyebrow={t("market.eyebrow")}
+      title={existingProduct ? t("marketPublish.editTitle") : t("marketPublish.createTitle")}
+      subtitle={existingProduct ? t("marketPublish.editSubtitle") : t("marketPublish.createSubtitle")}
       showBackButton
       onBackPress={() => router.back()}
+      scrollViewRef={screenScrollRef}
     >
       <View style={styles.paymentBanner}>
         <View style={styles.paymentIconWrap}>
@@ -85,18 +85,18 @@ export default function MarketPublishScreen() {
 
         <View style={styles.paymentTextWrap}>
           <Text style={styles.paymentTitle}>
-            {existingProduct ? "Editando publicación propia" : "La publicación tiene costo"}
+            {existingProduct ? t("marketPublish.editingOwn") : t("marketPublish.hasCost")}
           </Text>
           <Text style={styles.paymentText}>
             {existingProduct
-              ? "Podés ajustar el contenido y guardar los cambios."
-              : "Solo el admin publica gratis. El resto debe abonar por Mercado Pago."}
+              ? t("marketPublish.editingOwnText")
+              : t("marketPublish.hasCostText")}
           </Text>
         </View>
 
         <View style={styles.paymentLogoWrap}>
           <Image
-            source={require("@/assets/logo.png")}
+            source={mode === "dark" ? require("@/assets/logo-login.png") : require("@/assets/logo.png")}
             style={styles.paymentLogo}
             resizeMode="contain"
           />
@@ -105,37 +105,41 @@ export default function MarketPublishScreen() {
 
       <View style={styles.form}>
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Imagen</Text>
+          <Text style={styles.sectionLabel}>{t("marketPublish.image")}</Text>
           <Pressable style={styles.uploadBox}>
             <Ionicons name="cloud-upload-outline" size={30} color={colors.primaryDark} />
-            <Text style={styles.uploadTitle}>Subir imagen</Text>
-            <Text style={styles.uploadText}>
-              Tocá para agregar una imagen o pegá un enlace.
-            </Text>
+            <Text style={styles.uploadTitle}>{t("marketPublish.uploadImage")}</Text>
+            <Text style={styles.uploadText}>{t("marketPublish.uploadText")}</Text>
           </Pressable>
           <TextInput
             style={styles.input}
-            placeholder="URL de la imagen"
+            placeholder={t("marketPublish.imageUrl")}
             placeholderTextColor={colors.muted}
             value={imageUrl}
             onChangeText={setImageUrl}
             autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="next"
+            onSubmitEditing={() => nameInputRef.current?.focus()}
           />
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Nombre</Text>
+          <Text style={styles.sectionLabel}>{t("marketPublish.name")}</Text>
           <TextInput
+            ref={nameInputRef}
             style={styles.input}
-            placeholder="Ej: Casco Kep Italia"
+            placeholder={t("marketPublish.namePlaceholder")}
             placeholderTextColor={colors.muted}
             value={name}
             onChangeText={setName}
+            returnKeyType="next"
+            onSubmitEditing={() => priceInputRef.current?.focus()}
           />
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Estado</Text>
+          <Text style={styles.sectionLabel}>{t("marketPublish.state")}</Text>
           <View style={styles.stateRow}>
             {productStates.map((state) => (
               <Pressable
@@ -149,7 +153,7 @@ export default function MarketPublishScreen() {
                     selectedState === state && styles.stateChipTextActive
                   ]}
                 >
-                  {state}
+                  {state === "Nuevo" ? t("marketPublish.status.new") : state === "Usado" ? t("marketPublish.status.used") : t("marketPublish.status.refurbished")}
                 </Text>
               </Pressable>
             ))}
@@ -157,21 +161,21 @@ export default function MarketPublishScreen() {
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Tipo de producto</Text>
+          <Text style={styles.sectionLabel}>{t("marketPublish.productType")}</Text>
           <View style={styles.stateRow}>
             {publishCategories.map((cat) => (
               <Pressable
-                key={cat.value}
-                style={[styles.stateChip, selectedCategory === cat.value && styles.stateChipActive]}
-                onPress={() => setSelectedCategory(cat.value)}
+                key={cat}
+                style={[styles.stateChip, selectedCategory === cat && styles.stateChipActive]}
+                onPress={() => setSelectedCategory(cat)}
               >
                 <Text
                   style={[
                     styles.stateChipText,
-                    selectedCategory === cat.value && styles.stateChipTextActive
+                    selectedCategory === cat && styles.stateChipTextActive
                   ]}
                 >
-                  {cat.label}
+                  {t(`market.category.${cat}`)}
                 </Text>
               </Pressable>
             ))}
@@ -179,28 +183,44 @@ export default function MarketPublishScreen() {
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Precio</Text>
+          <Text style={styles.sectionLabel}>{t("marketPublish.price")}</Text>
           <TextInput
+            ref={priceInputRef}
             style={styles.input}
-            placeholder="Ej: 250000"
+            placeholder={t("marketPublish.pricePlaceholder")}
             placeholderTextColor={colors.muted}
             value={price}
             onChangeText={setPrice}
             keyboardType="decimal-pad"
+            returnKeyType="next"
+            onSubmitEditing={() => descriptionInputRef.current?.focus()}
           />
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>Descripcion</Text>
+          <Text style={styles.sectionLabel}>{t("marketPublish.description")}</Text>
           <TextInput
+            ref={descriptionInputRef}
             style={[styles.input, styles.textArea]}
-            placeholder="Contá el estado, medidas, detalles y cualquier dato útil"
+            placeholder={t("marketPublish.descriptionPlaceholder")}
             placeholderTextColor={colors.muted}
             value={description}
             onChangeText={setDescription}
             multiline
             textAlignVertical="top"
+            onFocus={() => {
+              setTimeout(() => {
+                screenScrollRef.current?.scrollToEnd({ animated: true });
+              }, 120);
+            }}
+            blurOnSubmit={false}
+            returnKeyType="default"
           />
+          <View style={styles.descriptionActions}>
+            <Pressable style={styles.descriptionDoneButton} onPress={Keyboard.dismiss}>
+              <Text style={styles.descriptionDoneText}>{t("common.done")}</Text>
+            </Pressable>
+          </View>
         </View>
 
         <Pressable
@@ -228,21 +248,21 @@ export default function MarketPublishScreen() {
               if (result.payment.required && result.payment.url) {
                 await Linking.openURL(result.payment.url);
                 Alert.alert(
-                  "Pago requerido",
-                  "Se abrió Mercado Pago. Tu publicación quedó pendiente hasta que se confirme el pago."
+                  t("marketPublish.paymentRequiredTitle"),
+                  t("marketPublish.paymentRequiredText")
                 );
               } else {
-                Alert.alert("Publicado", "Tu publicación fue creada sin costo por tener rol administrador.");
+                Alert.alert(t("marketPublish.publishedTitle"), t("marketPublish.publishedText"));
               }
 
               router.back();
             } catch (error) {
-              Alert.alert("No se pudo publicar", error instanceof Error ? error.message : "Ocurrió un error inesperado.");
+              Alert.alert(t("marketPublish.errorTitle"), error instanceof Error ? error.message : t("marketPublish.errorFallback"));
             }
           }}
         >
           <Ionicons name="cash-outline" size={20} color="#ffffff" />
-          <Text style={styles.publishButtonText}>{existingProduct ? "Guardar cambios" : "Publicar"}</Text>
+          <Text style={styles.publishButtonText}>{existingProduct ? t("marketPublish.saveChanges") : t("market.publish")}</Text>
         </Pressable>
 
         {existingProduct ? (
@@ -254,12 +274,12 @@ export default function MarketPublishScreen() {
             }}
           >
             <Ionicons name="trash-outline" size={18} color={colors.danger} />
-            <Text style={styles.deleteOwnButtonText}>Eliminar publicación</Text>
+            <Text style={styles.deleteOwnButtonText}>{t("marketPublish.delete")}</Text>
           </Pressable>
         ) : null}
 
         <Text style={styles.helperText}>
-          Solo el admin publica sin costo. Para el resto, el aviso queda pendiente hasta confirmar el pago.
+          {t("marketPublish.helper")}
         </Text>
       </View>
     </Screen>
@@ -367,6 +387,25 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   textArea: {
     minHeight: 112,
     textAlignVertical: "top"
+  },
+  descriptionActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end"
+  },
+  descriptionDoneButton: {
+    minHeight: 34,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  descriptionDoneText: {
+    color: colors.primaryDark,
+    fontSize: 12,
+    fontWeight: "800"
   },
   stateRow: {
     flexDirection: "row",

@@ -3,19 +3,21 @@ import { useRouter } from "expo-router";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
+import { useLocale } from "@/contexts/LocaleContext";
 import { useMarket } from "@/contexts/MarketContext";
 
 export default function FavoritesScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const router = useRouter();
+  const { t } = useLocale();
   const { favoriteProducts, toggleFavorite } = useMarket();
 
   return (
     <Screen
-      eyebrow="Mercado"
-      title="Favoritos"
-      subtitle="Tus publicaciones guardadas para revisar rapido antes de comprar."
+      eyebrow={t("market.eyebrow")}
+      title={t("favorites.title")}
+      subtitle={t("favorites.subtitle")}
       showBackButton
       onBackPress={() => router.back()}
     >
@@ -32,7 +34,7 @@ export default function FavoritesScreen() {
             <Pressable
               style={styles.removeButton}
               onPress={() => toggleFavorite(product.id)}
-              accessibilityLabel={`Quitar ${product.name} de favoritos`}
+              accessibilityLabel={t("favorites.removeA11y", { name: product.name })}
             >
               <Ionicons name="heart" size={20} color={colors.danger} />
             </Pressable>
@@ -42,8 +44,8 @@ export default function FavoritesScreen() {
         {favoriteProducts.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="heart-outline" size={46} color={colors.muted} />
-            <Text style={styles.emptyTitle}>Todavia no guardaste productos</Text>
-            <Text style={styles.emptyText}>Marcá el corazon en mercado para verlos aca.</Text>
+            <Text style={styles.emptyTitle}>{t("favorites.emptyTitle")}</Text>
+            <Text style={styles.emptyText}>{t("favorites.emptyText")}</Text>
           </View>
         ) : null}
       </View>

@@ -11,15 +11,29 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "usesAppleSignIn": true,
+      "bundleIdentifier": "com.poloconnect.app"
     },
     "android": {
+      "package": "com.poloconnect.app",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#ffffff"
       }
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Polo Connect necesita acceso a tus fotos para elegir una imagen de perfil.",
+          "cameraPermission": "Polo Connect necesita acceso a la cámara para sacar tu foto de perfil."
+        }
+      ],
+      "expo-apple-authentication",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

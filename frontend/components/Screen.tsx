@@ -4,8 +4,11 @@ import { PropsWithChildren, ReactNode, useRef } from "react";
 import {
   Animated,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -15,6 +18,8 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppDrawer } from "@/components/AppDrawer";
 import { AppColors, useTheme, useThemeColors } from "@/constants/theme";
+import { useAuth } from "@/contexts/AuthContext";
+import { resolveUploadedUrl } from "@/services/api/users";
 
 const topBarHeight = 68;
 const topBarGap = 4;
@@ -27,17 +32,20 @@ type ScreenProps = PropsWithChildren<{
   showBackButton?: boolean;
   onBackPress?: () => void;
   headerRight?: ReactNode;
+  scrollViewRef?: any;
 }>;
 
-export function Screen({ children, eyebrow, title, subtitle, style, showBackButton, onBackPress, headerRight }: ScreenProps) {
+export function Screen({ children, eyebrow, title, subtitle, style, showBackButton, onBackPress, headerRight, scrollViewRef }: ScreenProps) {
   const colors = useThemeColors();
   const { mode } = useTheme();
   const styles = createStyles(colors);
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const { openDrawer } = useAppDrawer();
   const isOnNotifications = pathname === "/notifications";
+  const topAvatarSource = resolveUploadedUrl(user?.avatarUrl);
   const topBarTranslateY = useRef(new Animated.Value(0)).current;
   const lastScrollY = useRef(0);
   const isTopBarVisible = useRef(true);
@@ -101,7 +109,11 @@ export function Screen({ children, eyebrow, title, subtitle, style, showBackButt
               openDrawer();
             }}
           >
-            <Ionicons name="person" size={22} color={colors.primaryDark} />
+            {topAvatarSource ? (
+              <Image source={{ uri: topAvatarSource }} style={styles.profileAvatarImage} />
+            ) : (
+              <Ionicons name="person" size={22} color={colors.primaryDark} />
+            )}
           </Pressable>
         )}
 
@@ -128,25 +140,35 @@ export function Screen({ children, eyebrow, title, subtitle, style, showBackButt
         </Pressable>
       </Animated.View>
 
-      <Animated.ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + topBarGap + topBarHeight + 12 },
-          style
-        ]}
-        showsVerticalScrollIndicator={false}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
+      <KeyboardAvoidingView
+        style={styles.keyboardArea}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
       >
-        <View style={styles.header}>
-          {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-          {headerRight ? <View style={styles.headerRight}>{headerRight}</View> : null}
-          <Text style={styles.title}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-        </View>
-        {children}
-      </Animated.ScrollView>
+        <Animated.ScrollView
+          ref={scrollViewRef}
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.content,
+            { paddingTop: insets.top + topBarGap + topBarHeight + 12 },
+            style
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          onScrollBeginDrag={Keyboard.dismiss}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        >
+          <View style={styles.header}>
+            {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+            {headerRight ? <View style={styles.headerRight}>{headerRight}</View> : null}
+            <Text style={styles.title}>{title}</Text>
+            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          </View>
+          {children}
+        </Animated.ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -186,7 +208,12 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    overflow: "hidden"
+  },
+  profileAvatarImage: {
+    width: "100%",
+    height: "100%"
   },
   appLogo: {
     flex: 1,
@@ -221,6 +248,9 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   scroll: {
     flex: 1,
     backgroundColor: colors.background
+  },
+  keyboardArea: {
+    flex: 1
   },
   content: {
     paddingHorizontal: 20,

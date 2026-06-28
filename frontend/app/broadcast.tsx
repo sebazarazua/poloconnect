@@ -13,6 +13,7 @@ import {
 import { SectionTitle } from "@/components/Card";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
+import { useLocale } from "@/contexts/LocaleContext";
 import { listBroadcasts } from "@/services/api/matches";
 
 interface BroadcastMatch {
@@ -39,6 +40,7 @@ export default function BroadcastScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const router = useRouter();
+  const { locale, t } = useLocale();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [broadcasts, setBroadcasts] = useState<BroadcastMatch[]>([]);
 
@@ -49,7 +51,7 @@ export default function BroadcastScreen() {
         team1: item.team1,
         team2: item.team2,
         date: item.date,
-        dateLabel: item.date.toLocaleDateString("es-AR", {
+        dateLabel: item.date.toLocaleDateString(locale, {
           weekday: "long",
           day: "numeric",
           month: "long"
@@ -61,7 +63,7 @@ export default function BroadcastScreen() {
         club: item.club || item.competition
       })));
     });
-  }, []);
+  }, [locale]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -134,7 +136,7 @@ export default function BroadcastScreen() {
       }
       // Older - group by month/year
       else {
-        const monthKey = broadcastDate.toLocaleString("es-ES", {
+        const monthKey = broadcastDate.toLocaleString(locale, {
           month: "long",
           year: "numeric"
         });
@@ -159,13 +161,13 @@ export default function BroadcastScreen() {
   const getTimeSegmentLabel = (segment: TimeSegment): string => {
     switch (segment) {
       case "today":
-        return "Hoy";
+        return t("broadcast.today");
       case "yesterday":
-        return "Ayer";
+        return t("broadcast.yesterday");
       case "lastWeek":
-        return "Última semana";
+        return t("broadcast.lastWeek");
       case "lastMonth":
-        return "Último mes";
+        return t("broadcast.lastMonth");
       default:
         return segment.charAt(0).toUpperCase() + segment.slice(1);
     }
@@ -219,7 +221,7 @@ export default function BroadcastScreen() {
             onPress={() => handleWatchPress(broadcast.youtubeUrl)}
           >
             <Ionicons name="play-circle" size={18} color="#ffffff" />
-            <Text style={styles.watchButtonText}>Ver en YouTube</Text>
+            <Text style={styles.watchButtonText}>{t("broadcast.watchYoutube")}</Text>
           </Pressable>
         )}
       </View>
@@ -234,7 +236,7 @@ export default function BroadcastScreen() {
   return (
     <View style={styles.container} {...panResponder.panHandlers}>
       <Screen
-        title="Partidos Emitidos"
+        title={t("broadcast.title")}
         showBackButton
         onBackPress={() => router.back()}
       >

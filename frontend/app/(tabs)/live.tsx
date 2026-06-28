@@ -276,9 +276,7 @@ export default function LiveScreen() {
             size={48}
             color={colors.muted}
           />
-          <Text style={styles.emptyText}>
-            No hay partidos para este día
-          </Text>
+          <Text style={styles.emptyText}>{t("live.emptyDay")}</Text>
         </View>
       )}
     </Screen>

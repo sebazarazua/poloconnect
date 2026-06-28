@@ -12,16 +12,12 @@ import {
 } from "react-native";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
+import { useLocale } from "@/contexts/LocaleContext";
 import { useMarket } from "@/contexts/MarketContext";
 import { fetchProduct } from "@/services/api/market";
 import type { Product } from "@/services/market";
 
 type ProductTab = "detalle" | "vendedor";
-
-const tabs: { id: ProductTab; label: string }[] = [
-  { id: "detalle", label: "Detalle" },
-  { id: "vendedor", label: "Vendedor" }
-];
 
 const fallbackVendor = {
   id: "fallback",
@@ -38,6 +34,7 @@ export default function ProductDetailScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const router = useRouter();
+  const { t } = useLocale();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { products, isFavorite, toggleFavorite } = useMarket();
   const cachedProduct = useMemo(() => products.find((item) => item.id === id), [id, products]);
@@ -66,9 +63,9 @@ export default function ProductDetailScreen() {
 
   if (!product) {
     return (
-      <Screen title="Producto no encontrado" showBackButton onBackPress={() => router.back()}>
+      <Screen title={t("product.notFoundTitle")} showBackButton onBackPress={() => router.back()}>
         <View style={styles.centerContent}>
-          <Text style={styles.errorText}>Producto no disponible</Text>
+          <Text style={styles.errorText}>{t("product.notAvailable")}</Text>
         </View>
       </Screen>
     );
@@ -118,13 +115,16 @@ export default function ProductDetailScreen() {
 
             <Pressable style={styles.contactButton}>
               <Ionicons name="chatbubble-ellipses-outline" size={18} color="#ffffff" />
-              <Text style={styles.contactButtonText}>Contactar vendedor</Text>
+              <Text style={styles.contactButtonText}>{t("product.contactSeller")}</Text>
             </Pressable>
           </View>
 
           {/* Tabs */}
           <View style={styles.tabs}>
-            {tabs.map((tab) => (
+            {([
+              { id: "detalle", label: t("product.tab.detail") },
+              { id: "vendedor", label: t("product.tab.vendor") }
+            ] as Array<{ id: ProductTab; label: string }>).map((tab) => (
               <Pressable
                 key={tab.id}
                 style={[styles.tab, activeTab === tab.id && styles.activeTab]}
@@ -141,25 +141,25 @@ export default function ProductDetailScreen() {
           {activeTab === "detalle" ? (
             <View style={styles.tabContent}>
               <View style={styles.detailSection}>
-                <Text style={styles.sectionTitle}>Información del producto</Text>
+                <Text style={styles.sectionTitle}>{t("product.info")}</Text>
 
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Categoría:</Text>
+                  <Text style={styles.detailLabel}>{t("product.category")}</Text>
                   <Text style={styles.detailValue}>{product.category}</Text>
                 </View>
 
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Estado:</Text>
+                  <Text style={styles.detailLabel}>{t("product.status")}</Text>
                   <Text style={styles.detailValue}>{product.status}</Text>
                 </View>
 
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Precio:</Text>
+                  <Text style={styles.detailLabel}>{t("product.price")}</Text>
                   <Text style={styles.detailValue}>USD {product.price.toLocaleString()}</Text>
                 </View>
 
                 <View style={styles.detailSection}>
-                  <Text style={styles.sectionTitle}>Descripción</Text>
+                  <Text style={styles.sectionTitle}>{t("product.description")}</Text>
                   <Text style={styles.descriptionFull}>{product.description}</Text>
                 </View>
               </View>
@@ -175,34 +175,34 @@ export default function ProductDetailScreen() {
                   </View>
                   <View style={styles.vendorInfo}>
                     <Text style={styles.vendorName}>{vendor.name}</Text>
-                    <Text style={styles.vendorLocation}>{vendor.location ?? "Ubicación no informada"}</Text>
+                    <Text style={styles.vendorLocation}>{vendor.location ?? t("product.locationMissing")}</Text>
                     <View style={styles.ratingRow}>
                       <Ionicons name="star" size={14} color={colors.primary} />
                       <Text style={styles.ratingText}>
-                        {vendor.rating ?? 0} ({vendor.reviews ?? 0} reseñas)
+                        {vendor.rating ?? 0} ({vendor.reviews ?? 0} {t("product.reviews")})
                       </Text>
                     </View>
                   </View>
                 </View>
 
-                <Text style={styles.vendorDescription}>{"Vendedor verificado por Polo Connect."}</Text>
+                <Text style={styles.vendorDescription}>{t("product.verifiedVendor")}</Text>
 
                 <View style={styles.contactInfo}>
                   <View style={styles.contactRow}>
                     <Ionicons name="call-outline" size={16} color={colors.primary} />
-                    <Text style={styles.contactValue}>{vendor.phone ?? "Sin teléfono visible"}</Text>
+                    <Text style={styles.contactValue}>{vendor.phone ?? t("product.noPhone")}</Text>
                   </View>
 
                   <View style={styles.contactRow}>
                     <Ionicons name="mail-outline" size={16} color={colors.primary} />
-                    <Text style={styles.contactValue}>{vendor.email ?? "Sin email visible"}</Text>
+                    <Text style={styles.contactValue}>{vendor.email ?? t("product.noEmail")}</Text>
                   </View>
                 </View>
 
                 <View style={styles.actionButtons}>
                   <Pressable style={styles.callButton}>
                     <Ionicons name="call" size={18} color="#ffffff" />
-                    <Text style={styles.callButtonText}>Llamar</Text>
+                    <Text style={styles.callButtonText}>{t("product.call")}</Text>
                   </Pressable>
 
                   <Pressable style={styles.whatsappButton}>

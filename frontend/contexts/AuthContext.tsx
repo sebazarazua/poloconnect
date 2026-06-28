@@ -1,8 +1,12 @@
 import { PropsWithChildren, createContext, useContext, useState } from "react";
 import {
+  authenticateWithApple,
+  authenticateWithGoogle,
   authenticateWithPassword,
   registerWithPassword,
   type AuthUser,
+  type AppleSignInPayload,
+  type GoogleSignInPayload,
   type SignInPayload,
   type SignUpPayload
 } from "@/services/auth";
@@ -40,8 +44,11 @@ type AuthContextValue = {
   isSubmitting: boolean;
   user: AuthUser | null;
   signIn: (payload: SignInPayload) => Promise<void>;
+  signInWithGoogle: (payload: GoogleSignInPayload) => Promise<void>;
+  signInWithApple: (payload: AppleSignInPayload) => Promise<void>;
   signUp: (payload: SignUpPayload) => Promise<void>;
   signOut: () => void;
+  updateUser: (nextUser: AuthUser) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -55,6 +62,30 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     try {
       const nextUser = await authenticateWithPassword(payload);
+      setUser(nextUser);
+      writeStoredUser(nextUser);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const signInWithGoogle = async (payload: GoogleSignInPayload) => {
+    setIsSubmitting(true);
+
+    try {
+      const nextUser = await authenticateWithGoogle(payload);
+      setUser(nextUser);
+      writeStoredUser(nextUser);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const signInWithApple = async (payload: AppleSignInPayload) => {
+    setIsSubmitting(true);
+
+    try {
+      const nextUser = await authenticateWithApple(payload);
       setUser(nextUser);
       writeStoredUser(nextUser);
     } finally {
@@ -80,6 +111,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     writeStoredUser(null);
   };
 
+  const updateUser = (nextUser: AuthUser) => {
+    setUser(nextUser);
+    writeStoredUser(nextUser);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -87,8 +123,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
         isSubmitting,
         user,
         signIn,
+        signInWithGoogle,
+        signInWithApple,
         signUp,
-        signOut
+        signOut,
+        updateUser
       }}
     >
       {children}

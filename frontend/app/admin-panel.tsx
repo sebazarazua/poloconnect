@@ -5,6 +5,7 @@ import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextIn
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocale } from "@/contexts/LocaleContext";
 import { describeContentAsset, resolveContentImageSource } from "@/services/content-images";
 import {
   banCommunityMember,
@@ -26,25 +27,25 @@ import {
 type ContentSection = {
   section: string;
   slot: string;
-  title: string;
-  subtitle: string;
+  titleKey: "adminPanel.section.logoTitle" | "adminPanel.section.homeHeroTitle" | "adminPanel.section.homeCompactTitle" | "adminPanel.section.homeNewsTitle" | "adminPanel.section.communityTitle" | "adminPanel.section.liveTitle";
+  subtitleKey: "adminPanel.section.logoText" | "adminPanel.section.homeHeroText" | "adminPanel.section.homeCompactText" | "adminPanel.section.homeNewsText" | "adminPanel.section.communityText" | "adminPanel.section.liveText";
 };
 
 const contentSections: ContentSection[] = [
-  { section: "branding", slot: "app_logo", title: "Logo principal", subtitle: "Imagen central de la app" },
-  { section: "home", slot: "hero_ads", title: "Home principal", subtitle: "3 slides grandes de publicidad" },
-  { section: "home", slot: "compact_ads", title: "Home secundaria", subtitle: "3 banners compactos de publicidad" },
-  { section: "home", slot: "main_news", title: "Home noticias", subtitle: "3 cards editoriales de noticias" },
-  { section: "community", slot: "ads", title: "Community", subtitle: "3 slides para la comunidad" },
-  { section: "live", slot: "ads", title: "Live", subtitle: "3 slides para partidos en vivo" }
+  { section: "branding", slot: "app_logo", titleKey: "adminPanel.section.logoTitle", subtitleKey: "adminPanel.section.logoText" },
+  { section: "home", slot: "hero_ads", titleKey: "adminPanel.section.homeHeroTitle", subtitleKey: "adminPanel.section.homeHeroText" },
+  { section: "home", slot: "compact_ads", titleKey: "adminPanel.section.homeCompactTitle", subtitleKey: "adminPanel.section.homeCompactText" },
+  { section: "home", slot: "main_news", titleKey: "adminPanel.section.homeNewsTitle", subtitleKey: "adminPanel.section.homeNewsText" },
+  { section: "community", slot: "ads", titleKey: "adminPanel.section.communityTitle", subtitleKey: "adminPanel.section.communityText" },
+  { section: "live", slot: "ads", titleKey: "adminPanel.section.liveTitle", subtitleKey: "adminPanel.section.liveText" }
 ];
 
-const contentTypeLabels: Record<AdminContentItem["type"], string> = {
-  logo: "Logo",
-  ad: "Publicidad",
-  banner: "Banner",
-  news: "Noticia",
-  generic: "Genérico"
+const contentTypeLabelKeys: Record<AdminContentItem["type"], "adminPanel.type.logo" | "adminPanel.type.ad" | "adminPanel.type.banner" | "adminPanel.type.news" | "adminPanel.type.generic"> = {
+  logo: "adminPanel.type.logo",
+  ad: "adminPanel.type.ad",
+  banner: "adminPanel.type.banner",
+  news: "adminPanel.type.news",
+  generic: "adminPanel.type.generic"
 };
 
 export default function AdminPanelScreen() {
@@ -52,6 +53,7 @@ export default function AdminPanelScreen() {
   const styles = createStyles(colors);
   const router = useRouter();
   const { user } = useAuth();
+  const { t } = useLocale();
   const [contentItems, setContentItems] = useState<AdminContentItem[]>([]);
   const [rooms, setRooms] = useState<Array<{ id: string; title: string; kind: string }>>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
@@ -82,9 +84,11 @@ export default function AdminPanelScreen() {
   const groupedContent = useMemo(() => {
     return contentSections.filter((group) => group.section === activeSectionFilter || activeSectionFilter === "all").map((group) => ({
       ...group,
+      title: t(group.titleKey),
+      subtitle: t(group.subtitleKey),
       items: contentItems.filter((item) => item.section === group.section && item.slot === group.slot).sort((a, b) => a.sortOrder - b.sortOrder)
     }));
-  }, [activeSectionFilter, contentItems]);
+  }, [activeSectionFilter, contentItems, t]);
 
   const isBanActive = (ban: CommunityBan) => {
     if (ban.revokedAt) return false;
@@ -171,17 +175,17 @@ export default function AdminPanelScreen() {
 
   if (Platform.OS !== "web") {
     return (
-      <Screen eyebrow="Admin" title="Panel web" subtitle="Disponible únicamente en navegador" showBackButton onBackPress={() => router.back()}>
-        <Text style={styles.infoText}>Abrí esta ruta desde web para administrar la plataforma.</Text>
+      <Screen eyebrow="Admin" title={t("adminPanel.webTitle")} subtitle={t("adminPanel.webSubtitle")} showBackButton onBackPress={() => router.back()}>
+        <Text style={styles.infoText}>{t("adminPanel.webText")}</Text>
       </Screen>
     );
   }
 
   if (!isAdmin) {
     return (
-      <Screen eyebrow="Admin" title="Sin permisos" subtitle="Necesitás rol admin o superadmin" showBackButton onBackPress={() => router.back()}>
+      <Screen eyebrow="Admin" title={t("adminPanel.noAccessTitle")} subtitle={t("adminPanel.noAccessSubtitle")} showBackButton onBackPress={() => router.back()}>
         <Pressable style={styles.buttonSecondary} onPress={() => router.push("/admin-login")}>
-          <Text style={styles.buttonSecondaryText}>Ir a login admin</Text>
+          <Text style={styles.buttonSecondaryText}>{t("adminPanel.goLogin")}</Text>
         </Pressable>
       </Screen>
     );
@@ -216,27 +220,27 @@ export default function AdminPanelScreen() {
   };
 
   return (
-    <Screen eyebrow="Admin" title="Panel de Administración" subtitle="Contenido real, moderación efectiva y base operativa">
+    <Screen eyebrow="Admin" title={t("adminPanel.title")} subtitle={t("adminPanel.subtitle")}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.heroCard}>
           <View style={styles.heroHeader}>
             <View>
-              <Text style={styles.heroEyebrow}>Panel web protegido</Text>
-              <Text style={styles.heroTitle}>Admin Dashboard</Text>
-              <Text style={styles.heroSubtitle}>Administrá contenido, comunidades y módulos base desde una sola interfaz.</Text>
+              <Text style={styles.heroEyebrow}>{t("adminPanel.heroEyebrow")}</Text>
+              <Text style={styles.heroTitle}>{t("adminPanel.heroTitle")}</Text>
+              <Text style={styles.heroSubtitle}>{t("adminPanel.heroSubtitle")}</Text>
             </View>
             <View style={styles.heroBadge}>
               <Ionicons name="shield-checkmark" size={18} color="#fff" />
-              <Text style={styles.heroBadgeText}>RBAC activo</Text>
+              <Text style={styles.heroBadgeText}>{t("adminPanel.rbac")}</Text>
             </View>
           </View>
           <View style={styles.statGrid}>
-            <StatTile label="Usuarios" value={stats.users ?? 0} />
-            <StatTile label="Contenido" value={stats.contentItems ?? 0} />
-            <StatTile label="Comunidades" value={stats.rooms ?? 0} />
-            <StatTile label="Partidos" value={stats.matches ?? 0} />
-            <StatTile label="Torneos" value={stats.tournaments ?? 0} />
-            <StatTile label="Actividad" value={(stats as any).recentActivity ?? 0} />
+            <StatTile label={t("adminPanel.stat.users")} value={stats.users ?? 0} />
+            <StatTile label={t("adminPanel.stat.content")} value={stats.contentItems ?? 0} />
+            <StatTile label={t("adminPanel.stat.communities")} value={stats.rooms ?? 0} />
+            <StatTile label={t("adminPanel.stat.matches")} value={stats.matches ?? 0} />
+            <StatTile label={t("adminPanel.stat.tournaments")} value={stats.tournaments ?? 0} />
+            <StatTile label={t("adminPanel.stat.activity")} value={(stats as any).recentActivity ?? 0} />
           </View>
         </View>
 
@@ -244,18 +248,18 @@ export default function AdminPanelScreen() {
           <View style={styles.card}>
             <View style={styles.sectionHeader}>
               <View>
-                <Text style={styles.cardTitle}>Biblioteca de contenido</Text>
-                <Text style={styles.cardSubtitle}>Cada elemento indica sección, carrusel y número de orden.</Text>
+                <Text style={styles.cardTitle}>{t("adminPanel.contentLibrary")}</Text>
+                <Text style={styles.cardSubtitle}>{t("adminPanel.contentLibraryText")}</Text>
               </View>
               <Pressable style={styles.smallButton} onPress={() => setSelectedContentId(null)}>
-                <Text style={styles.smallButtonText}>Nuevo</Text>
+                <Text style={styles.smallButtonText}>{t("adminPanel.new")}</Text>
               </Pressable>
             </View>
 
             <View style={styles.filterRow}>
               {(["all", "branding", "home", "community", "live"] as const).map((section) => (
                 <Pressable key={section} style={[styles.filterChip, activeSectionFilter === section && styles.filterChipActive]} onPress={() => setActiveSectionFilter(section)}>
-                  <Text style={[styles.filterChipText, activeSectionFilter === section && styles.filterChipTextActive]}>{section === "all" ? "Todo" : section}</Text>
+                  <Text style={[styles.filterChipText, activeSectionFilter === section && styles.filterChipTextActive]}>{section === "all" ? t("adminPanel.all") : section}</Text>
                 </Pressable>
               ))}
             </View>
@@ -263,9 +267,9 @@ export default function AdminPanelScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sectionPillsRow}>
               {contentSections.map((group) => (
                 <View key={`${group.section}-${group.slot}`} style={styles.sectionPill}>
-                  <Text style={styles.sectionPillTitle}>{group.title}</Text>
+                  <Text style={styles.sectionPillTitle}>{t(group.titleKey)}</Text>
                   <Text style={styles.sectionPillMeta}>{group.section} / {group.slot}</Text>
-                  <Text style={styles.sectionPillHint}>{group.subtitle}</Text>
+                  <Text style={styles.sectionPillHint}>{t(group.subtitleKey)}</Text>
                 </View>
               ))}
             </ScrollView>
@@ -276,7 +280,7 @@ export default function AdminPanelScreen() {
                   <Text style={styles.groupTitle}>{group.title}</Text>
                   <Text style={styles.groupMeta}>{group.section} · {group.slot}</Text>
                   {group.items.length === 0 ? (
-                    <Text style={styles.emptyText}>Sin elementos cargados.</Text>
+                    <Text style={styles.emptyText}>{t("adminPanel.noItems")}</Text>
                   ) : (
                     group.items.map((item) => (
                       <Pressable key={item.id} style={[styles.contentRow, selectedContentId === item.id && styles.contentRowActive]} onPress={() => setSelectedContentId(item.id)}>
@@ -284,9 +288,9 @@ export default function AdminPanelScreen() {
                         <View style={styles.contentRowBody}>
                           <View style={styles.contentRowHeader}>
                             <Text style={styles.contentRowTitle}>{item.title || item.section}</Text>
-                            <Text style={styles.badge}>{contentTypeLabels[item.type]}</Text>
+                            <Text style={styles.badge}>{t(contentTypeLabelKeys[item.type])}</Text>
                           </View>
-                          <Text style={styles.contentRowMeta}>Carrusel #{item.sortOrder} · Prioridad {item.priority} · {describeContentAsset(item.imageUrl)}</Text>
+                          <Text style={styles.contentRowMeta}>{t("adminPanel.carousel", { order: item.sortOrder })} · {t("adminPanel.priority", { priority: item.priority })} · {describeContentAsset(item.imageUrl)}</Text>
                           <Text numberOfLines={1} style={styles.contentRowPath}>{item.imageUrl}</Text>
                         </View>
                       </Pressable>
@@ -300,38 +304,38 @@ export default function AdminPanelScreen() {
           <View style={styles.card}>
             <View style={styles.sectionHeader}>
               <View>
-                <Text style={styles.cardTitle}>{selectedContent ? "Editar contenido" : "Crear contenido"}</Text>
-                <Text style={styles.cardSubtitle}>Podés usar assets existentes, subir archivo o poner una URL externa.</Text>
+                <Text style={styles.cardTitle}>{selectedContent ? t("adminPanel.editContent") : t("adminPanel.createContent")}</Text>
+                <Text style={styles.cardSubtitle}>{t("adminPanel.contentFormText")}</Text>
               </View>
             </View>
 
             <View style={styles.previewCard}>
               <Image source={resolveContentImageSource(newImageUrl || selectedContent?.imageUrl || "asset:home/hero-1")} style={styles.previewImage} resizeMode="cover" />
               <View style={styles.previewCopy}>
-                <Text style={styles.previewLabel}>{contentTypeLabels[newType]}</Text>
-                <Text style={styles.previewTitle}>{newTitle || selectedContent?.title || "Sin título"}</Text>
+                <Text style={styles.previewLabel}>{t(contentTypeLabelKeys[newType])}</Text>
+                <Text style={styles.previewTitle}>{newTitle || selectedContent?.title || t("adminPanel.noTitle")}</Text>
                 <Text style={styles.previewMeta}>{newSection} · {newSlot} · #{newSortOrder}</Text>
                 <Text style={styles.previewHint}>{describeContentAsset(newImageUrl || selectedContent?.imageUrl || "asset:home/hero-1")}</Text>
               </View>
             </View>
 
             <View style={styles.formGrid}>
-              <LabeledInput label="Sección" value={newSection} onChangeText={setNewSection} placeholder="home" />
-              <LabeledInput label="Carrusel / slot" value={newSlot} onChangeText={setNewSlot} placeholder="hero_ads" />
-              <LabeledInput label="Tipo" value={newType} onChangeText={(value) => setNewType(value as AdminContentItem["type"])} placeholder="ad" />
-              <LabeledInput label="Orden" value={newSortOrder} onChangeText={setNewSortOrder} placeholder="1" keyboardType="numeric" />
-              <LabeledInput label="Prioridad" value={newPriority} onChangeText={setNewPriority} placeholder="0" keyboardType="numeric" />
-              <LabeledInput label="Título" value={newTitle} onChangeText={setNewTitle} placeholder="Título visible" />
-              <LabeledInput label="Subtítulo" value={newSubtitle} onChangeText={setNewSubtitle} placeholder="Subtítulo" />
-              <LabeledInput label="Link destino" value={newTargetUrl} onChangeText={setNewTargetUrl} placeholder="https://..." />
+              <LabeledInput label={t("adminPanel.section")} value={newSection} onChangeText={setNewSection} placeholder="home" />
+              <LabeledInput label={t("adminPanel.slot")} value={newSlot} onChangeText={setNewSlot} placeholder="hero_ads" />
+              <LabeledInput label={t("adminPanel.type")} value={newType} onChangeText={(value) => setNewType(value as AdminContentItem["type"])} placeholder="ad" />
+              <LabeledInput label={t("adminPanel.order")} value={newSortOrder} onChangeText={setNewSortOrder} placeholder="1" keyboardType="numeric" />
+              <LabeledInput label={t("adminPanel.priorityLabel")} value={newPriority} onChangeText={setNewPriority} placeholder="0" keyboardType="numeric" />
+              <LabeledInput label={t("adminPanel.titleField")} value={newTitle} onChangeText={setNewTitle} placeholder={t("adminPanel.visibleTitle")} />
+              <LabeledInput label={t("adminPanel.subtitleField")} value={newSubtitle} onChangeText={setNewSubtitle} placeholder={t("adminPanel.subtitleField")} />
+              <LabeledInput label={t("adminPanel.targetLink")} value={newTargetUrl} onChangeText={setNewTargetUrl} placeholder="https://..." />
               <View style={styles.fullWidthField}>
-                <Text style={styles.inputLabel}>Body / descripción</Text>
-                <TextInput style={[styles.textInput, styles.textArea]} value={newBody} onChangeText={setNewBody} placeholder="Descripción o copy" placeholderTextColor={colors.muted} multiline />
+                <Text style={styles.inputLabel}>{t("adminPanel.body")}</Text>
+                <TextInput style={[styles.textInput, styles.textArea]} value={newBody} onChangeText={setNewBody} placeholder={t("adminPanel.bodyPlaceholder")} placeholderTextColor={colors.muted} multiline />
               </View>
               <View style={styles.fullWidthField}>
-                <Text style={styles.inputLabel}>Imagen</Text>
-                <TextInput style={styles.textInput} value={newImageUrl} onChangeText={setNewImageUrl} placeholder="asset:home/hero-1 o URL" placeholderTextColor={colors.muted} autoCapitalize="none" />
-                <Text style={styles.helperText}>Usá claves existentes como asset:home/hero-1 o subí una imagen desde tu equipo.</Text>
+                <Text style={styles.inputLabel}>{t("adminPanel.image")}</Text>
+                <TextInput style={styles.textInput} value={newImageUrl} onChangeText={setNewImageUrl} placeholder={t("adminPanel.imagePlaceholder")} placeholderTextColor={colors.muted} autoCapitalize="none" />
+                <Text style={styles.helperText}>{t("adminPanel.imageHelp")}</Text>
               </View>
             </View>
 
@@ -339,11 +343,11 @@ export default function AdminPanelScreen() {
               <View style={styles.uploadHeaderRow}>
                 <Ionicons name="cloud-upload-outline" size={24} color={colors.primaryDark} />
                 <View style={styles.uploadCopyBlock}>
-                  <Text style={styles.uploadTitle}>Subir imagen desde tu dispositivo</Text>
-                  <Text style={styles.uploadText}>Elegí un archivo desde la web y se guarda en el backend para usarlo en este contenido.</Text>
+                  <Text style={styles.uploadTitle}>{t("adminPanel.uploadTitle")}</Text>
+                  <Text style={styles.uploadText}>{t("adminPanel.uploadText")}</Text>
                 </View>
                 <Pressable style={styles.smallButton} onPress={() => document.getElementById("admin-upload-input")?.click()}>
-                  <Text style={styles.smallButtonText}>{uploading ? "Subiendo..." : "Elegir archivo"}</Text>
+                  <Text style={styles.smallButtonText}>{uploading ? t("adminPanel.uploading") : t("adminPanel.chooseFile")}</Text>
                 </Pressable>
               </View>
               <input
@@ -358,7 +362,7 @@ export default function AdminPanelScreen() {
                   try {
                     const uploaded = await uploadAdminContentImage(file);
                     setNewImageUrl(uploaded.url);
-                    Alert.alert("Imagen subida", uploaded.filename);
+                    Alert.alert(t("adminPanel.imageUploaded"), uploaded.filename);
                   } finally {
                     setUploading(false);
                   }
@@ -367,7 +371,7 @@ export default function AdminPanelScreen() {
             </View>
 
             <View style={styles.fullWidthField}>
-              <Text style={styles.inputLabel}>Atajo de assets existentes</Text>
+              <Text style={styles.inputLabel}>{t("adminPanel.assetShortcut")}</Text>
               <View style={styles.assetGrid}>
                 {[
                   "asset:app/logo",
@@ -397,7 +401,7 @@ export default function AdminPanelScreen() {
                 const nextItems = await listAdminContent();
                 setContentItems(nextItems);
               }}>
-                <Text style={styles.buttonPrimaryText}>{selectedContent ? "Guardar cambios" : "Crear elemento"}</Text>
+                <Text style={styles.buttonPrimaryText}>{selectedContent ? t("adminPanel.saveChanges") : t("adminPanel.createItem")}</Text>
               </Pressable>
               {selectedContent ? (
                 <Pressable style={styles.buttonDanger} onPress={async () => {
@@ -406,7 +410,7 @@ export default function AdminPanelScreen() {
                   setContentItems(nextItems);
                   setSelectedContentId(nextItems[0]?.id ?? null);
                 }}>
-                  <Text style={styles.buttonDangerText}>Eliminar</Text>
+                  <Text style={styles.buttonDangerText}>{t("adminPanel.delete")}</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -416,8 +420,8 @@ export default function AdminPanelScreen() {
         <View style={styles.card}>
           <View style={styles.sectionHeader}>
             <View>
-              <Text style={styles.cardTitle}>Moderación de comunidad</Text>
-              <Text style={styles.cardSubtitle}>El ban saca al usuario de todos los lados de esa comunidad en la app.</Text>
+              <Text style={styles.cardTitle}>{t("adminPanel.moderation")}</Text>
+              <Text style={styles.cardSubtitle}>{t("adminPanel.moderationText")}</Text>
             </View>
           </View>
 
@@ -440,8 +444,8 @@ export default function AdminPanelScreen() {
                   <Text style={styles.memberName}>{entry.user.firstName} {entry.user.lastName}</Text>
                   <Text style={styles.memberMeta}>@{entry.user.username}</Text>
                   <View style={styles.memberStatusRow}>
-                    <Text style={[styles.memberStatusChip, entry.isBanned ? styles.memberStatusBanned : styles.memberStatusActive]}>{entry.isBanned ? "Baneado" : "Activo"}</Text>
-                    <Text style={[styles.memberStatusChip, entry.isMember ? styles.memberStatusActive : styles.memberStatusMuted]}>{entry.isMember ? "En sala" : "Fuera de sala"}</Text>
+                    <Text style={[styles.memberStatusChip, entry.isBanned ? styles.memberStatusBanned : styles.memberStatusActive]}>{entry.isBanned ? t("adminPanel.banned") : t("adminPanel.active")}</Text>
+                    <Text style={[styles.memberStatusChip, entry.isMember ? styles.memberStatusActive : styles.memberStatusMuted]}>{entry.isMember ? t("adminPanel.inRoom") : t("adminPanel.outRoom")}</Text>
                   </View>
                   <Text style={styles.memberMetaSmall}>ID {entry.user.id}</Text>
                 </View>
@@ -451,33 +455,33 @@ export default function AdminPanelScreen() {
                     disabled={entry.isBanned}
                     onPress={async () => {
                       if (!selectedRoomId) return;
-                      await banCommunityMember(selectedRoomId, entry.user.id, "Moderación desde panel admin");
+                      await banCommunityMember(selectedRoomId, entry.user.id, t("adminPanel.banReason"));
                       await refreshRoomModeration(selectedRoomId);
                     }}
                   >
-                    <Text style={styles.actionButtonDanger}>Banear</Text>
+                    <Text style={styles.actionButtonDanger}>{t("adminPanel.ban")}</Text>
                   </Pressable>
                   <Pressable
                     style={[styles.actionButton, !entry.isMember && styles.actionButtonDisabled]}
                     disabled={!entry.isMember}
                     onPress={async () => {
                       if (!selectedRoomId) return;
-                      await removeCommunityMember(selectedRoomId, entry.user.id, "Quitado desde panel admin");
+                      await removeCommunityMember(selectedRoomId, entry.user.id, t("adminPanel.removeReason"));
                       await refreshRoomModeration(selectedRoomId);
                     }}
                   >
-                    <Text style={styles.actionButtonPrimary}>Quitar</Text>
+                    <Text style={styles.actionButtonPrimary}>{t("adminPanel.remove")}</Text>
                   </Pressable>
                   <Pressable
                     style={[styles.actionButton, !entry.isBanned && styles.actionButtonDisabled]}
                     disabled={!entry.isBanned}
                     onPress={async () => {
                       if (!selectedRoomId) return;
-                      await unbanCommunityMember(selectedRoomId, entry.user.id, "Reactivado desde panel admin");
+                      await unbanCommunityMember(selectedRoomId, entry.user.id, t("adminPanel.unbanReason"));
                       await refreshRoomModeration(selectedRoomId);
                     }}
                   >
-                    <Text style={styles.actionButtonPrimary}>Desbanear</Text>
+                    <Text style={styles.actionButtonPrimary}>{t("adminPanel.unban")}</Text>
                   </Pressable>
                 </View>
               </View>

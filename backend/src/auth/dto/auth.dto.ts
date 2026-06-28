@@ -22,3 +22,24 @@ export class ChangePasswordDto {
   @IsString() currentPassword!: string;
   @IsString() @MinLength(8) newPassword!: string;
 }
+
+export class PasswordResetRequestDto {
+  @IsEmail() email!: string;
+}
+
+export class PasswordResetConfirmDto {
+  @IsEmail() email!: string;
+  @IsString() code!: string;
+  @IsString() @MinLength(8) newPassword!: string;
+}
+
+export class GoogleLoginDto {
+  @IsString() accessToken!: string;
+}
+
+export class AppleLoginDto {
+  @IsString() identityToken!: string;
+  @IsOptional() @IsString() email?: string;
+  @IsOptional() @IsString() firstName?: string;
+  @IsOptional() @IsString() lastName?: string;
+}

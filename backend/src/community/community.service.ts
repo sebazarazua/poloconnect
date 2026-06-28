@@ -2,10 +2,16 @@ import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/commo
 import { page } from "../common/dto/pagination.dto";
 import { PrismaService } from "../database/prisma.service";
 import { MessageQueryDto } from "./dto/community.dto";
+import { NotificationsService } from "../notifications/notifications.service";
+import { CommunityGateway } from "./community.gateway";
 
 @Injectable()
 export class CommunityService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+    private readonly gateway: CommunityGateway
+  ) {}
 
   async listRooms(userId: string) {
     const now = new Date();
@@ -53,11 +59,23 @@ export class CommunityService {
   async sendMessage(userId: string, roomId: string, text: string, clientMessageId?: string) {
     await this.ensureNoActiveBan(userId, roomId);
     await this.ensureMembership(userId, roomId);
+    const room = await this.ensureRoom(roomId);
     const last = await this.prisma.chatMessage.findFirst({ where: { roomId }, orderBy: { messageNumber: "desc" } });
     const messageNumber = BigInt(Number(last?.messageNumber ?? 0) + 1);
     const sanitized = text.trim().replace(/[<>]/g, "");
     const message = await this.prisma.chatMessage.create({ data: { roomId, userId, messageNumber, body: text.trim(), bodySanitized: sanitized }, include: { user: true } });
-    return { ...this.toMessageDto(message, userId), clientMessageId };
+    const messageDto = { ...this.toMessageDto(message, userId), clientMessageId };
+    const realtimeMessageDto = this.toRealtimeMessageDto(message);
+
+    this.gateway.emitMessage(roomId, realtimeMessageDto as Record<string, unknown>);
+
+    void this.notifications.notifyRoomMembers(roomId, userId, {
+      kind: "message",
+      title: room.title,
+      body: `${message.user.firstName} ${message.user.lastName}`.trim() || "Nuevo mensaje",
+      data: { roomId, messageId: message.id, clientMessageId }
+    });
+    return messageDto;
   }
 
   private async ensureRoom(roomId: string) {
@@ -106,12 +124,26 @@ export class CommunityService {
     return {
       id: message.id,
       userId: message.userId,
+      avatarUrl: message.user.avatarUrl ?? undefined,
       userName: message.userId === userId ? "Vos" : `${message.user.firstName} ${message.user.lastName}`.trim(),
       text: message.bodySanitized,
       time: new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false }).format(message.createdAt),
       createdAt: message.createdAt,
       messageNumber: message.messageNumber.toString(),
       isMe: message.userId === userId
+    };
+  }
+
+  private toRealtimeMessageDto(message: any) {
+    return {
+      id: message.id,
+      userId: message.userId,
+      avatarUrl: message.user.avatarUrl ?? undefined,
+      userName: `${message.user.firstName} ${message.user.lastName}`.trim(),
+      text: message.bodySanitized,
+      time: new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false }).format(message.createdAt),
+      createdAt: message.createdAt,
+      messageNumber: message.messageNumber.toString()
     };
   }
 }

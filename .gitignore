@@ -12,6 +12,14 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .expo-web*.log
+.env
+.env.*
+!.env.example
+!.env.*.example
 backend/node_modules/
 backend/dist/
 backend/.env
+backend/uploads/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example

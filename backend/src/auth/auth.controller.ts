@@ -4,7 +4,16 @@ import { Public } from "../common/decorators/public.decorator";
 import { CurrentUser, RequestUser } from "../common/decorators/current-user.decorator";
 import { parseCookieHeader } from "../common/utils/cookies";
 import { AuthService } from "./auth.service";
-import { ChangePasswordDto, LoginDto, RefreshDto, RegisterDto } from "./dto/auth.dto";
+import {
+  AppleLoginDto,
+  ChangePasswordDto,
+  GoogleLoginDto,
+  LoginDto,
+  PasswordResetConfirmDto,
+  PasswordResetRequestDto,
+  RefreshDto,
+  RegisterDto
+} from "./dto/auth.dto";
 
 @Controller("auth")
 export class AuthController {
@@ -40,6 +49,39 @@ export class AuthController {
   @Post("login")
   login(@Body() dto: LoginDto, @Req() req: any) {
     return this.auth.login(dto, req).then((tokens) => {
+      this.applyAuthCookies(req.res, tokens);
+      return tokens;
+    });
+  }
+
+  @Public()
+  @Post("login/google")
+  loginWithGoogle(@Body() dto: GoogleLoginDto, @Req() req: any) {
+    return this.auth.loginWithGoogle(dto, req).then((tokens) => {
+      this.applyAuthCookies(req.res, tokens);
+      return tokens;
+    });
+  }
+
+  @Public()
+  @Post("login/apple")
+  loginWithApple(@Body() dto: AppleLoginDto, @Req() req: any) {
+    return this.auth.loginWithApple(dto, req).then((tokens) => {
+      this.applyAuthCookies(req.res, tokens);
+      return tokens;
+    });
+  }
+
+  @Public()
+  @Post("password-reset/request")
+  requestPasswordReset(@Body() dto: PasswordResetRequestDto) {
+    return this.auth.requestPasswordReset(dto);
+  }
+
+  @Public()
+  @Post("password-reset/confirm")
+  confirmPasswordReset(@Body() dto: PasswordResetConfirmDto, @Req() req: any) {
+    return this.auth.confirmPasswordReset(dto, req).then((tokens) => {
       this.applyAuthCookies(req.res, tokens);
       return tokens;
     });

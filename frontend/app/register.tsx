@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { AuthScaffold } from "@/components/AuthScaffold";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocale } from "@/contexts/LocaleContext";
 
 type RegisterForm = {
   firstName: string;
@@ -35,6 +36,7 @@ const initialForm: RegisterForm = {
 export default function RegisterScreen() {
   const router = useRouter();
   const { signUp, isSubmitting } = useAuth();
+  const { t } = useLocale();
   const [form, setForm] = useState(initialForm);
   const [error, setError] = useState("");
 
@@ -53,12 +55,12 @@ export default function RegisterScreen() {
       !form.username.trim() ||
       !form.password.trim()
     ) {
-      setError("Completá los datos obligatorios para crear la cuenta.");
+      setError(t("auth.register.required"));
       return;
     }
 
     if (form.password !== form.confirmPassword) {
-      setError("Las contraseñas no coinciden.");
+      setError(t("auth.register.passwordMismatch"));
       return;
     }
 
@@ -74,7 +76,7 @@ export default function RegisterScreen() {
         phone: form.phone
       });
     } catch (registerError) {
-      setError(registerError instanceof Error ? registerError.message : "No se pudo crear la cuenta.");
+      setError(registerError instanceof Error ? registerError.message : t("auth.register.error"));
     }
   };
 
@@ -82,90 +84,90 @@ export default function RegisterScreen() {
     <>
       <StatusBar style="light" backgroundColor="#071221" />
       <AuthScaffold
-        title="Crear cuenta"
-        subtitle="Completá tus datos para sumar tu perfil a Polo Connect y entrar a la app en un solo paso."
-        footerText="Al crear tu cuenta aceptás una experiencia demo con la misma estética del acceso."
+        title={t("auth.register.title")}
+        subtitle={t("auth.register.subtitle")}
+        footerText={t("auth.register.footer")}
       >
         <View style={styles.formBlock}>
           <View style={styles.row}>
             <View style={styles.halfField}>
-              <FieldLabel label="Nombre" />
+              <FieldLabel label={t("auth.register.firstName")} />
               <TextInput
                 value={form.firstName}
                 onChangeText={(value) => updateField("firstName", value)}
-                placeholder="Nombre"
+                placeholder={t("auth.register.firstName")}
                 placeholderTextColor="#60728c"
                 style={styles.input}
               />
             </View>
 
             <View style={styles.halfField}>
-              <FieldLabel label="Apellido" />
+              <FieldLabel label={t("auth.register.lastName")} />
               <TextInput
                 value={form.lastName}
                 onChangeText={(value) => updateField("lastName", value)}
-                placeholder="Apellido"
+                placeholder={t("auth.register.lastName")}
                 placeholderTextColor="#60728c"
                 style={styles.input}
               />
             </View>
           </View>
 
-          <FieldLabel label="Mail" />
+          <FieldLabel label={t("common.email")} />
           <TextInput
             value={form.email}
             onChangeText={(value) => updateField("email", value)}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
-            placeholder="Tu mail"
+            placeholder={t("auth.register.emailPlaceholder")}
             placeholderTextColor="#60728c"
             style={styles.input}
           />
 
-          <FieldLabel label="Nombre de usuario" />
+          <FieldLabel label={t("auth.register.username")} />
           <TextInput
             value={form.username}
             onChangeText={(value) => updateField("username", value)}
             autoCapitalize="none"
             autoCorrect={false}
-            placeholder="Elegí un usuario"
+            placeholder={t("auth.register.usernamePlaceholder")}
             placeholderTextColor="#60728c"
             style={styles.input}
           />
 
           <View style={styles.row}>
             <View style={styles.halfField}>
-              <FieldLabel label="Contraseña" />
+              <FieldLabel label={t("auth.login.password")} />
               <TextInput
                 value={form.password}
                 onChangeText={(value) => updateField("password", value)}
                 secureTextEntry
-                placeholder="Crear contraseña"
+                placeholder={t("auth.register.createPassword")}
                 placeholderTextColor="#60728c"
                 style={styles.input}
               />
             </View>
 
             <View style={styles.halfField}>
-              <FieldLabel label="Confirmar" />
+              <FieldLabel label={t("auth.register.confirm")} />
               <TextInput
                 value={form.confirmPassword}
                 onChangeText={(value) => updateField("confirmPassword", value)}
                 secureTextEntry
-                placeholder="Repetir contraseña"
+                placeholder={t("auth.register.confirmPlaceholder")}
                 placeholderTextColor="#60728c"
                 style={styles.input}
               />
             </View>
           </View>
 
-          <FieldLabel label="Telefono" />
+          <FieldLabel label={t("common.phone")} />
           <TextInput
             value={form.phone}
             onChangeText={(value) => updateField("phone", value)}
             keyboardType="phone-pad"
-            placeholder="Opcional para contacto"
+            placeholder={t("auth.register.phonePlaceholder")}
             placeholderTextColor="#60728c"
             style={styles.input}
           />
@@ -176,7 +178,7 @@ export default function RegisterScreen() {
             {isSubmitting ? (
               <ActivityIndicator color="#ffffff" />
             ) : (
-              <Text style={styles.primaryButtonText}>Crear cuenta</Text>
+              <Text style={styles.primaryButtonText}>{t("auth.register.submit")}</Text>
             )}
           </Pressable>
 
@@ -185,7 +187,7 @@ export default function RegisterScreen() {
             onPress={() => router.replace("/login")}
             disabled={isSubmitting}
           >
-            <Text style={styles.secondaryButtonText}>Ya tengo cuenta</Text>
+            <Text style={styles.secondaryButtonText}>{t("auth.register.hasAccount")}</Text>
           </Pressable>
         </View>
       </AuthScaffold>

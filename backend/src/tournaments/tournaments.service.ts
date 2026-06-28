@@ -2,10 +2,11 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { page } from "../common/dto/pagination.dto";
 import { PrismaService } from "../database/prisma.service";
 import { RegisterTeamDto, TournamentsQueryDto } from "./dto/tournaments.dto";
+import { NotificationsService } from "../notifications/notifications.service";
 
 @Injectable()
 export class TournamentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly notifications: NotificationsService) {}
 
   async list(query: TournamentsQueryDto) {
     const limit = Number(query.limit ?? 50);
@@ -46,6 +47,12 @@ export class TournamentsService {
         }
       },
       include: { players: { include: { player: true } } }
+    });
+    void this.notifications.notifyUser(userId, {
+      kind: "tournament",
+      title: "Inscripción recibida",
+      body: `Tu equipo ${body.teamName.trim()} quedó registrado en ${tournament.name}.`,
+      data: { tournamentId: tournament.id, registrationId: registration.id }
     });
     return registration;
   }

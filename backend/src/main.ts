@@ -29,7 +29,7 @@ async function bootstrap() {
   }
   app.use("/uploads", express.static(uploadsDir));
 
-  await app.listen(config.get<number>("PORT", 4000));
+  await app.listen(config.get<number>("PORT", 4000), "0.0.0.0");
 }
 
 void bootstrap();

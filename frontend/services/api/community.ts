@@ -1,14 +1,22 @@
 import { apiRequest } from "@/services/api/client";
+import { getApiUrl } from "@/services/api/client";
+import { io, Socket } from "socket.io-client";
 import type { ChatItem } from "@/contexts/CommunityContext";
 
 export type ChatMessage = {
   id: string;
   userId: string;
+  avatarUrl?: string;
   userName: string;
   text: string;
   time: string;
   createdAt?: string;
-  isMe: boolean;
+  isMe?: boolean;
+};
+
+type IncomingSocketMessage = {
+  roomId: string;
+  message: ChatMessage;
 };
 
 type RoomsResponse = {
@@ -24,6 +32,26 @@ type Page<T> = {
     hasMore: boolean;
   };
 };
+
+let communitySocket: Socket | null = null;
+
+function getWsBaseUrl() {
+  return getApiUrl().replace(/\/api\/v1\/?$/, "");
+}
+
+function getCommunitySocket() {
+  if (!communitySocket) {
+    communitySocket = io(`${getWsBaseUrl()}/ws`, {
+      transports: ["websocket"],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 400,
+      reconnectionDelayMax: 4000
+    });
+  }
+
+  return communitySocket;
+}
 
 export async function listChatRooms() {
   return apiRequest<RoomsResponse>("/chat-rooms");
@@ -47,4 +75,24 @@ export async function sendMessage(roomId: string, text: string) {
     method: "POST",
     body: JSON.stringify({ text, clientMessageId: `local-${Date.now()}` })
   });
+}
+
+export function subscribeToRoomMessages(roomId: string, onMessage: (message: ChatMessage) => void) {
+  const socket = getCommunitySocket();
+
+  const handler = (payload: IncomingSocketMessage) => {
+    if (payload?.roomId !== roomId || !payload?.message) {
+      return;
+    }
+
+    onMessage(payload.message);
+  };
+
+  socket.emit("join_room", { roomId });
+  socket.on("message_received", handler);
+
+  return () => {
+    socket.off("message_received", handler);
+    socket.emit("leave_room", { roomId });
+  };
 }

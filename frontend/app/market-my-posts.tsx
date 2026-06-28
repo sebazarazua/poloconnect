@@ -3,27 +3,29 @@ import { useRouter } from "expo-router";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
+import { useLocale } from "@/contexts/LocaleContext";
 import { useMarket } from "@/contexts/MarketContext";
 
 export default function MarketMyPostsScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const router = useRouter();
+  const { t } = useLocale();
   const { myProducts, deleteProduct } = useMarket();
 
   return (
     <Screen
-      eyebrow="Mercado"
-      title="Mis publicaciones"
-      subtitle="Edita o elimina tus avisos creados."
+      eyebrow={t("market.eyebrow")}
+      title={t("myPosts.title")}
+      subtitle={t("myPosts.subtitle")}
       showBackButton
       onBackPress={() => router.back()}
     >
       {myProducts.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="albums-outline" size={48} color={colors.muted} />
-          <Text style={styles.emptyTitle}>Todavía no publicaste nada</Text>
-          <Text style={styles.emptyText}>Usá Publicar para crear tu primer aviso.</Text>
+          <Text style={styles.emptyTitle}>{t("myPosts.emptyTitle")}</Text>
+          <Text style={styles.emptyText}>{t("myPosts.emptyText")}</Text>
         </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
@@ -43,7 +45,7 @@ export default function MarketMyPostsScreen() {
                     onPress={() => router.push(`/market-publish?id=${product.id}`)}
                   >
                     <Ionicons name="create-outline" size={16} color={colors.primaryDark} />
-                    <Text style={styles.actionText}>Editar</Text>
+                    <Text style={styles.actionText}>{t("common.edit")}</Text>
                   </Pressable>
 
                   <Pressable
@@ -51,7 +53,7 @@ export default function MarketMyPostsScreen() {
                     onPress={() => deleteProduct(product.id)}
                   >
                     <Ionicons name="trash-outline" size={16} color={colors.danger} />
-                    <Text style={[styles.actionText, styles.deleteText]}>Eliminar</Text>
+                    <Text style={[styles.actionText, styles.deleteText]}>{t("common.delete")}</Text>
                   </Pressable>
                 </View>
               </View>

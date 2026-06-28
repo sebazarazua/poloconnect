@@ -7,6 +7,10 @@ import { MatchesQueryDto, UpdateLiveStateDto } from "./dto/matches.dto";
 export class MatchesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private isUuid(value: string) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  }
+
   async list(query: MatchesQueryDto) {
     const limit = Number(query.limit ?? 50);
     const where: any = { deletedAt: null };
@@ -61,7 +65,11 @@ export class MatchesService {
   }
 
   private async findMatch(id: string, include: any = this.include()) {
-    const match = await this.prisma.match.findFirst({ where: { OR: [{ id }, { externalCode: id }], deletedAt: null }, include });
+    const where = this.isUuid(id)
+      ? { OR: [{ id }, { externalCode: id }], deletedAt: null }
+      : { externalCode: id, deletedAt: null };
+
+    const match = await this.prisma.match.findFirst({ where, include });
     if (!match) throw new NotFoundException("Match not found.");
     return match as any;
   }

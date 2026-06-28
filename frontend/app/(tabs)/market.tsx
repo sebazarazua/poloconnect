@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
+import { useLocale } from "@/contexts/LocaleContext";
 import { useMarket } from "@/contexts/MarketContext";
 import { type Product, type MarketCategory } from "@/services/market";
 
@@ -19,6 +20,7 @@ export default function MarketScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const router = useRouter();
+  const { t } = useLocale();
   const { products, favoriteIds, isFavorite, toggleFavorite } = useMarket();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<MarketCategory>("todos");
@@ -64,9 +66,9 @@ export default function MarketScreen() {
 
   return (
     <Screen
-      eyebrow="Mercado"
-      title="Compra y venta"
-      subtitle="Equipamiento, caballos y servicios para jugadores y clubes."
+      eyebrow={t("market.eyebrow")}
+      title={t("market.title")}
+      subtitle={t("market.subtitle")}
       headerRight={
         <Pressable style={styles.favoritesFloatingButton} onPress={() => router.push("/favorites")}>
           <Ionicons name="heart" size={17} color="#ffffff" />
@@ -82,12 +84,12 @@ export default function MarketScreen() {
         <View style={styles.actionRow}>
           <Pressable style={styles.secondaryAction} onPress={() => router.push("/market-my-posts")}>
             <Ionicons name="albums-outline" size={18} color={colors.primaryDark} />
-            <Text style={styles.secondaryActionText}>Mis publicaciones</Text>
+            <Text style={styles.secondaryActionText}>{t("market.myPosts")}</Text>
           </Pressable>
 
           <Pressable style={styles.primaryAction} onPress={() => router.push("/market-publish")}>
             <Ionicons name="add" size={18} color="#ffffff" />
-            <Text style={styles.primaryActionText}>Publicar</Text>
+            <Text style={styles.primaryActionText}>{t("market.publish")}</Text>
           </Pressable>
         </View>
 
@@ -96,7 +98,7 @@ export default function MarketScreen() {
           <Ionicons name="search" size={20} color={colors.muted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Buscar productos"
+            placeholder={t("market.searchPlaceholder")}
             placeholderTextColor={colors.muted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -120,7 +122,7 @@ export default function MarketScreen() {
                   selectedCategory === category && styles.categoryTabTextActive
                 ]}
               >
-                {category.toUpperCase()}
+                {t(`market.category.${category}`).toUpperCase()}
               </Text>
             </Pressable>
           ))}
@@ -140,7 +142,7 @@ export default function MarketScreen() {
         {filteredProducts.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="search-outline" size={48} color={colors.muted} />
-            <Text style={styles.emptyText}>No hay productos</Text>
+            <Text style={styles.emptyText}>{t("market.empty")}</Text>
           </View>
         )}
       </View>

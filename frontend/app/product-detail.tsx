@@ -2,7 +2,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Image,
+  Linking,
   PanResponder,
   Pressable,
   ScrollView,
@@ -14,6 +16,7 @@ import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useMarket } from "@/contexts/MarketContext";
+import { contactSeller } from "@/services/api/market";
 import { fetchProduct } from "@/services/api/market";
 import type { Product } from "@/services/market";
 
@@ -29,6 +32,19 @@ const fallbackVendor = {
   email: "jmartinez@correo.com",
   description: "Vendedor de equipamiento polo con más de 10 años de experiencia."
 };
+
+function normalizePhone(phone?: string) {
+  if (!phone) return "";
+  const trimmed = phone.trim();
+  const hasPlus = trimmed.startsWith("+");
+  const digits = trimmed.replace(/[^\d]/g, "");
+  if (!digits) return "";
+  return hasPlus ? `+${digits}` : digits;
+}
+
+function whatsappPhone(phone?: string) {
+  return normalizePhone(phone).replace(/^\+/, "");
+}
 
 export default function ProductDetailScreen() {
   const colors = useThemeColors();
@@ -48,6 +64,47 @@ export default function ProductDetailScreen() {
   }, [cachedProduct, id]);
 
   const vendor = product?.seller ?? fallbackVendor;
+
+  const handleCallSeller = async () => {
+    if (!product) return;
+
+    const phone = normalizePhone(vendor.phone);
+    if (!phone) {
+      Alert.alert(t("product.noPhone"));
+      return;
+    }
+
+    const telUrl = `tel:${phone}`;
+    const canOpen = await Linking.canOpenURL(telUrl);
+    if (!canOpen) {
+      Alert.alert("No se pudo abrir el marcador");
+      return;
+    }
+
+    await contactSeller(product.id, { contactType: "phone", message: `Llamada solicitada por ${product.name}` }).catch(() => undefined);
+    await Linking.openURL(telUrl);
+  };
+
+  const handleWhatsappSeller = async () => {
+    if (!product) return;
+
+    const phone = whatsappPhone(vendor.phone);
+    if (!phone) {
+      Alert.alert(t("product.noPhone"));
+      return;
+    }
+
+    const text = `Hola, vi tu producto en Polo Connect y me interesa. Producto: ${product.name}. Precio: USD ${product.price.toLocaleString()}.`;
+    const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+    const canOpen = await Linking.canOpenURL(waUrl);
+    if (!canOpen) {
+      Alert.alert("No se pudo abrir WhatsApp");
+      return;
+    }
+
+    await contactSeller(product.id, { contactType: "whatsapp", message: text }).catch(() => undefined);
+    await Linking.openURL(waUrl);
+  };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -113,7 +170,7 @@ export default function ProductDetailScreen() {
 
             <Text style={styles.description}>{product.description}</Text>
 
-            <Pressable style={styles.contactButton}>
+            <Pressable style={styles.contactButton} onPress={() => { void handleWhatsappSeller(); }}>
               <Ionicons name="chatbubble-ellipses-outline" size={18} color="#ffffff" />
               <Text style={styles.contactButtonText}>{t("product.contactSeller")}</Text>
             </Pressable>
@@ -200,12 +257,12 @@ export default function ProductDetailScreen() {
                 </View>
 
                 <View style={styles.actionButtons}>
-                  <Pressable style={styles.callButton}>
+                  <Pressable style={styles.callButton} onPress={() => { void handleCallSeller(); }}>
                     <Ionicons name="call" size={18} color="#ffffff" />
                     <Text style={styles.callButtonText}>{t("product.call")}</Text>
                   </Pressable>
 
-                  <Pressable style={styles.whatsappButton}>
+                  <Pressable style={styles.whatsappButton} onPress={() => { void handleWhatsappSeller(); }}>
                     <Ionicons name="logo-whatsapp" size={18} color="#ffffff" />
                     <Text style={styles.whatsappButtonText}>WhatsApp</Text>
                   </Pressable>

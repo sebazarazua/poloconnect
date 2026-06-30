@@ -347,14 +347,14 @@ export class AdminService {
       const xml = await response.text();
       const itemBlocks = xml.match(/<item>[\s\S]*?<\/item>/g) ?? [];
 
-      const items = itemBlocks
-        .map((block, index) => {
+      const parsed = await Promise.all(
+        itemBlocks.map(async (block, index) => {
           const title = this.decodeHtmlEntities(this.extractCDataOrTag(block, "title"));
           const link = this.extractCDataOrTag(block, "link").trim();
           const description = this.decodeHtmlEntities(this.extractCDataOrTag(block, "description"));
           const categories = [...block.matchAll(/<category><!\[CDATA\[(.*?)\]\]><\/category>/g)].map((match) => match[1]).filter(Boolean);
           const contentEncoded = this.extractCDataOrTag(block, "content:encoded");
-          const imageUrl = this.extractImageUrl(contentEncoded) || this.extractImageUrl(description);
+          const imageUrl = await this.resolveFeedImage(block, contentEncoded, description, link);
 
           if (!title || !link) {
             return null;
@@ -378,8 +378,9 @@ export class AdminService {
             isActive: true as const
           };
         })
-        .filter((item): item is NonNullable<typeof item> => Boolean(item))
-        .slice(0, limit);
+      );
+
+      const items = parsed.filter((item): item is NonNullable<typeof item> => Boolean(item)).slice(0, limit);
 
       this.polohubCache = {
         expiresAt: now + 1000 * 60 * 10,
@@ -405,13 +406,72 @@ export class AdminService {
 
   private extractImageUrl(content: string) {
     if (!content) return "";
-    const imageMatch = content.match(/<img[^>]+src=["']([^"']+)["']/i);
+    const imageMatch = content.match(/<img[^>]+(?:src|data-src|data-lazy-src)=["']([^"']+)["']/i);
     if (imageMatch?.[1]) {
-      return imageMatch[1].trim();
+      const direct = imageMatch[1].trim();
+      if (this.isValidNewsImageUrl(direct)) return direct;
     }
 
-    const plainUrlMatch = content.match(/https?:\/\/[^\s"']+\.(?:jpg|jpeg|png|webp)/i);
-    return plainUrlMatch?.[0]?.trim() ?? "";
+    const srcSetMatch = content.match(/srcset=["']([^"']+)["']/i);
+    if (srcSetMatch?.[1]) {
+      const srcSetUrl = srcSetMatch[1].split(",")[0]?.trim()?.split(" ")[0]?.trim();
+      if (srcSetUrl && this.isValidNewsImageUrl(srcSetUrl)) {
+        return srcSetUrl;
+      }
+    }
+
+    const plainUrlMatches = [...content.matchAll(/https?:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|webp)/gi)].map((match) => match[0]?.trim()).filter(Boolean) as string[];
+    const preferred = plainUrlMatches.find((url) => this.isValidNewsImageUrl(url));
+    return preferred ?? "";
+  }
+
+  private async resolveFeedImage(itemBlock: string, content: string, description: string, link: string) {
+    const inline = this.extractImageUrl(content) || this.extractImageUrl(description);
+    if (inline) return inline;
+
+    const enclosureMatch = itemBlock.match(/<enclosure[^>]+url=["']([^"']+)["'][^>]*>/i);
+    if (enclosureMatch?.[1] && this.isValidNewsImageUrl(enclosureMatch[1])) {
+      return enclosureMatch[1].trim();
+    }
+
+    const mediaContentMatch = itemBlock.match(/<media:content[^>]+url=["']([^"']+)["'][^>]*>/i);
+    if (mediaContentMatch?.[1] && this.isValidNewsImageUrl(mediaContentMatch[1])) {
+      return mediaContentMatch[1].trim();
+    }
+
+    if (!link) return "";
+
+    try {
+      const response = await fetch(link, {
+        headers: {
+          "User-Agent": "PoloConnect/1.0"
+        }
+      });
+      if (!response.ok) return "";
+
+      const html = await response.text();
+      const ogImage =
+        html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i)?.[1] ||
+        html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i)?.[1] ||
+        html.match(/<img[^>]+(?:src|data-src|data-lazy-src)=["']([^"']+)["']/i)?.[1];
+
+      if (ogImage && this.isValidNewsImageUrl(ogImage)) {
+        return ogImage.trim();
+      }
+    } catch {
+      return "";
+    }
+
+    return "";
+  }
+
+  private isValidNewsImageUrl(url: string) {
+    if (!url) return false;
+    const normalized = url.trim().toLowerCase();
+    if (!/^https?:\/\//.test(normalized)) return false;
+    if (!/\.(jpg|jpeg|png|webp)(\?|$)/.test(normalized)) return false;
+    if (normalized.includes("favicon")) return false;
+    return true;
   }
 
   private stripHtml(value: string) {

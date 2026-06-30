@@ -325,16 +325,22 @@ export default function HomeScreen() {
               style={[
                 styles.matchHero,
                 styles.newsHero,
-                { width: bannerWidth, backgroundColor: item.background }
+                { width: bannerWidth }
               ]}
               onPress={() => Linking.openURL(item.targetUrl ?? poloHubUrl)}
             >
-              <ImageBackground
-                source={item.imageUrl ? resolveContentImageSource(item.imageUrl) : undefined}
-                style={styles.matchHeroFill}
-                imageStyle={styles.matchHeroImage}
-                resizeMode="cover"
-              >
+              {item.imageUrl ? (
+                <Image
+                  source={resolveContentImageSource(item.imageUrl)}
+                  style={styles.newsBackgroundImage}
+                  resizeMode="cover"
+                  blurRadius={3}
+                />
+              ) : null}
+
+              <View style={styles.newsDarkLayer} />
+
+              <View style={styles.matchHeroFill}>
                 <View style={styles.newsBackdrop}>
                   <View
                     style={[
@@ -364,34 +370,34 @@ export default function HomeScreen() {
                       { backgroundColor: item.panel }
                     ]}
                   >
-                    <View style={styles.newsSourceRow}>
-                      <View
-                        style={[
-                          styles.newsCategoryBadge,
-                          { backgroundColor: item.accent }
-                        ]}
-                      >
-                        <Text style={styles.newsCategoryText}>{item.category}</Text>
-                      </View>
-                      <Text style={styles.newsSourceText}>{item.source}</Text>
-                      <Text style={styles.newsTime}>{item.time}</Text>
+                  <View style={styles.newsSourceRow}>
+                    <View
+                      style={[
+                        styles.newsCategoryBadge,
+                        { backgroundColor: item.accent }
+                      ]}
+                    >
+                      <Text style={styles.newsCategoryText}>{item.category}</Text>
                     </View>
+                    <Text style={styles.newsSourceText}>{item.source}</Text>
+                    <Text style={styles.newsTime}>{item.time}</Text>
+                  </View>
 
-                    <View style={styles.newsBody}>
-                      <Text style={styles.newsTitle} numberOfLines={2}>
-                        {item.title}
-                      </Text>
-                      <Text style={styles.newsSummary} numberOfLines={2}>
-                        {item.summary}
-                      </Text>
-                      <View style={styles.readMoreButton}>
-                        <Text style={styles.readMoreText}>{t("home.readMore")}</Text>
-                        <Ionicons name="arrow-forward" size={13} color="#ffffff" />
-                      </View>
+                  <View style={styles.newsBody}>
+                    <Text style={styles.newsTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.newsSummary} numberOfLines={2}>
+                      {item.summary}
+                    </Text>
+                    <View style={styles.readMoreButton}>
+                      <Text style={styles.readMoreText}>{t("home.readMore")}</Text>
+                      <Ionicons name="arrow-forward" size={13} color="#ffffff" />
                     </View>
                   </View>
+                  </View>
                 </View>
-              </ImageBackground>
+              </View>
             </Pressable>
           )
         )}
@@ -648,20 +654,20 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
 
   // News slide
   newsHero: {
-    borderWidth: 1,
-    borderColor: "rgba(217, 233, 247, 0.35)",
+    borderWidth: 0,
     position: "relative"
+  },
+  newsBackgroundImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%"
+  },
+  newsDarkLayer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(6, 16, 28, 0.39)"
   },
   newsBackdrop: {
     ...StyleSheet.absoluteFillObject
-  },
-  newsOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-    gap: 0,
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 12
   },
   newsGlowPrimary: {
     position: "absolute",
@@ -680,6 +686,14 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     left: -26,
     borderWidth: 1,
     backgroundColor: "rgba(255,255,255,0.03)"
+  },
+  newsOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    gap: 0,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 14
   },
   newsKickerLine: {
     width: 42,
@@ -704,7 +718,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 8
+    marginBottom: 10
   },
   newsCategoryBadge: {
     borderRadius: 999,
@@ -718,9 +732,9 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     letterSpacing: 0.8
   },
   newsSourceText: {
-    color: "rgba(255,255,255,0.82)",
-    fontSize: 11,
-    fontWeight: "700",
+    color: "rgba(255,255,255,0.92)",
+    fontSize: 12,
+    fontWeight: "800",
     flex: 1
   },
   newsTime: {

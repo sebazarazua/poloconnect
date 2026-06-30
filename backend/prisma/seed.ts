@@ -83,58 +83,58 @@ async function main() {
     }
   });
 
-  const match = await prisma.match.upsert({
-    where: { externalCode: "2-1" },
-    update: {},
-    create: {
-      externalCode: "2-1",
-      tournamentId: tournament.id,
-      clubId: clubs[0].id,
-      team1Id: teams.get("La Dolfina")!.id,
-      team2Id: teams.get("Ellerstina")!.id,
-      scheduledAt: new Date(Date.UTC(2026, 5, 2, 14, 0, 0)),
-      status: "live",
-      score1: 5,
-      score2: 3,
-      currentChukker: 3,
-      totalChukkers: 6,
-      competitionName: "129° Abierto Argentino de Polo",
-      youtubeUrl: "https://www.youtube.com/live/zY3JUrfPtTo"
-    }
-  });
+  // El seed base no debe dejar partidos live de demo activos.
+  await prisma.match.deleteMany({ where: { externalCode: "2-1" } });
 
-  const playerNames = ["Adolfo Cambiaso", "David Stirling", "Juan Martin Nero", "Pablo Mac Donough", "Gonzalo Pieres Jr.", "Facundo Pieres", "Nicolas Pieres", "Mariano Aguerre"];
-  const players = [];
-  for (const name of playerNames) {
-    players.push(await prisma.player.create({ data: { displayName: name, handicap: 10 } }));
-  }
-  for (let index = 0; index < 8; index += 1) {
-    await prisma.matchLineup.upsert({
-      where: { matchId_teamId_position: { matchId: match.id, teamId: index < 4 ? teams.get("La Dolfina")!.id : teams.get("Ellerstina")!.id, position: (index % 4) + 1 } },
-      update: {},
-      create: { matchId: match.id, teamId: index < 4 ? teams.get("La Dolfina")!.id : teams.get("Ellerstina")!.id, playerId: players[index].id, position: (index % 4) + 1, shirtNumber: (index % 4) + 1, goalsLabel: index < 6 ? "+1 goles" : "0 goles" }
-    });
-  }
-
-  for (const stat of [
-    ["goals", "Goles", "5", "3", 62, 38],
-    ["shots", "Tiros al arco", "12", "8", 60, 40],
-    ["fouls", "Faltas", "4", "6", 40, 60]
-  ] as const) {
-    await prisma.matchStat.upsert({ where: { matchId_statKey: { matchId: match.id, statKey: stat[0] } }, update: {}, create: { matchId: match.id, statKey: stat[0], label: stat[1], team1Value: stat[2], team2Value: stat[3], team1Percent: stat[4], team2Percent: stat[5] } });
-  }
-
-  await prisma.matchEvent.upsert({ where: { matchId_eventNumber: { matchId: match.id, eventNumber: BigInt(1) } }, update: {}, create: { matchId: match.id, eventNumber: BigInt(1), eventType: "goal", matchClock: "72:00", title: "Gol de La Dolfina", body: "Adolfo Cambiaso convierte desde mitad de cancha." } });
+  await prisma.product.deleteMany({ where: { sellerId: user.id } });
 
   const products = [
-    ["Silla Butet Usada", 3200, "equipamiento", "Usado", "Silla profesional en buen estado."],
-    ["Casco Kep Italia", 980, "equipamiento", "Nuevo", "Casco liviano y ventilado."],
-    ["Camisa La Martina Oficial", 120, "indumentaria", "Nuevo", "Camisa oficial para competencia."],
-    ["Vehiculo Transporte", 15000, "vehiculos", "Usado", "Vehiculo adaptado para caballos."]
+    [
+      "Silla Butet Usada",
+      3200,
+      "equipamiento",
+      "Usado",
+      "Silla profesional en buen estado.",
+      "https://images.pexels.com/photos/1174104/pexels-photo-1174104.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    ],
+    [
+      "Casco Kep Italia",
+      980,
+      "equipamiento",
+      "Nuevo",
+      "Casco liviano y ventilado.",
+      "https://images.pexels.com/photos/163452/sport-treadmill-tor-route-163452.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    ],
+    [
+      "Camisa La Martina Oficial",
+      120,
+      "indumentaria",
+      "Nuevo",
+      "Camisa oficial para competencia.",
+      "https://images.pexels.com/photos/1124465/pexels-photo-1124465.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    ],
+    [
+      "Vehiculo Transporte",
+      15000,
+      "vehiculos",
+      "Usado",
+      "Vehículo adaptado para caballos y equipamiento.",
+      "https://images.pexels.com/photos/1592384/pexels-photo-1592384.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    ]
   ] as const;
-  for (const [title, price, category, condition, description] of products) {
-    const product = await prisma.product.create({ data: { sellerId: user.id, title, priceCents: price * 100, category, condition, description, status: "active" } });
-    await prisma.productImage.create({ data: { productId: product.id, url: `https://via.placeholder.com/180x180/244360/FFFFFF?text=${encodeURIComponent(title)}`, position: 1 } });
+  for (const [title, price, category, condition, description, imageUrl] of products) {
+    const product = await prisma.product.create({
+      data: {
+        sellerId: user.id,
+        title,
+        priceCents: price * 100,
+        category,
+        condition,
+        description,
+        status: "active"
+      }
+    });
+    await prisma.productImage.create({ data: { productId: product.id, url: imageUrl, position: 1 } });
   }
 
   for (const room of [

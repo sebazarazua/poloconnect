@@ -12,6 +12,7 @@
     "infra:down": "docker compose -f backend/docker-compose.yml down",
     "backend:migrate": "npm --prefix backend run prisma:deploy",
     "backend:seed:auctions": "npm --prefix backend run prisma:seed:auctions",
+    "backend:seed:live-match": "npm --prefix backend run prisma:seed:live-match",
     "frontend:start": "npm --prefix frontend run start",
     "frontend:android": "npm --prefix frontend run android",
     "frontend:ios": "npm --prefix frontend run ios",

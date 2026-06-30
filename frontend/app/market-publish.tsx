@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -15,6 +16,7 @@ import {
 import { Screen } from "@/components/Screen";
 import { AppColors, useTheme, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
+import { uploadProductImage } from "@/services/api/market";
 import { type ProductStatus, type MarketCategory } from "@/services/market";
 import { useMarket } from "@/contexts/MarketContext";
 
@@ -58,6 +60,65 @@ export default function MarketPublishScreen() {
   }, [existingProduct]);
 
   const normalizedPrice = Number(price.replace(/[^0-9.]/g, ""));
+
+  const uploadImageFromLibrary = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(t("profile.photoPermissionTitle"), t("profile.galleryPermissionText"));
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8
+    });
+
+    if (result.canceled || !result.assets[0]?.uri) return;
+
+    const uploadedUrl = await uploadProductImage(result.assets[0].uri);
+    setImageUrl(uploadedUrl);
+  };
+
+  const uploadImageFromCamera = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(t("profile.photoPermissionTitle"), t("profile.cameraPermissionText"));
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.8
+    });
+
+    if (result.canceled || !result.assets[0]?.uri) return;
+
+    const uploadedUrl = await uploadProductImage(result.assets[0].uri);
+    setImageUrl(uploadedUrl);
+  };
+
+  const handlePickImage = () => {
+    Alert.alert(t("marketPublish.uploadImage"), t("marketPublish.uploadText"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("profile.takePhoto"),
+        onPress: () => {
+          void uploadImageFromCamera().catch(() => {
+            Alert.alert(t("marketPublish.errorTitle"), t("marketPublish.errorFallback"));
+          });
+        }
+      },
+      {
+        text: t("profile.chooseGallery"),
+        onPress: () => {
+          void uploadImageFromLibrary().catch(() => {
+            Alert.alert(t("marketPublish.errorTitle"), t("marketPublish.errorFallback"));
+          });
+        }
+      }
+    ]);
+  };
 
   const isSubmitDisabled = useMemo(() => {
     return (
@@ -106,10 +167,16 @@ export default function MarketPublishScreen() {
       <View style={styles.form}>
         <View style={styles.sectionCard}>
           <Text style={styles.sectionLabel}>{t("marketPublish.image")}</Text>
-          <Pressable style={styles.uploadBox}>
-            <Ionicons name="cloud-upload-outline" size={30} color={colors.primaryDark} />
-            <Text style={styles.uploadTitle}>{t("marketPublish.uploadImage")}</Text>
-            <Text style={styles.uploadText}>{t("marketPublish.uploadText")}</Text>
+          <Pressable style={[styles.uploadBox, imageUrl ? styles.uploadBoxWithImage : null]} onPress={handlePickImage}>
+            {imageUrl ? (
+              <Image source={{ uri: imageUrl }} style={styles.uploadPreview} resizeMode="cover" />
+            ) : (
+              <>
+                <Ionicons name="cloud-upload-outline" size={30} color={colors.primaryDark} />
+                <Text style={styles.uploadTitle}>{t("marketPublish.uploadImage")}</Text>
+                <Text style={styles.uploadText}>{t("marketPublish.uploadText")}</Text>
+              </>
+            )}
           </Pressable>
           <TextInput
             style={styles.input}
@@ -351,7 +418,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     fontWeight: "800"
   },
   uploadBox: {
-    minHeight: 150,
+    height: 170,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#bfd6eb",
@@ -360,7 +427,17 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingHorizontal: 18
+    paddingHorizontal: 18,
+    overflow: "hidden"
+  },
+  uploadBoxWithImage: {
+    borderStyle: "solid",
+    paddingHorizontal: 0
+  },
+  uploadPreview: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 15
   },
   uploadTitle: {
     color: colors.text,

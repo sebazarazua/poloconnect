@@ -2,6 +2,7 @@ export type MatchStatus = "live" | "upcoming" | "finished";
 
 export interface Match {
   id: string;
+  externalCode?: string;
   time: string;
   team1: string;
   team2: string;

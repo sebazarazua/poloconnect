@@ -10,6 +10,24 @@ import { UpsertMatchDto, UpsertMatchStatDto, UpsertTournamentDto } from "./dto/a
 export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private polohubCache: {
+    expiresAt: number;
+    items: Array<{
+      id: string;
+      type: "news";
+      section: "home";
+      slot: "main_news";
+      title: string;
+      subtitle: string;
+      body: string;
+      imageUrl: string;
+      targetUrl: string;
+      priority: number;
+      sortOrder: number;
+      isActive: true;
+    }>;
+  } | null = null;
+
   async dashboard() {
     const [users, products, rooms, matches, tournaments, contentItems, activity] = await Promise.all([
       this.prisma.user.count({ where: { deletedAt: null } }),
@@ -289,12 +307,15 @@ export class AdminService {
   }
 
   async getPublicHomeContent() {
-    const [heroAds, compactAds, news, branding] = await Promise.all([
+    const [heroAds, compactAds, fallbackNews, branding, polohubNews] = await Promise.all([
       this.getPublicSection("home", "hero_ads"),
       this.getPublicSection("home", "compact_ads"),
       this.getPublicSection("home", "main_news"),
-      this.getPublicSection("branding", "app_logo")
+      this.getPublicSection("branding", "app_logo"),
+      this.getPolohubNews(12)
     ]);
+
+    const news = polohubNews.length > 0 ? polohubNews : fallbackNews;
 
     return {
       heroAds,
@@ -304,6 +325,128 @@ export class AdminService {
         logo: branding[0] ?? null
       }
     };
+  }
+
+  private async getPolohubNews(limit: number) {
+    const now = Date.now();
+    if (this.polohubCache && this.polohubCache.expiresAt > now) {
+      return this.polohubCache.items.slice(0, limit);
+    }
+
+    try {
+      const response = await fetch("https://polohub.net/feed/", {
+        headers: {
+          "User-Agent": "PoloConnect/1.0"
+        }
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const xml = await response.text();
+      const itemBlocks = xml.match(/<item>[\s\S]*?<\/item>/g) ?? [];
+
+      const items = itemBlocks
+        .map((block, index) => {
+          const title = this.decodeHtmlEntities(this.extractCDataOrTag(block, "title"));
+          const link = this.extractCDataOrTag(block, "link").trim();
+          const description = this.decodeHtmlEntities(this.extractCDataOrTag(block, "description"));
+          const categories = [...block.matchAll(/<category><!\[CDATA\[(.*?)\]\]><\/category>/g)].map((match) => match[1]).filter(Boolean);
+          const contentEncoded = this.extractCDataOrTag(block, "content:encoded");
+          const imageUrl = this.extractImageUrl(contentEncoded) || this.extractImageUrl(description);
+
+          if (!title || !link) {
+            return null;
+          }
+
+          const subtitle = categories[0] || "Actualidad";
+          const body = this.trimWords(this.stripHtml(description), 36);
+
+          return {
+            id: `polohub-${index}-${this.slugify(title)}`,
+            type: "news" as const,
+            section: "home" as const,
+            slot: "main_news" as const,
+            title,
+            subtitle,
+            body,
+            imageUrl: imageUrl || "https://polohub.net/wp-content/uploads/2022/06/cropped-favicon-polomagazine-1-270x270.jpg",
+            targetUrl: link,
+            priority: 100,
+            sortOrder: index + 1,
+            isActive: true as const
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+        .slice(0, limit);
+
+      this.polohubCache = {
+        expiresAt: now + 1000 * 60 * 10,
+        items
+      };
+
+      return items;
+    } catch {
+      return [];
+    }
+  }
+
+  private extractCDataOrTag(xml: string, tagName: string) {
+    const cdataRegex = new RegExp(`<${tagName}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tagName}>`, "i");
+    const directRegex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "i");
+
+    const cdataMatch = xml.match(cdataRegex);
+    if (cdataMatch?.[1]) return cdataMatch[1];
+
+    const directMatch = xml.match(directRegex);
+    return directMatch?.[1] ?? "";
+  }
+
+  private extractImageUrl(content: string) {
+    if (!content) return "";
+    const imageMatch = content.match(/<img[^>]+src=["']([^"']+)["']/i);
+    if (imageMatch?.[1]) {
+      return imageMatch[1].trim();
+    }
+
+    const plainUrlMatch = content.match(/https?:\/\/[^\s"']+\.(?:jpg|jpeg|png|webp)/i);
+    return plainUrlMatch?.[0]?.trim() ?? "";
+  }
+
+  private stripHtml(value: string) {
+    return value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  private decodeHtmlEntities(value: string) {
+    return value
+      .replace(/&#8217;/g, "'")
+      .replace(/&#8220;/g, '"')
+      .replace(/&#8221;/g, '"')
+      .replace(/&#8211;/g, "-")
+      .replace(/&#8230;/g, "...")
+      .replace(/&#38;/g, "&")
+      .replace(/&amp;/g, "&")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&#(\d+);/g, (_match, code) => String.fromCharCode(Number(code)));
+  }
+
+  private trimWords(value: string, wordLimit: number) {
+    const words = value.split(/\s+/).filter(Boolean);
+    if (words.length <= wordLimit) return value;
+    return `${words.slice(0, wordLimit).join(" ")}...`;
+  }
+
+  private slugify(value: string) {
+    return value
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "")
+      .slice(0, 48);
   }
 
   private async ensureContent(id: string) {

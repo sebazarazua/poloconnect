@@ -24,11 +24,15 @@ import { formatHomeEyebrow } from "@/constants/i18n";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHomeContent } from "@/services/api/content";
+import { listMatches } from "@/services/api/matches";
 import { resolveContentImageSource } from "@/services/content-images";
+import { Match } from "@/services/matches";
 
 const screenHorizontalPadding = 40;
 const featuredMatchBackground = require("../../assets/home-match-bg.png");
 const poloHubUrl = "https://polohub.net/";
+const matchSlideDurationMs = 7000;
+const newsSlideDurationMs = 4300;
 
 const fallbackAds = [
   require("../../assets/ads/home/hero-1.png"),
@@ -61,15 +65,15 @@ export default function HomeScreen() {
     compactAds: [],
     news: []
   });
+  const [liveMatches, setLiveMatches] = useState<Match[]>([]);
 
   const openPoloHub = () => {
     Linking.openURL(poloHubUrl);
   };
-
-  const openFeaturedMatch = () => {
+  const openFeaturedMatch = (id: string) => {
     router.push({
       pathname: "/match-detail",
-      params: { id: "2-1" }
+      params: { id }
     });
   };
 
@@ -91,6 +95,17 @@ export default function HomeScreen() {
       .catch(() => {
         setHomeContent({ heroAds: [], compactAds: [], news: [] });
       });
+
+    void listMatches(undefined, "live")
+      .then((matches) => {
+        const sorted = [...matches].sort((a, b) => {
+          const aTime = new Date(`${String(a.date).slice(0, 10)}T${a.time}:00`).getTime();
+          const bTime = new Date(`${String(b.date).slice(0, 10)}T${b.time}:00`).getTime();
+          return aTime - bTime;
+        });
+        setLiveMatches(sorted);
+      })
+      .catch(() => setLiveMatches([]));
   }, [t]);
 
   const ads = homeContent.heroAds.length > 0 ? homeContent.heroAds.map((uri) => resolveContentImageSource(uri)) : fallbackAds;
@@ -104,7 +119,16 @@ export default function HomeScreen() {
   ] as const;
 
   type HeroItem =
-    | { type: "match" }
+    | {
+        type: "match";
+        id: string;
+        team1: string;
+        team2: string;
+        score1: number;
+        score2: number;
+        competition: string;
+        chukker?: string;
+      }
     | {
         type: "news";
         source: string;
@@ -112,6 +136,7 @@ export default function HomeScreen() {
         title: string;
         summary: string;
         time: string;
+        imageUrl?: string;
         targetUrl?: string;
         accent: string;
         background: string;
@@ -119,64 +144,14 @@ export default function HomeScreen() {
         glow: string;
       };
 
-  const fallbackNewsItems: HeroItem[] = [
-    {
-      type: "news",
-      source: "Polo Hub",
-      category: "FICHAJE",
-      title: "Cambiaso renueva con La Dolfina por dos temporadas más",
-      summary: "El mejor polista del mundo firmó su continuidad en el equipo hasta el 2028.",
-      time: "Hace 2 horas",
-      accent: "#f7c66b",
-      background: "#0d4f8c",
-      panel: "rgba(255, 255, 255, 0.10)",
-      glow: "rgba(247, 198, 107, 0.22)"
-    },
-    {
-      type: "news",
-      source: "AAP Noticias",
-      category: "TORNEO",
-      title: "El Abierto de Palermo 2026 ya tiene fixture completo",
-      summary: "La Asociación Argentina de Polo publicó el calendario oficial del torneo más importante del mundo.",
-      time: "Hace 4 horas",
-      accent: "#53d6b5",
-      background: "#0a5a78",
-      panel: "rgba(255, 255, 255, 0.10)",
-      glow: "rgba(83, 214, 181, 0.20)"
-    },
-    {
-      type: "news",
-      source: "Polo Line",
-      category: "INTERNACIONAL",
-      title: "Argentina domina el ranking mundial con 8 jugadores en el top 10",
-      summary: "La FIP publicó la nueva clasificación donde Argentina sigue siendo la potencia del polo mundial.",
-      time: "Ayer",
-      accent: "#8dc2ff",
-      background: "#153f78",
-      panel: "rgba(255, 255, 255, 0.09)",
-      glow: "rgba(141, 194, 255, 0.18)"
-    },
-    {
-      type: "news",
-      source: "Equine Network",
-      category: "BIENESTAR",
-      title: "Nuevos protocolos de bienestar equino en torneos de alto handicap",
-      summary: "La FIP aprobó medidas más estrictas para el cuidado de los caballos durante competencias.",
-      time: "Ayer",
-      accent: "#ff9f7a",
-      background: "#6b3f63",
-      panel: "rgba(255, 255, 255, 0.10)",
-      glow: "rgba(255, 159, 122, 0.18)"
-    }
-  ];
-
   const remoteNewsItems: HeroItem[] = homeContent.news.map((entry, index) => ({
     type: "news",
-    source: "Polo Connect",
+    source: "PoloHUB",
     category: entry.subtitle?.toUpperCase() || t("home.fallbackNewsCategory"),
     title: entry.title,
     summary: entry.body || "",
     time: t("home.now"),
+    imageUrl: entry.imageUrl,
     targetUrl: entry.targetUrl,
     accent: ["#f7c66b", "#53d6b5", "#8dc2ff", "#ff9f7a"][index % 4],
     background: ["#0d4f8c", "#0a5a78", "#153f78", "#6b3f63"][index % 4],
@@ -184,7 +159,21 @@ export default function HomeScreen() {
     glow: ["rgba(247, 198, 107, 0.22)", "rgba(83, 214, 181, 0.20)", "rgba(141, 194, 255, 0.18)", "rgba(255, 159, 122, 0.18)"][index % 4]
   }));
 
-  const heroItems: HeroItem[] = [{ type: "match" }, ...(remoteNewsItems.length > 0 ? remoteNewsItems : fallbackNewsItems)];
+  const liveMatchItems: HeroItem[] = liveMatches.map((match) => ({
+    type: "match",
+    id: match.externalCode || match.id,
+    team1: match.team1,
+    team2: match.team2,
+    score1: match.score1,
+    score2: match.score2,
+    competition: match.competition,
+    chukker: match.chukker
+  }));
+
+  const heroItems: HeroItem[] = [...liveMatchItems, ...remoteNewsItems];
+
+  const activeHeroItem = heroItems[activeHero];
+  const activeHeroDuration = activeHeroItem?.type === "match" ? matchSlideDurationMs : newsSlideDurationMs;
 
   const handleQuickAccessPress = (key: string) => {
     if (key === "calendar") {
@@ -199,15 +188,24 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    const timer = setInterval(() => {
+    if (heroItems.length <= 1) return;
+
+    const timer = setTimeout(() => {
       setActiveHero((current) => {
         const next = (current + 1) % heroItems.length;
         heroCarouselRef.current?.scrollTo({ x: next * bannerWidth, animated: true });
         return next;
       });
-    }, 4500);
-    return () => clearInterval(timer);
-  }, [bannerWidth]);
+    }, activeHeroDuration);
+
+    return () => clearTimeout(timer);
+  }, [activeHero, activeHeroDuration, bannerWidth, heroItems.length]);
+
+  useEffect(() => {
+    if (activeHero < heroItems.length) return;
+    setActiveHero(0);
+    heroCarouselRef.current?.scrollTo({ x: 0, animated: false });
+  }, [activeHero, heroItems.length]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -266,7 +264,7 @@ export default function HomeScreen() {
             <Pressable
               key={index}
               style={[styles.matchHero, { width: bannerWidth }]}
-              onPress={openFeaturedMatch}
+              onPress={() => openFeaturedMatch(item.id)}
             >
               <ImageBackground
                 source={featuredMatchBackground}
@@ -282,9 +280,9 @@ export default function HomeScreen() {
                   </View>
 
                   <Text style={styles.matchTournament}>
-                    129° ABIERTO ARGENTINO DE POLO
+                    {(item.competition || "PARTIDO EN VIVO").toUpperCase()}
                   </Text>
-                  <Text style={styles.matchChukker}>CHUKKER 3</Text>
+                  <Text style={styles.matchChukker}>{(item.chukker || "EN JUEGO").toUpperCase()}</Text>
                 </View>
 
                 <View style={styles.matchBottom}>
@@ -292,28 +290,28 @@ export default function HomeScreen() {
                     <View style={styles.teamBlock}>
                       <View style={styles.teamLogo}>
                         <Image
-                          source={getTeamLogoSource("La Dolfina", 92)}
+                          source={getTeamLogoSource(item.team1, 92)}
                           style={styles.teamLogoImg}
                           resizeMode="cover"
                         />
                       </View>
                       <Text style={styles.teamName} numberOfLines={1}>
-                        LA DOLFINA
+                        {item.team1.toUpperCase()}
                       </Text>
                     </View>
 
-                    <Text style={styles.matchScore}>5 - 3</Text>
+                    <Text style={styles.matchScore}>{item.score1} - {item.score2}</Text>
 
                     <View style={styles.teamBlock}>
                       <View style={styles.teamLogo}>
                         <Image
-                          source={getTeamLogoSource("Ellerstina", 92)}
+                          source={getTeamLogoSource(item.team2, 92)}
                           style={styles.teamLogoImg}
                           resizeMode="cover"
                         />
                       </View>
                       <Text style={styles.teamName} numberOfLines={1}>
-                        ELLERSTINA
+                        {item.team2.toUpperCase()}
                       </Text>
                     </View>
                   </View>
@@ -331,66 +329,82 @@ export default function HomeScreen() {
               ]}
               onPress={() => Linking.openURL(item.targetUrl ?? poloHubUrl)}
             >
-              <View style={styles.newsBackdrop}>
-                <View
-                  style={[
-                    styles.newsGlowPrimary,
-                    { backgroundColor: item.glow }
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.newsGlowSecondary,
-                    { borderColor: `${item.accent}55` }
-                  ]}
-                />
-              </View>
+              <ImageBackground
+                source={item.imageUrl ? resolveContentImageSource(item.imageUrl) : undefined}
+                style={styles.matchHeroFill}
+                imageStyle={styles.matchHeroImage}
+                resizeMode="cover"
+              >
+                <View style={styles.newsBackdrop}>
+                  <View
+                    style={[
+                      styles.newsGlowPrimary,
+                      { backgroundColor: item.glow }
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.newsGlowSecondary,
+                      { borderColor: `${item.accent}55` }
+                    ]}
+                  />
+                </View>
 
-              <View style={styles.newsOverlay}>
-                <View
-                  style={[
-                    styles.newsKickerLine,
-                    { backgroundColor: item.accent }
-                  ]}
-                />
+                <View style={styles.newsOverlay}>
+                  <View
+                    style={[
+                      styles.newsKickerLine,
+                      { backgroundColor: item.accent }
+                    ]}
+                  />
 
-                <View
-                  style={[
-                    styles.newsContentPanel,
-                    { backgroundColor: item.panel }
-                  ]}
-                >
-                  <View style={styles.newsSourceRow}>
-                    <View
-                      style={[
-                        styles.newsCategoryBadge,
-                        { backgroundColor: item.accent }
-                      ]}
-                    >
-                      <Text style={styles.newsCategoryText}>{item.category}</Text>
+                  <View
+                    style={[
+                      styles.newsContentPanel,
+                      { backgroundColor: item.panel }
+                    ]}
+                  >
+                    <View style={styles.newsSourceRow}>
+                      <View
+                        style={[
+                          styles.newsCategoryBadge,
+                          { backgroundColor: item.accent }
+                        ]}
+                      >
+                        <Text style={styles.newsCategoryText}>{item.category}</Text>
+                      </View>
+                      <Text style={styles.newsSourceText}>{item.source}</Text>
+                      <Text style={styles.newsTime}>{item.time}</Text>
                     </View>
-                    <Text style={styles.newsSourceText}>{item.source}</Text>
-                    <Text style={styles.newsTime}>{item.time}</Text>
-                  </View>
 
-                  <View style={styles.newsBody}>
-                    <Text style={styles.newsTitle} numberOfLines={2}>
-                      {item.title}
-                    </Text>
-                    <Text style={styles.newsSummary} numberOfLines={2}>
-                      {item.summary}
-                    </Text>
-                    <View style={styles.readMoreButton}>
-                      <Text style={styles.readMoreText}>{t("home.readMore")}</Text>
-                      <Ionicons name="arrow-forward" size={13} color="#ffffff" />
+                    <View style={styles.newsBody}>
+                      <Text style={styles.newsTitle} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                      <Text style={styles.newsSummary} numberOfLines={2}>
+                        {item.summary}
+                      </Text>
+                      <View style={styles.readMoreButton}>
+                        <Text style={styles.readMoreText}>{t("home.readMore")}</Text>
+                        <Ionicons name="arrow-forward" size={13} color="#ffffff" />
+                      </View>
                     </View>
                   </View>
                 </View>
-              </View>
+              </ImageBackground>
             </Pressable>
           )
         )}
       </ScrollView>
+
+      <View style={styles.heroDots}>
+        {heroItems.map((_, index) => (
+          <View
+            key={`hero-dot-${index}`}
+            style={[styles.dot, index === activeHero ? styles.activeDot : null]}
+          />
+        ))}
+      </View>
 
 
       <ScrollView

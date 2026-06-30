@@ -578,6 +578,53 @@ model AppContentItem {
   @@unique([section, slot, type, sortOrder])
 }
 
+model HorseAuctionEvent {
+  id           String             @id @default(uuid()) @db.Uuid
+  slug         String             @unique
+  title        String
+  imageUrl     String?
+  organizer    String
+  venue        String
+  city         String
+  country      String             @default("Argentina")
+  eventDate    DateTime
+  contactName  String
+  contactPhone String?
+  contactEmail String?
+  websiteUrl   String?
+  notes        String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  deletedAt    DateTime?
+  horses       HorseAuctionHorse[]
+
+  @@index([eventDate])
+  @@index([deletedAt])
+}
+
+model HorseAuctionHorse {
+  id                String           @id @default(uuid()) @db.Uuid
+  eventId           String           @db.Uuid
+  lotNumber         Int?
+  horseName         String
+  imageUrl          String?
+  ownerName         String
+  reservePriceCents Int
+  currency          String           @default("USD")
+  breed             String?
+  sex               String?
+  ageYears          Int?
+  coatColor         String?
+  contactPhone      String?
+  contactEmail      String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  event             HorseAuctionEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, lotNumber])
+  @@index([ownerName])
+}
+
 model CommunityBan {
   id          String    @id @default(uuid()) @db.Uuid
   roomId       String    @db.Uuid

@@ -255,6 +255,9 @@ async function main() {
       create: { type: "ad", section: "live", slot: "ads", sortOrder: ad.sortOrder, imageUrl: ad.imageUrl, createdBy: user.id, updatedBy: user.id }
     });
   }
+
+  await prisma.horseAuctionEvent.deleteMany({});
+
 }
 
 main().finally(async () => prisma.$disconnect());

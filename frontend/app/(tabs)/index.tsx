@@ -100,7 +100,7 @@ export default function HomeScreen() {
     { key: "calendar", label: t("home.calendar"), icon: "calendar-outline", route: "/(tabs)/tournaments" },
     { key: "community", label: t("home.communities"), icon: "people-outline", route: "/(tabs)/community" },
     { key: "broadcast", label: t("home.broadcast"), icon: "play-circle-outline", route: "/broadcast" },
-    { key: "news", label: t("home.news"), icon: "newspaper-outline" }
+    { key: "auctions", label: t("home.auctions"), icon: "cash-outline" }
   ] as const;
 
   type HeroItem =
@@ -193,8 +193,8 @@ export default function HomeScreen() {
       router.push("/broadcast");
     } else if (key === "community") {
       router.push("/(tabs)/community");
-    } else if (key === "news") {
-      openPoloHub();
+    } else if (key === "auctions") {
+      router.push("/horse-auctions");
     }
   };
 

@@ -14,6 +14,41 @@ npm install
 npm run frontend:start
 ```
 
+## Levantar toda la app de una
+
+Comando unico desde la raiz del repo:
+
+```bash
+npm install
+npm run dev:up
+```
+
+Esto hace en orden:
+- Libera puertos de desarrollo (4000 backend, 8081 frontend) si estaban ocupados.
+- Levanta Postgres y Redis via Docker Compose.
+- Ejecuta migraciones de Prisma en backend.
+- Arranca backend (watch) y frontend Expo en paralelo.
+
+Nota: el script intenta liberar esos puertos automaticamente. Si tenes algo importante corriendo en 4000/8081, detenelo manualmente antes de usar `npm run dev:up`.
+
+Para bajar infraestructura Docker:
+
+```bash
+npm run dev:down
+```
+
+## Remates de caballos sin mock
+
+Los remates NO se crean con el seed general. Si no corres el seed especifico, la seccion queda vacia.
+
+Para poblar eventos y caballos con imagenes:
+
+```bash
+npm run backend:seed:auctions
+```
+
+Tambien podes crear eventos/caballos con fotos reales desde dispositivo en la pantalla Gestionar remates (rol admin/superadmin).
+
 Backend local:
 
 ```bash

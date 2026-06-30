@@ -4,6 +4,14 @@
   "private": true,
   "scripts": {
     "start": "npm --prefix frontend run start",
+    "dev:up": "npm run ports:free && npm run infra:up && npm run backend:migrate && npm run dev:apps",
+    "dev:apps": "concurrently -n backend,frontend -c blue,green \"npm run backend:dev\" \"npm run frontend:start\"",
+    "dev:down": "npm run infra:down",
+    "ports:free": "kill-port 4000 8081",
+    "infra:up": "docker compose -f backend/docker-compose.yml up -d",
+    "infra:down": "docker compose -f backend/docker-compose.yml down",
+    "backend:migrate": "npm --prefix backend run prisma:deploy",
+    "backend:seed:auctions": "npm --prefix backend run prisma:seed:auctions",
     "frontend:start": "npm --prefix frontend run start",
     "frontend:android": "npm --prefix frontend run android",
     "frontend:ios": "npm --prefix frontend run ios",
@@ -16,6 +24,8 @@
     "typecheck:all": "npm run typecheck:frontend && npm run typecheck:backend"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
+    "kill-port": "^2.0.1",
     "@types/react": "~19.2.14",
     "typescript": "~6.0.3"
   }

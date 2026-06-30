@@ -80,6 +80,9 @@ function RootNavigator() {
         <Stack.Screen name="market-my-posts" />
         <Stack.Screen name="market-publish" />
         <Stack.Screen name="match-detail" />
+        <Stack.Screen name="horse-auctions" />
+        <Stack.Screen name="horse-auction-detail" />
+        <Stack.Screen name="horse-auctions-admin" />
         <Stack.Screen name="product-detail" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="profile" />

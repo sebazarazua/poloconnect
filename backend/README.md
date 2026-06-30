@@ -11,8 +11,11 @@ copy .env.example .env
 docker compose up -d
 npm run prisma:migrate -- --name init
 npm run prisma:seed
+npm run prisma:seed:auctions
 npm run start:dev
 ```
+
+Nota: `prisma:seed` no crea remates de caballos. Para que existan eventos/caballos (con imagenes), usar `prisma:seed:auctions`.
 
 API local: `http://localhost:4000/api/v1`
 

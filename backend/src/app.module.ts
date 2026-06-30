@@ -9,6 +9,7 @@ import { RolesGuard } from "./common/guards/roles.guard";
 import { CommunityModule } from "./community/community.module";
 import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health/health.controller";
+import { HorseAuctionsModule } from "./horse-auctions/horse-auctions.module";
 import { MarketplaceModule } from "./marketplace/marketplace.module";
 import { MatchesModule } from "./matches/matches.module";
 import { NotificationsModule } from "./notifications/notifications.module";
@@ -29,6 +30,7 @@ import { UsersModule } from "./users/users.module";
     CommunityModule,
     MatchesModule,
     TournamentsModule,
+    HorseAuctionsModule,
     NotificationsModule
   ],
   controllers: [HealthController],

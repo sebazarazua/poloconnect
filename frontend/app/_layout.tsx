@@ -87,6 +87,7 @@ function RootNavigator() {
         <Stack.Screen name="notifications" />
         <Stack.Screen name="profile" />
         <Stack.Screen name="settings" />
+        <Stack.Screen name="help-center" />
         <Stack.Screen name="team-register" />
         <Stack.Screen name="group-chat" />
         <Stack.Screen name="admin-panel" />

@@ -130,21 +130,18 @@ export default function ProfileScreen() {
 
     setSavingProfile(true);
 
-        setSaving(true);
-
-        try {
-          await changeMyPassword({ currentPassword, newPassword });
-          setCurrentPassword("");
-          setNewPassword("");
-          setConfirmPassword("");
-          Alert.alert(t("profile.passwordUpdatedTitle"), t("profile.passwordUpdatedText"));
-          signOut();
-          router.replace("/login");
-        } catch (error) {
-          Alert.alert(t("profile.errorTitle"), error instanceof Error ? error.message : t("profile.profileError"));
-        } finally {
-          setSaving(false);
-        }
+    try {
+      const nextUser = await updateMyProfile({
+        firstName: trimmedFirstName,
+        lastName: trimmedLastName
+      });
+      updateUser(nextUser);
+      Alert.alert(t("profile.profileUpdatedTitle"), t("profile.profileUpdatedText"));
+    } catch (error) {
+      Alert.alert(t("profile.errorTitle"), error instanceof Error ? error.message : t("profile.profileError"));
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
       const handleResetByEmailCode = async () => {
@@ -181,14 +178,20 @@ export default function ProfileScreen() {
     }
 
     setSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    setSaving(false);
 
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-
-    Alert.alert(t("profile.passwordUpdatedTitle"), t("profile.passwordUpdatedText"));
+    try {
+      await changeMyPassword({ currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      Alert.alert(t("profile.passwordUpdatedTitle"), t("profile.passwordUpdatedText"));
+      signOut();
+      router.replace("/login");
+    } catch (error) {
+      Alert.alert(t("profile.errorTitle"), error instanceof Error ? error.message : t("profile.profileError"));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const fullName = user ? `${firstName || user.firstName} ${lastName || user.lastName}` : "—";

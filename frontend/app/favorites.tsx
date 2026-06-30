@@ -24,12 +24,18 @@ export default function FavoritesScreen() {
       <View style={styles.list}>
         {favoriteProducts.map((product) => (
           <View key={product.id} style={styles.card}>
-            <Image source={{ uri: product.image }} style={styles.image} />
+            <Pressable
+              style={styles.cardMain}
+              onPress={() => router.push({ pathname: "/product-detail", params: { id: product.id } })}
+              accessibilityLabel={t("favorites.openProductA11y", { name: product.name })}
+            >
+              <Image source={{ uri: product.image }} style={styles.image} />
 
-            <View style={styles.info}>
-              <Text style={styles.name}>{product.name.replace("\n", " ")}</Text>
-              <Text style={styles.price}>USD {product.price.toLocaleString()}</Text>
-            </View>
+              <View style={styles.info}>
+                <Text style={styles.name}>{product.name.replace("\n", " ")}</Text>
+                <Text style={styles.price}>USD {product.price.toLocaleString()}</Text>
+              </View>
+            </Pressable>
 
             <Pressable
               style={styles.removeButton}
@@ -66,6 +72,12 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 16,
     padding: 12
+  },
+  cardMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12
   },
   image: {
     width: 74,

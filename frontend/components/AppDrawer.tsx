@@ -86,7 +86,7 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
   ];
   const drawerFooterItems: Array<DrawerItem> = [
     { label: t("common.settings"), icon: "settings-outline", route: "/settings" },
-    { label: t("drawer.helpCenter"), icon: "help-circle-outline" }
+    { label: t("drawer.helpCenter"), icon: "help-circle-outline", route: "/help-center" }
   ];
 
   const openDrawer = () => {

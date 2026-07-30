@@ -16,7 +16,7 @@ async function bootstrap() {
 
   app.use(helmet());
   app.enableCors({
-    origin: corsOrigin === "*" ? true : corsOrigin.split(","),
+    origin: corsOrigin === "*" ? true : corsOrigin.split(",").map((origin) => origin.trim()).filter(Boolean),
     credentials: true
   });
   app.setGlobalPrefix(prefix);

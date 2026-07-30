@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,6 +15,8 @@ import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useMarket } from "@/contexts/MarketContext";
+import { resolveContentImageSource } from "@/services/content-images";
+import { type Brand, listBrands } from "@/services/api/brands";
 import { type Product, type MarketCategory } from "@/services/market";
 
 export default function MarketScreen() {
@@ -24,6 +27,11 @@ export default function MarketScreen() {
   const { products, favoriteIds, isFavorite, toggleFavorite } = useMarket();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<MarketCategory>("todos");
+  const [brands, setBrands] = useState<Brand[]>([]);
+
+  useEffect(() => {
+    void listBrands().then(setBrands).catch(() => {});
+  }, []);
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
@@ -81,6 +89,42 @@ export default function MarketScreen() {
       }
     >
       <View style={styles.marketShell}>
+        <View style={styles.brandsSection}>
+          <View style={styles.brandsHeaderRow}>
+            <Text style={styles.brandsSectionTitle}>Marcas</Text>
+            <Pressable style={styles.brandsSeeAllButton} onPress={() => router.push("/brand-catalog") as any}>
+              <Text style={styles.brandsSeeAllText}>Ver catálogo</Text>
+            </Pressable>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.brandsTrack}>
+            {brands.length > 0 ? brands.map((brand) => (
+              <Pressable
+                key={brand.id}
+                style={styles.brandChip}
+                onPress={() => router.push({ pathname: "/brand-catalog", params: { id: brand.id } })}
+              >
+                {brand.logoUrl ? (
+                  <Image
+                    source={resolveContentImageSource(brand.logoUrl)}
+                    style={styles.brandChipLogo}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <View style={[styles.brandChipLogo, styles.brandChipLogoFallback]}>
+                    <Ionicons name="storefront-outline" size={22} color={colors.primary} />
+                  </View>
+                )}
+                <Text style={styles.brandChipName} numberOfLines={1}>{brand.name}</Text>
+              </Pressable>
+            )) : (
+              <View style={styles.brandsEmptyState}>
+                <Ionicons name="pricetags-outline" size={20} color={colors.muted} />
+                <Text style={styles.brandsEmptyText}>Todavía no hay marcas cargadas</Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+
         <View style={styles.actionRow}>
           <Pressable style={styles.secondaryAction} onPress={() => router.push("/market-my-posts")}>
             <Ionicons name="albums-outline" size={18} color={colors.primaryDark} />
@@ -151,6 +195,77 @@ export default function MarketScreen() {
 }
 
 const createStyles = (colors: AppColors) => StyleSheet.create({
+  brandsSection: {
+    marginBottom: 20
+  },
+  brandsHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10
+  },
+  brandsSectionTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 10
+  },
+  brandsSeeAllButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface
+  },
+  brandsSeeAllText: {
+    color: colors.primaryDark,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  brandsTrack: {
+    gap: 12,
+    paddingBottom: 4
+  },
+  brandChip: {
+    alignItems: "center",
+    gap: 6,
+    width: 72
+  },
+  brandChipLogo: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.border
+  },
+  brandChipLogoFallback: {
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  brandChipName: {
+    color: colors.text,
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center"
+  },
+  brandsEmptyState: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border
+  },
+  brandsEmptyText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "700"
+  },
   actionRow: {
     flexDirection: "row",
     gap: 10,

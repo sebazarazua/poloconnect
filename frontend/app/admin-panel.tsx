@@ -23,6 +23,19 @@ import {
   uploadAdminContentImage,
   type AdminContentItem
 } from "@/services/api/admin";
+import {
+  type Brand,
+  type BrandProduct,
+  adminListBrands,
+  adminCreateBrand,
+  adminUpdateBrand,
+  adminDeleteBrand,
+  adminListBrandProducts,
+  adminCreateBrandProduct,
+  adminUpdateBrandProduct,
+  adminDeleteBrandProduct,
+  uploadBrandImage
+} from "@/services/api/brands";
 
 type ContentSection = {
   section: string;
@@ -73,6 +86,14 @@ export default function AdminPanelScreen() {
   const [newBody, setNewBody] = useState("");
   const [uploading, setUploading] = useState(false);
   const [activeSectionFilter, setActiveSectionFilter] = useState<string>("home");
+
+  // Brands state
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
+  const [brandProducts, setBrandProducts] = useState<BrandProduct[]>([]);
+  const [brandForm, setBrandForm] = useState({ name: "", slug: "", description: "", whatsapp: "", phone: "", email: "", website: "", logoUrl: "" });
+  const [bpForm, setBpForm] = useState({ name: "", description: "", price: "", imageUrl: "" });
+  const [selectedBpId, setSelectedBpId] = useState<string | null>(null);
 
   const isAdmin = useMemo(() => {
     const roles = user?.roles ?? [];
@@ -152,6 +173,8 @@ export default function AdminPanelScreen() {
       setSelectedRoomId((current) => current ?? nextRooms[0]?.id ?? null);
       setSelectedContentId((current) => current ?? items[0]?.id ?? null);
     });
+
+    void adminListBrands().then(setBrands).catch(() => {});
   }, [isAdmin, router]);
 
   useEffect(() => {
@@ -488,6 +511,180 @@ export default function AdminPanelScreen() {
             ))}
           </View>
         </View>
+
+        {/* ── Brands section ── */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={styles.cardTitle}>Marcas</Text>
+              <Text style={styles.cardSubtitle}>Gestión de catálogos de marcas</Text>
+            </View>
+            <Pressable
+              style={styles.smallButton}
+              onPress={() => {
+                setBrandForm({ name: "", slug: "", description: "", whatsapp: "", phone: "", email: "", website: "", logoUrl: "" });
+                setSelectedBrandId(null);
+                setSelectedBpId(null);
+                setBrandProducts([]);
+              }}
+            >
+              <Text style={styles.smallButtonText}>+ Nueva marca</Text>
+            </Pressable>
+          </View>
+
+          {/* Brand list */}
+          {brands.map((brand) => (
+            <View key={brand.id} style={[styles.memberCard, { flexDirection: "row", alignItems: "center", gap: 10 }]}>
+              {brand.logoUrl ? (
+                <Image source={resolveContentImageSource(brand.logoUrl)} style={{ width: 40, height: 40, borderRadius: 20 }} />
+              ) : (
+                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceStrong, alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name="storefront-outline" size={20} color={colors.primary} />
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.memberName}>{brand.name}</Text>
+                <Text style={styles.memberMeta}>{(brand as any)._count?.products ?? 0} productos</Text>
+              </View>
+              <View style={styles.memberActions}>
+                <Pressable
+                  style={styles.actionButton}
+                  onPress={async () => {
+                    setBrandForm({ name: brand.name, slug: brand.slug, description: brand.description ?? "", whatsapp: brand.whatsapp ?? "", phone: brand.phone ?? "", email: brand.email ?? "", website: brand.website ?? "", logoUrl: brand.logoUrl ?? "" });
+                    setSelectedBrandId(brand.id);
+                    setSelectedBpId(null);
+                    const products = await adminListBrandProducts(brand.id).catch(() => []);
+                    setBrandProducts(products);
+                  }}
+                >
+                  <Text style={styles.actionButtonPrimary}>Editar</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.actionButton}
+                  onPress={async () => {
+                    await adminDeleteBrand(brand.id);
+                    setBrands((prev) => prev.filter((b) => b.id !== brand.id));
+                  }}
+                >
+                  <Text style={styles.actionButtonDanger}>Eliminar</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+
+          {/* Brand form */}
+          <View style={styles.formCard}>
+            <Text style={styles.formTitle}>{selectedBrandId ? "Editar marca" : "Nueva marca"}</Text>
+            <LabeledInput label="Nombre" value={brandForm.name} onChangeText={(v) => setBrandForm((f) => ({ ...f, name: v }))} placeholder="Ej: La Dolfina" />
+            <LabeledInput label="Slug (URL)" value={brandForm.slug} onChangeText={(v) => setBrandForm((f) => ({ ...f, slug: v }))} placeholder="la-dolfina" autoCapitalize="none" />
+            <LabeledInput label="Descripción" value={brandForm.description} onChangeText={(v) => setBrandForm((f) => ({ ...f, description: v }))} placeholder="Descripción breve" />
+            <LabeledInput label="WhatsApp (con código de país)" value={brandForm.whatsapp} onChangeText={(v) => setBrandForm((f) => ({ ...f, whatsapp: v }))} placeholder="+541112345678" keyboardType="phone-pad" />
+            <LabeledInput label="Teléfono" value={brandForm.phone} onChangeText={(v) => setBrandForm((f) => ({ ...f, phone: v }))} placeholder="+541112345678" keyboardType="phone-pad" />
+            <LabeledInput label="Email" value={brandForm.email} onChangeText={(v) => setBrandForm((f) => ({ ...f, email: v }))} placeholder="contacto@marca.com" keyboardType="email-address" autoCapitalize="none" />
+            <LabeledInput label="Sitio web" value={brandForm.website} onChangeText={(v) => setBrandForm((f) => ({ ...f, website: v }))} placeholder="https://..." autoCapitalize="none" />
+            <LabeledInput label="URL del logo" value={brandForm.logoUrl} onChangeText={(v) => setBrandForm((f) => ({ ...f, logoUrl: v }))} placeholder="https://... o /uploads/..." autoCapitalize="none" />
+            <Pressable
+              style={[styles.primaryAction, { marginTop: 8 }]}
+              onPress={async () => {
+                if (!brandForm.name.trim() || !brandForm.slug.trim()) {
+                  Alert.alert("Error", "Nombre y slug son requeridos.");
+                  return;
+                }
+                const payload = { ...brandForm, isActive: true, sortOrder: 0 };
+                try {
+                  if (selectedBrandId) {
+                    const updated = await adminUpdateBrand(selectedBrandId, payload);
+                    setBrands((prev) => prev.map((b) => b.id === selectedBrandId ? updated : b));
+                  } else {
+                    const created = await adminCreateBrand(payload);
+                    setBrands((prev) => [...prev, created]);
+                  }
+                  setBrandForm({ name: "", slug: "", description: "", whatsapp: "", phone: "", email: "", website: "", logoUrl: "" });
+                  setSelectedBrandId(null);
+                  Alert.alert("Listo", selectedBrandId ? "Marca actualizada." : "Marca creada correctamente.");
+                } catch (err: any) {
+                  Alert.alert("Error", err?.message ?? "No se pudo guardar la marca. Verificá que el backend esté corriendo.");
+                }
+              }}
+            >
+              <Text style={styles.primaryActionText}>{selectedBrandId ? "Guardar cambios" : "Crear marca"}</Text>
+            </Pressable>
+          </View>
+
+          {/* Products of selected brand */}
+          {selectedBrandId && (
+            <View style={{ marginTop: 16 }}>
+              <Text style={[styles.cardTitle, { marginBottom: 8 }]}>Productos de la marca ({brandProducts.length}/20)</Text>
+              {brandProducts.map((bp) => (
+                <View key={bp.id} style={[styles.memberCard, { flexDirection: "row", alignItems: "center", gap: 10 }]}>
+                  {bp.imageUrl ? (
+                    <Image source={resolveContentImageSource(bp.imageUrl)} style={{ width: 44, height: 44, borderRadius: 10 }} resizeMode="cover" />
+                  ) : (
+                    <View style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: colors.surfaceStrong, alignItems: "center", justifyContent: "center" }}>
+                      <Ionicons name="cube-outline" size={20} color={colors.muted} />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.memberName}>{bp.name}</Text>
+                    <Text style={styles.memberMeta}>{bp.priceCents ? `${bp.currency} ${(bp.priceCents / 100).toLocaleString()}` : "Sin precio"}</Text>
+                  </View>
+                  <View style={styles.memberActions}>
+                    <Pressable
+                      style={styles.actionButton}
+                      onPress={() => {
+                        setBpForm({ name: bp.name, description: bp.description, price: bp.priceCents ? String(bp.priceCents / 100) : "", imageUrl: bp.imageUrl ?? "" });
+                        setSelectedBpId(bp.id);
+                      }}
+                    >
+                      <Text style={styles.actionButtonPrimary}>Editar</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.actionButton}
+                      onPress={async () => {
+                        await adminDeleteBrandProduct(selectedBrandId, bp.id);
+                        setBrandProducts((prev) => prev.filter((p) => p.id !== bp.id));
+                      }}
+                    >
+                      <Text style={styles.actionButtonDanger}>Eliminar</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+
+              {brandProducts.length < 20 && (
+                <View style={[styles.formCard, { marginTop: 12 }]}>
+                  <Text style={styles.formTitle}>{selectedBpId ? "Editar producto" : "Nuevo producto"}</Text>
+                  <LabeledInput label="Nombre del producto" value={bpForm.name} onChangeText={(v) => setBpForm((f) => ({ ...f, name: v }))} placeholder="Ej: Casco de polo premium" />
+                  <LabeledInput label="Descripción" value={bpForm.description} onChangeText={(v) => setBpForm((f) => ({ ...f, description: v }))} placeholder="Descripción del producto" />
+                  <LabeledInput label="Precio (opcional)" value={bpForm.price} onChangeText={(v) => setBpForm((f) => ({ ...f, price: v }))} placeholder="0.00" keyboardType="numeric" />
+                  <LabeledInput label="URL de imagen" value={bpForm.imageUrl} onChangeText={(v) => setBpForm((f) => ({ ...f, imageUrl: v }))} placeholder="https://... o /uploads/..." autoCapitalize="none" />
+                  <Pressable
+                    style={[styles.primaryAction, { marginTop: 8 }]}
+                    onPress={async () => {
+                      if (!bpForm.name.trim() || !bpForm.description.trim()) {
+                        Alert.alert("Error", "Nombre y descripción son requeridos.");
+                        return;
+                      }
+                      const payload = { name: bpForm.name.trim(), description: bpForm.description.trim(), price: bpForm.price ? Number(bpForm.price) : undefined, imageUrl: bpForm.imageUrl || undefined };
+                      if (selectedBpId) {
+                        const updated = await adminUpdateBrandProduct(selectedBrandId, selectedBpId, payload).catch(() => null);
+                        if (updated) setBrandProducts((prev) => prev.map((p) => p.id === selectedBpId ? updated : p));
+                      } else {
+                        const created = await adminCreateBrandProduct(selectedBrandId, payload).catch(() => null);
+                        if (created) setBrandProducts((prev) => [...prev, created]);
+                      }
+                      setBpForm({ name: "", description: "", price: "", imageUrl: "" });
+                      setSelectedBpId(null);
+                    }}
+                  >
+                    <Text style={styles.primaryActionText}>{selectedBpId ? "Guardar producto" : "Agregar producto"}</Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+
       </ScrollView>
     </Screen>
   );
@@ -1057,5 +1254,33 @@ const createStyles = (colors: AppColors) =>
     actionButtonPrimary: {
       color: colors.primary,
       fontWeight: "900"
+    },
+    primaryAction: {
+      minHeight: 46,
+      borderRadius: 14,
+      backgroundColor: colors.primary,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 16
+    },
+    primaryActionText: {
+      color: "#fff",
+      fontWeight: "900",
+      fontSize: 15
+    },
+    formCard: {
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: "#d8e5f1",
+      backgroundColor: "#f7fbff",
+      padding: 14,
+      gap: 8,
+      marginTop: 12
+    },
+    formTitle: {
+      color: colors.text,
+      fontSize: 15,
+      fontWeight: "900",
+      marginBottom: 4
     }
   });

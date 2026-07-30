@@ -112,9 +112,9 @@ export default function HomeScreen() {
   const compactAds = homeContent.compactAds.length > 0 ? homeContent.compactAds.map((uri) => resolveContentImageSource(uri)) : fallbackCompactAds;
 
   const quickAccessItems = [
-    { key: "calendar", label: t("home.calendar"), icon: "calendar-outline", route: "/(tabs)/tournaments" },
-    { key: "community", label: t("home.communities"), icon: "people-outline", route: "/(tabs)/community" },
-    { key: "broadcast", label: t("home.broadcast"), icon: "play-circle-outline", route: "/broadcast" },
+    { key: "calendar", label: t("home.calendar"), icon: "calendar-outline" },
+    { key: "community", label: t("home.communities"), icon: "people-outline" },
+    { key: "broadcast", label: t("home.broadcast"), icon: "play-circle-outline" },
     { key: "auctions", label: t("home.auctions"), icon: "cash-outline" }
   ] as const;
 
@@ -458,14 +458,21 @@ export default function HomeScreen() {
             ]}
             onPress={() => handleQuickAccessPress(key)}
           >
-            <View>
-              <Ionicons
-                name={icon as keyof typeof Ionicons.glyphMap}
-                size={23}
-                color={colors.primary}
-              />
+            <View style={styles.quickGoldBar} />
+            <View style={styles.quickRow}>
+              <View style={[
+                styles.quickIconWrap,
+                colors.background !== "#ffffff" && styles.quickIconWrapDark
+              ]}>
+                <Ionicons
+                  name={icon as keyof typeof Ionicons.glyphMap}
+                  size={30}
+                  color={colors.background !== "#ffffff" ? "#0a3d7a" : "#E8C97A"}
+                />
+              </View>
+              <Text style={styles.quickText}>{label}</Text>
             </View>
-            <Text style={styles.quickText}>{label}</Text>
+            <View style={styles.quickGoldDot} />
           </Pressable>
         ))}
       </View>
@@ -615,18 +622,72 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderRadius: 18,
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "rgba(232, 201, 122, 0.30)",
     padding: 14,
-    justifyContent: "space-between"
+    justifyContent: "center",
+    overflow: "hidden",
+    shadowColor: "#C9A84C",
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4
   },
   quickItemPressed: {
     backgroundColor: colors.surfaceStrong,
-    opacity: 0.8
+    opacity: 0.88
+  },
+  quickGoldBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: 3,
+    height: "100%",
+    backgroundColor: "#E8C97A",
+    borderTopLeftRadius: 18,
+    borderBottomLeftRadius: 18
+  },
+  quickRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12
+  },
+  quickIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: colors.primaryDark,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(232, 201, 122, 0.35)",
+    shadowColor: "#E8C97A",
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 }
+  },
+  quickIconWrapDark: {
+    backgroundColor: "#E8C97A",
+    borderColor: "rgba(232, 201, 122, 0.6)",
+    shadowColor: "#C9A84C",
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 }
   },
   quickText: {
     color: colors.text,
     fontSize: 15,
-    fontWeight: "700"
+    fontWeight: "800",
+    flex: 1
+  },
+  quickGoldDot: {
+    position: "absolute",
+    bottom: 10,
+    right: 12,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#E8C97A",
+    opacity: 0.7
   },
   cardTitle: {
     color: colors.text,

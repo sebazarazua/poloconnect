@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { diskStorage } from "multer";
@@ -6,6 +6,8 @@ import { extname } from "path";
 import { CurrentUser, RequestUser } from "../common/decorators/current-user.decorator";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CsrfGuard } from "../common/guards/csrf.guard";
+import { BrandsService } from "../brands/brands.service";
+import { UpsertBrandDto, UpsertBrandProductDto } from "../brands/dto/brands.dto";
 import { AdminService } from "./admin.service";
 import { AdminContentQueryDto, UpsertAdminContentDto } from "./dto/admin-content.dto";
 import { AdminCommunityBanDto, AdminCommunityMembershipDto } from "./dto/admin-community.dto";
@@ -14,7 +16,7 @@ import { UpsertMatchDto, UpsertMatchStatDto, UpsertTournamentDto } from "./dto/a
 @Roles("admin", "superadmin")
 @Controller("admin")
 export class AdminController {
-  constructor(private readonly admin: AdminService, private readonly config: ConfigService) {}
+  constructor(private readonly admin: AdminService, private readonly config: ConfigService, private readonly brandsService: BrandsService) {}
 
   private static storageName(_req: any, file: any, callback: (error: Error | null, filename: string) => void) {
     const safeExt = extname(file.originalname || "").replace(/[^a-zA-Z0-9.]/g, "") || ".bin";
@@ -134,5 +136,65 @@ export class AdminController {
   @Put("sports/matches/:matchId/stats")
   upsertMatchStat(@CurrentUser() user: RequestUser, @Param("matchId") matchId: string, @Body() dto: UpsertMatchStatDto) {
     return this.admin.upsertMatchStat(user, matchId, dto);
+  }
+
+  // Brands
+  @Get("brands")
+  listBrands() {
+    return this.brandsService.adminListBrands();
+  }
+
+  @Post("brands")
+  createBrand(@Body() dto: UpsertBrandDto) {
+    return this.brandsService.adminCreateBrand(dto);
+  }
+
+  @Put("brands/:id")
+  updateBrand(@Param("id") id: string, @Body() dto: UpsertBrandDto) {
+    return this.brandsService.adminUpdateBrand(id, dto);
+  }
+
+  @Delete("brands/:id")
+  deleteBrand(@Param("id") id: string) {
+    return this.brandsService.adminDeleteBrand(id);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Post("brands/upload")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({ destination: "uploads", filename: AdminController.storageName }),
+      fileFilter: (_req, file, cb) => {
+        if (!String(file.mimetype).startsWith("image/")) { cb(new BadRequestException("Only images allowed."), false); return; }
+        cb(null, true);
+      },
+      limits: { fileSize: 8 * 1024 * 1024 }
+    })
+  )
+  uploadBrandImage(@UploadedFile() file: any) {
+    if (!file) throw new BadRequestException("Image file is required.");
+    const baseUrl = this.config.get<string>("PUBLIC_BASE_URL")?.trim();
+    const path = `/uploads/${file.filename}`;
+    return { url: baseUrl ? `${baseUrl.replace(/\/$/, "")}${path}` : path };
+  }
+
+  @Get("brands/:brandId/products")
+  listBrandProducts(@Param("brandId") brandId: string) {
+    return this.brandsService.adminListBrandProducts(brandId);
+  }
+
+  @Post("brands/:brandId/products")
+  createBrandProduct(@Param("brandId") brandId: string, @Body() dto: UpsertBrandProductDto) {
+    return this.brandsService.adminCreateBrandProduct(brandId, dto);
+  }
+
+  @Put("brands/:brandId/products/:productId")
+  updateBrandProduct(@Param("brandId") brandId: string, @Param("productId") productId: string, @Body() dto: UpsertBrandProductDto) {
+    return this.brandsService.adminUpdateBrandProduct(brandId, productId, dto);
+  }
+
+  @Delete("brands/:brandId/products/:productId")
+  deleteBrandProduct(@Param("brandId") brandId: string, @Param("productId") productId: string) {
+    return this.brandsService.adminDeleteBrandProduct(brandId, productId);
   }
 }

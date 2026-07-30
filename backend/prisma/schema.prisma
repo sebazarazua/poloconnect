@@ -659,3 +659,43 @@ model CommunityModerationAction {
   @@index([targetUserId, createdAt])
   @@index([action, createdAt])
 }
+
+model Brand {
+  id          String         @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String         @unique
+  logoUrl     String?
+  description String?
+  whatsapp    String?
+  phone       String?
+  email       String?
+  website     String?
+  isActive    Boolean        @default(true)
+  sortOrder   Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  deletedAt   DateTime?
+  products    BrandProduct[]
+
+  @@index([isActive, sortOrder])
+  @@index([deletedAt])
+}
+
+model BrandProduct {
+  id          String   @id @default(uuid()) @db.Uuid
+  brandId     String   @db.Uuid
+  name        String
+  description String
+  priceCents  Int?
+  currency    String   @default("USD")
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  brand       Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@index([brandId, isActive])
+  @@index([deletedAt])
+}

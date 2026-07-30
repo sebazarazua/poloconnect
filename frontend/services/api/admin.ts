@@ -32,6 +32,40 @@ export type CommunityBan = {
   };
 };
 
+export type AdminTournament = {
+  id: string;
+  name: string;
+  slug: string;
+  clubId?: string | null;
+  startDate: string;
+  endDate?: string | null;
+  levelLabel?: string | null;
+  minHandicap?: number | null;
+  maxHandicap?: number | null;
+  maxTeams?: number | null;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  registrationStatus?: string;
+  status?: string;
+  createdAt: string;
+};
+
+export type UpsertAdminTournamentPayload = {
+  name: string;
+  slug: string;
+  clubId?: string;
+  startDate: string;
+  endDate?: string;
+  levelLabel?: string;
+  minHandicap?: number;
+  maxHandicap?: number;
+  maxTeams?: number;
+  contactName?: string;
+  contactPhone?: string;
+  registrationStatus?: string;
+  status?: string;
+};
+
 export async function getAdminDashboard() {
   return apiRequest<{ counters: Record<string, number>; recentActivity: Array<{ id: string; action: string; createdAt: string }> }>("/admin/dashboard");
 }
@@ -107,5 +141,16 @@ export async function addCommunityMember(roomId: string, userId: string, reason?
   return apiRequest<{ ok: boolean }>(`/admin/community/rooms/${encodeURIComponent(roomId)}/members/${encodeURIComponent(userId)}/add`, {
     method: "POST",
     body: JSON.stringify({ reason })
+  });
+}
+
+export async function listAdminTournaments() {
+  return apiRequest<AdminTournament[]>("/admin/sports/tournaments");
+}
+
+export async function createAdminTournament(payload: UpsertAdminTournamentPayload) {
+  return apiRequest<AdminTournament>("/admin/sports/tournaments", {
+    method: "POST",
+    body: JSON.stringify(payload)
   });
 }

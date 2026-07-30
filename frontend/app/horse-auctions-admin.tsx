@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,6 +23,7 @@ import {
   deleteHorseAuctionEvent,
   deleteHorseAuctionHorse,
   listHorseAuctionsAdmin,
+  normalizeAuctionImageUrlForStorage,
   resolveAuctionImageUrl,
   type HorseAuctionAdminEvent,
   updateHorseAuctionEvent,
@@ -42,12 +44,37 @@ function dateToInput(value: string) {
   return new Date(value).toISOString().slice(0, 16);
 }
 
+function PreviewImage({ uri, width, height, borderRadius }: { uri: string; width: number; height: number; borderRadius: number }) {
+  if (Platform.OS === "web") {
+    return (
+      <img
+        src={uri}
+        alt="Preview"
+        style={{
+          width,
+          height,
+          borderRadius,
+          objectFit: "contain",
+          display: "block",
+          background: "transparent"
+        }}
+      />
+    );
+  }
+
+  return <Image source={{ uri }} style={{ width, height, borderRadius }} resizeMode="contain" />;
+}
+
 export default function HorseAuctionsAdminScreen() {
   const colors = useThemeColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { t } = useLocale();
   const router = useRouter();
+
+  if (Platform.OS !== "web") {
+    return <Redirect href={isAuthenticated ? "/horse-auctions" : "/login"} />;
+  }
 
   const [items, setItems] = useState<HorseAuctionAdminEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,12 +83,8 @@ export default function HorseAuctionsAdminScreen() {
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [imageUrl, setImageUrl] = useState("");
-  const [organizer, setOrganizer] = useState("");
-  const [venue, setVenue] = useState("");
-  const [city, setCity] = useState("");
-  const [country, setCountry] = useState("Argentina");
+  const [address, setAddress] = useState("");
   const [eventDate, setEventDate] = useState("");
-  const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
@@ -70,18 +93,42 @@ export default function HorseAuctionsAdminScreen() {
 
   const [horseName, setHorseName] = useState("");
   const [horseImageUrl, setHorseImageUrl] = useState("");
-  const [lotNumber, setLotNumber] = useState("");
   const [ownerName, setOwnerName] = useState("");
-  const [reservePrice, setReservePrice] = useState("");
+  const [damName, setDamName] = useState("");
+  const [sireName, setSireName] = useState("");
   const [horseBreed, setHorseBreed] = useState("");
   const [horseAgeYears, setHorseAgeYears] = useState("");
-  const [horsePhone, setHorsePhone] = useState("");
-  const [horseEmail, setHorseEmail] = useState("");
   const [savingHorse, setSavingHorse] = useState(false);
 
   const isAdmin = (user?.roles ?? []).some((role) => role === "admin" || role === "superadmin");
 
   const selectedEvent = useMemo(() => items.find((item) => item.id === selectedEventId) ?? null, [items, selectedEventId]);
+
+  const persistEventImageIfEditing = async (nextImageUrl: string) => {
+    if (!selectedEventId) return;
+    const parsedDate = new Date(eventDate);
+    if (Number.isNaN(parsedDate.getTime())) {
+      Alert.alert(t("profile.errorTitle"), t("auctions.loadError"));
+      return;
+    }
+
+    await updateHorseAuctionEvent(selectedEventId, {
+      slug: (slug.trim() || toSlug(title)).slice(0, 120),
+      title: title.trim(),
+      imageUrl: nextImageUrl,
+      organizer: title.trim(),
+      venue: address.trim(),
+      city: address.trim(),
+      country: "",
+      eventDate: parsedDate.toISOString(),
+      contactName: title.trim(),
+      contactPhone: contactPhone.trim() || null,
+      contactEmail: contactEmail.trim() || null,
+      websiteUrl: websiteUrl.trim() || null,
+      notes: notes.trim() || null
+    });
+    await load();
+  };
 
   const load = async () => {
     setLoading(true);
@@ -99,19 +146,15 @@ export default function HorseAuctionsAdminScreen() {
   useEffect(() => {
     if (!isAdmin) return;
     void load();
-  }, [isAdmin]);
+  }, [isAdmin, router]);
 
   useEffect(() => {
     if (!selectedEvent) {
       setTitle("");
       setSlug("");
       setImageUrl("");
-      setOrganizer("");
-      setVenue("");
-      setCity("");
-      setCountry("Argentina");
+      setAddress("");
       setEventDate(new Date().toISOString().slice(0, 16));
-      setContactName("");
       setContactPhone("");
       setContactEmail("");
       setWebsiteUrl("");
@@ -122,12 +165,8 @@ export default function HorseAuctionsAdminScreen() {
     setTitle(selectedEvent.title);
     setSlug(selectedEvent.slug);
     setImageUrl(selectedEvent.imageUrl ?? "");
-    setOrganizer(selectedEvent.organizer);
-    setVenue(selectedEvent.venue);
-    setCity(selectedEvent.city);
-    setCountry(selectedEvent.country ?? "Argentina");
+    setAddress(selectedEvent.venue);
     setEventDate(dateToInput(selectedEvent.eventDate));
-    setContactName(selectedEvent.contactName);
     setContactPhone(selectedEvent.contactPhone ?? "");
     setContactEmail(selectedEvent.contactEmail ?? "");
     setWebsiteUrl(selectedEvent.websiteUrl ?? "");
@@ -135,6 +174,29 @@ export default function HorseAuctionsAdminScreen() {
   }, [selectedEvent]);
 
   const pickEventImage = async () => {
+    if (Platform.OS === "web") {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.onchange = async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        try {
+          const uploaded = await uploadHorseAuctionEventImage(file);
+          const nextImageUrl = normalizeAuctionImageUrlForStorage(uploaded.url) ?? "";
+          setImageUrl(nextImageUrl);
+          if (selectedEventId) {
+            await persistEventImageIfEditing(nextImageUrl);
+            Alert.alert(t("common.done"), t("auctions.adminEventSaved"));
+          }
+        } catch (error) {
+          Alert.alert(t("profile.errorTitle"), error instanceof Error ? error.message : t("auctions.loadError"));
+        }
+      };
+      input.click();
+      return;
+    }
+
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert(t("profile.photoPermissionTitle"), t("profile.galleryPermissionText"));
@@ -154,10 +216,37 @@ export default function HorseAuctionsAdminScreen() {
       fileName: asset.fileName,
       mimeType: asset.mimeType
     });
-    setImageUrl(uploaded.url);
+    const nextImageUrl = normalizeAuctionImageUrlForStorage(uploaded.url) ?? "";
+    setImageUrl(nextImageUrl);
+    if (selectedEventId) {
+      try {
+        await persistEventImageIfEditing(nextImageUrl);
+        Alert.alert(t("common.done"), t("auctions.adminEventSaved"));
+      } catch (error) {
+        Alert.alert(t("profile.errorTitle"), error instanceof Error ? error.message : t("auctions.loadError"));
+      }
+    }
   };
 
   const pickHorseImage = async () => {
+    if (Platform.OS === "web") {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.onchange = async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        try {
+          const uploaded = await uploadHorseAuctionHorseImage(file);
+          setHorseImageUrl(normalizeAuctionImageUrlForStorage(uploaded.url) ?? "");
+        } catch (error) {
+          Alert.alert(t("profile.errorTitle"), error instanceof Error ? error.message : t("auctions.loadError"));
+        }
+      };
+      input.click();
+      return;
+    }
+
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert(t("profile.photoPermissionTitle"), t("profile.galleryPermissionText"));
@@ -177,11 +266,11 @@ export default function HorseAuctionsAdminScreen() {
       fileName: asset.fileName,
       mimeType: asset.mimeType
     });
-    setHorseImageUrl(uploaded.url);
+    setHorseImageUrl(normalizeAuctionImageUrlForStorage(uploaded.url) ?? "");
   };
 
   const saveEvent = async () => {
-    if (!title.trim() || !organizer.trim() || !venue.trim() || !city.trim() || !contactName.trim()) {
+    if (!title.trim() || !address.trim()) {
       Alert.alert(t("profile.errorTitle"), t("auctions.adminRequired"));
       return;
     }
@@ -192,12 +281,12 @@ export default function HorseAuctionsAdminScreen() {
         slug: (slug.trim() || toSlug(title)).slice(0, 120),
         title: title.trim(),
         imageUrl: imageUrl.trim() || null,
-        organizer: organizer.trim(),
-        venue: venue.trim(),
-        city: city.trim(),
-        country: country.trim() || "Argentina",
+        organizer: title.trim(),
+        venue: address.trim(),
+        city: address.trim(),
+        country: "",
         eventDate: new Date(eventDate).toISOString(),
-        contactName: contactName.trim(),
+        contactName: title.trim(),
         contactPhone: contactPhone.trim() || null,
         contactEmail: contactEmail.trim() || null,
         websiteUrl: websiteUrl.trim() || null,
@@ -242,41 +331,35 @@ export default function HorseAuctionsAdminScreen() {
       return;
     }
 
-    if (!horseName.trim() || !ownerName.trim() || !reservePrice.trim()) {
+    if (!horseName.trim() || !ownerName.trim()) {
       Alert.alert(t("profile.errorTitle"), t("auctions.adminHorseRequired"));
-      return;
-    }
-
-    const reserve = Math.round(Number(reservePrice) * 100);
-    if (!Number.isFinite(reserve) || reserve <= 0) {
-      Alert.alert(t("profile.errorTitle"), t("auctions.adminPriceInvalid"));
       return;
     }
 
     setSavingHorse(true);
     try {
       await createHorseAuctionHorse(selectedEventId, {
-        lotNumber: lotNumber.trim() ? Number(lotNumber) : null,
+        lotNumber: null,
         horseName: horseName.trim(),
         imageUrl: horseImageUrl.trim() || null,
         ownerName: ownerName.trim(),
-        reservePriceCents: reserve,
+        damName: damName.trim() || null,
+        sireName: sireName.trim() || null,
+        reservePriceCents: 1,
         breed: horseBreed.trim() || null,
         ageYears: horseAgeYears.trim() ? Number(horseAgeYears) : null,
-        contactPhone: horsePhone.trim() || null,
-        contactEmail: horseEmail.trim() || null,
+        contactPhone: null,
+        contactEmail: null,
         currency: "USD"
       });
 
       setHorseName("");
       setHorseImageUrl("");
-      setLotNumber("");
       setOwnerName("");
-      setReservePrice("");
+      setDamName("");
+      setSireName("");
       setHorseBreed("");
       setHorseAgeYears("");
-      setHorsePhone("");
-      setHorseEmail("");
       await load();
       Alert.alert(t("common.done"), t("auctions.adminHorseSaved"));
     } catch (error) {
@@ -287,6 +370,10 @@ export default function HorseAuctionsAdminScreen() {
   };
 
   if (!isAdmin) {
+    if (!isAuthenticated) {
+      return <Redirect href="/admin-login" />;
+    }
+
     return (
       <Screen
         eyebrow={t("auctions.eyebrow")}
@@ -330,7 +417,12 @@ export default function HorseAuctionsAdminScreen() {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{t("auctions.adminEventSection")}</Text>
-          {imageUrl ? <Image source={{ uri: resolveAuctionImageUrl(imageUrl) }} style={styles.heroImage} resizeMode="cover" /> : null}
+          <Text style={styles.scopeNote}>{t("auctions.adminScopeNote")}</Text>
+          {imageUrl ? (
+            <View style={styles.previewWrap}>
+              <PreviewImage uri={resolveAuctionImageUrl(imageUrl) ?? imageUrl} width={220} height={120} borderRadius={12} />
+            </View>
+          ) : null}
 
           <Pressable style={styles.lightButton} onPress={() => void pickEventImage()}>
             <Ionicons name="images-outline" size={16} color={colors.primaryDark} />
@@ -341,13 +433,8 @@ export default function HorseAuctionsAdminScreen() {
             setTitle(value);
             if (!selectedEventId) setSlug(toSlug(value));
           }} />
-          <LabeledInput label="Slug" value={slug} onChangeText={setSlug} autoCapitalize="none" />
-          <LabeledInput label={t("auctions.organizer")} value={organizer} onChangeText={setOrganizer} />
-          <LabeledInput label={t("auctions.venue")} value={venue} onChangeText={setVenue} />
-          <LabeledInput label={t("auctions.city")} value={city} onChangeText={setCity} />
-          <LabeledInput label={t("auctions.country")} value={country} onChangeText={setCountry} />
+          <LabeledInput label="Dirección" value={address} onChangeText={setAddress} />
           <LabeledInput label={t("auctions.dateTime")} value={eventDate} onChangeText={setEventDate} placeholder="2026-11-04T18:00" />
-          <LabeledInput label={t("auctions.contactSection")} value={contactName} onChangeText={setContactName} />
           <LabeledInput label={t("common.phone")} value={contactPhone} onChangeText={setContactPhone} />
           <LabeledInput label={t("common.email")} value={contactEmail} onChangeText={setContactEmail} autoCapitalize="none" />
           <LabeledInput label={t("auctions.viewWebsite")} value={websiteUrl} onChangeText={setWebsiteUrl} autoCapitalize="none" />
@@ -369,7 +456,11 @@ export default function HorseAuctionsAdminScreen() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>{t("auctions.adminHorseSection")}</Text>
 
-            {horseImageUrl ? <Image source={{ uri: resolveAuctionImageUrl(horseImageUrl) }} style={styles.horseImage} resizeMode="cover" /> : null}
+            {horseImageUrl ? (
+              <View style={styles.previewWrap}>
+                <PreviewImage uri={resolveAuctionImageUrl(horseImageUrl) ?? horseImageUrl} width={160} height={96} borderRadius={12} />
+              </View>
+            ) : null}
 
             <Pressable style={styles.lightButton} onPress={() => void pickHorseImage()}>
               <Ionicons name="image-outline" size={16} color={colors.primaryDark} />
@@ -378,12 +469,10 @@ export default function HorseAuctionsAdminScreen() {
 
             <LabeledInput label={t("auctions.horseName")} value={horseName} onChangeText={setHorseName} />
             <LabeledInput label={t("auctions.owner")} value={ownerName} onChangeText={setOwnerName} />
-            <LabeledInput label={t("auctions.lot")} value={lotNumber} onChangeText={setLotNumber} keyboardType="numeric" />
-            <LabeledInput label={t("auctions.reservePriceUsd")} value={reservePrice} onChangeText={setReservePrice} keyboardType="numeric" placeholder="45000" />
+            <LabeledInput label={t("auctions.dam")} value={damName} onChangeText={setDamName} />
+            <LabeledInput label={t("auctions.sire")} value={sireName} onChangeText={setSireName} />
             <LabeledInput label={t("auctions.breed")} value={horseBreed} onChangeText={setHorseBreed} />
             <LabeledInput label={t("auctions.age")} value={horseAgeYears} onChangeText={setHorseAgeYears} keyboardType="numeric" />
-            <LabeledInput label={t("common.phone")} value={horsePhone} onChangeText={setHorsePhone} />
-            <LabeledInput label={t("common.email")} value={horseEmail} onChangeText={setHorseEmail} autoCapitalize="none" />
 
             <Pressable style={styles.primaryButton} onPress={() => void saveHorse()} disabled={savingHorse}>
               <Text style={styles.primaryButtonText}>{savingHorse ? t("common.saving") : t("auctions.adminAddHorse")}</Text>
@@ -394,6 +483,8 @@ export default function HorseAuctionsAdminScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.horseRowTitle}>{horse.horseName}</Text>
                   <Text style={styles.subtleText}>{horse.ownerName}</Text>
+                  {horse.damName ? <Text style={styles.horseMetaText}>{t("auctions.dam")}: {horse.damName}</Text> : null}
+                  {horse.sireName ? <Text style={styles.horseMetaText}>{t("auctions.sire")}: {horse.sireName}</Text> : null}
                 </View>
                 <Pressable
                   onPress={async () => {
@@ -475,15 +566,30 @@ const createStyles = (colors: AppColors) =>
       fontWeight: "900",
       marginBottom: 10
     },
+    scopeNote: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 17,
+      marginBottom: 10
+    },
     heroImage: {
-      width: "100%",
-      height: 170,
+      width: 220,
+      height: 120,
       borderRadius: 12,
       marginBottom: 10
     },
+    previewWrap: {
+      alignSelf: "flex-start",
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.background,
+      padding: 6,
+      marginBottom: 10
+    },
     horseImage: {
-      width: "100%",
-      height: 140,
+      width: 160,
+      height: 96,
       borderRadius: 12,
       marginBottom: 10
     },
@@ -572,5 +678,9 @@ const createStyles = (colors: AppColors) =>
       color: colors.text,
       fontWeight: "800",
       fontSize: 14
+    },
+    horseMetaText: {
+      color: colors.muted,
+      fontSize: 12
     }
   });

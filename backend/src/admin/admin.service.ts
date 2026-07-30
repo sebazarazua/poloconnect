@@ -217,12 +217,17 @@ export class AdminService {
       data: {
         name: dto.name,
         slug: dto.slug,
+        clubId: dto.clubId,
         startDate: new Date(dto.startDate),
         endDate: dto.endDate ? new Date(dto.endDate) : null,
         levelLabel: dto.levelLabel,
         minHandicap: dto.minHandicap,
         maxHandicap: dto.maxHandicap,
         maxTeams: dto.maxTeams,
+        contactName: dto.contactName,
+        contactPhone: dto.contactPhone,
+        registrationStatus: dto.registrationStatus,
+        status: dto.status,
         createdBy: user.id
       }
     });

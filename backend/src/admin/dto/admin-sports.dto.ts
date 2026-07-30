@@ -11,12 +11,17 @@ export enum AdminMatchStatus {
 export class UpsertTournamentDto {
   @IsString() @MaxLength(140) name!: string;
   @IsString() @MaxLength(140) slug!: string;
+  @IsOptional() @IsString() clubId?: string;
   @IsDateString() startDate!: string;
   @IsOptional() @IsDateString() endDate?: string;
   @IsOptional() @IsString() levelLabel?: string;
   @Type(() => Number) @IsOptional() minHandicap?: number;
   @Type(() => Number) @IsOptional() maxHandicap?: number;
   @Type(() => Number) @IsOptional() @IsInt() @Min(2) maxTeams?: number;
+  @IsOptional() @IsString() @MaxLength(120) contactName?: string;
+  @IsOptional() @IsString() @MaxLength(60) contactPhone?: string;
+  @IsOptional() @IsString() @MaxLength(40) registrationStatus?: string;
+  @IsOptional() @IsString() @MaxLength(40) status?: string;
 }
 
 export class UpsertMatchDto {

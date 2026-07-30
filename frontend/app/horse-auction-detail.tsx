@@ -8,14 +8,6 @@ import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
 import { HorseAuctionDetail, getHorseAuction, resolveAuctionImageUrl } from "@/services/api/horse-auctions";
 
-function formatMoney(currency: string, cents: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0
-  }).format(cents / 100);
-}
-
 export default function HorseAuctionDetailScreen() {
   const colors = useThemeColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -64,36 +56,44 @@ export default function HorseAuctionDetailScreen() {
 
       {event ? (
         <>
-          {event.imageUrl ? (
-            <Image source={{ uri: resolveAuctionImageUrl(event.imageUrl) }} style={styles.heroImage} resizeMode="cover" />
-          ) : null}
-
           <Card>
-            <Text style={styles.sectionTitle}>{t("auctions.contactSection")}</Text>
-            <Text style={styles.meta}>{`${event.organizer} - ${event.city}, ${event.country}`}</Text>
-            <Text style={styles.meta}>{`${event.contactName}`}</Text>
+            <View style={styles.eventHeaderRow}>
+              {event.imageUrl ? (
+                <Image source={{ uri: resolveAuctionImageUrl(event.imageUrl) }} style={styles.heroImage} resizeMode="cover" />
+              ) : (
+                <View style={styles.eventImagePlaceholder}>
+                  <Ionicons name="image-outline" size={22} color={colors.muted} />
+                </View>
+              )}
 
-            <View style={styles.linkRow}>
-              {event.contactPhone ? (
-                <Pressable style={styles.linkButton} onPress={() => Linking.openURL(`tel:${event.contactPhone}`)}>
-                  <Ionicons name="call-outline" size={15} color={colors.primary} />
-                  <Text style={styles.linkText}>{event.contactPhone}</Text>
-                </Pressable>
-              ) : null}
+              <View style={styles.eventInfoCol}>
+                <Text style={styles.sectionTitle}>{t("auctions.contactSection")}</Text>
+                <Text style={styles.meta}>{event.venue}</Text>
+                <Text style={styles.meta}>{eventDateLabel}</Text>
 
-              {event.contactEmail ? (
-                <Pressable style={styles.linkButton} onPress={() => Linking.openURL(`mailto:${event.contactEmail}`)}>
-                  <Ionicons name="mail-outline" size={15} color={colors.primary} />
-                  <Text style={styles.linkText}>{event.contactEmail}</Text>
-                </Pressable>
-              ) : null}
+                <View style={styles.linkRow}>
+                  {event.contactPhone ? (
+                    <Pressable style={styles.linkButton} onPress={() => Linking.openURL(`tel:${event.contactPhone}`)}>
+                      <Ionicons name="call-outline" size={15} color={colors.primary} />
+                      <Text style={styles.linkText}>{event.contactPhone}</Text>
+                    </Pressable>
+                  ) : null}
+
+                  {event.contactEmail ? (
+                    <Pressable style={styles.linkButton} onPress={() => Linking.openURL(`mailto:${event.contactEmail}`)}>
+                      <Ionicons name="mail-outline" size={15} color={colors.primary} />
+                      <Text style={styles.linkText}>{event.contactEmail}</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                {event.websiteUrl ? (
+                  <Pressable style={styles.webButton} onPress={() => Linking.openURL(event.websiteUrl!)}>
+                    <Text style={styles.webText}>{t("auctions.viewWebsite")}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
-
-            {event.websiteUrl ? (
-              <Pressable style={styles.webButton} onPress={() => Linking.openURL(event.websiteUrl!)}>
-                <Text style={styles.webText}>{t("auctions.viewWebsite")}</Text>
-              </Pressable>
-            ) : null}
 
             {event.notes ? <Text style={styles.notes}>{event.notes}</Text> : null}
           </Card>
@@ -102,35 +102,27 @@ export default function HorseAuctionDetailScreen() {
           <ScrollView showsVerticalScrollIndicator={false}>
             {event.horses.map((horse) => (
               <View key={horse.id} style={styles.horseCard}>
-                {horse.imageUrl ? <Image source={{ uri: resolveAuctionImageUrl(horse.imageUrl) }} style={styles.horseImage} resizeMode="cover" /> : null}
+                <View style={styles.horseRowTop}>
+                  {horse.imageUrl ? (
+                    <Image source={{ uri: resolveAuctionImageUrl(horse.imageUrl) }} style={styles.horseImage} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.horseImage, styles.horseImagePlaceholder]}>
+                      <Ionicons name="image-outline" size={18} color={colors.muted} />
+                    </View>
+                  )}
 
-                <View style={styles.horseTop}>
-                  <Text style={styles.horseTitle}>
-                    {horse.lotNumber ? `#${horse.lotNumber} - ` : ""}
-                    {horse.horseName}
-                  </Text>
-                  <Text style={styles.price}>{formatMoney(horse.currency, horse.reservePriceCents)}</Text>
-                </View>
-
-                <Text style={styles.horseMeta}>{t("auctions.owner")}: {horse.ownerName}</Text>
-                <Text style={styles.horseMeta}>{t("auctions.breed")}: {horse.breed ?? t("auctions.notSpecified")}</Text>
-                <Text style={styles.horseMeta}>
-                  {t("auctions.age")}: {horse.ageYears ? `${horse.ageYears}` : t("auctions.notSpecified")}
-                </Text>
-
-                <View style={styles.contactRow}>
-                  {horse.contactPhone ? (
-                    <Pressable style={styles.inlinePill} onPress={() => Linking.openURL(`tel:${horse.contactPhone}`)}>
-                      <Ionicons name="call-outline" size={14} color={colors.primaryDark} />
-                      <Text style={styles.inlinePillText}>{horse.contactPhone}</Text>
-                    </Pressable>
-                  ) : null}
-                  {horse.contactEmail ? (
-                    <Pressable style={styles.inlinePill} onPress={() => Linking.openURL(`mailto:${horse.contactEmail}`)}>
-                      <Ionicons name="mail-outline" size={14} color={colors.primaryDark} />
-                      <Text style={styles.inlinePillText}>{horse.contactEmail}</Text>
-                    </Pressable>
-                  ) : null}
+                  <View style={styles.horseInfoCol}>
+                    <Text style={styles.horseTitle}>
+                      {horse.horseName}
+                    </Text>
+                    <Text style={styles.horseMeta}>{t("auctions.owner")}: {horse.ownerName}</Text>
+                    <Text style={styles.horseMeta}>{t("auctions.breed")}: {horse.breed ?? t("auctions.notSpecified")}</Text>
+                    <Text style={styles.horseMeta}>
+                      {t("auctions.age")}: {horse.ageYears ? `${horse.ageYears}` : t("auctions.notSpecified")}
+                    </Text>
+                    <Text style={styles.horseMeta}>{t("auctions.dam")}: {horse.damName ?? t("auctions.notSpecified")}</Text>
+                    <Text style={styles.horseMeta}>{t("auctions.sire")}: {horse.sireName ?? t("auctions.notSpecified")}</Text>
+                  </View>
                 </View>
               </View>
             ))}
@@ -143,11 +135,30 @@ export default function HorseAuctionDetailScreen() {
 
 const createStyles = (colors: AppColors) =>
   StyleSheet.create({
+    eventHeaderRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 12
+    },
     heroImage: {
-      width: "100%",
-      height: 220,
+      width: 120,
+      height: 120,
       borderRadius: 18,
-      marginBottom: 12
+      backgroundColor: colors.surfaceStrong
+    },
+    eventImagePlaceholder: {
+      width: 120,
+      height: 120,
+      borderRadius: 18,
+      backgroundColor: colors.surfaceStrong,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: colors.border
+    },
+    eventInfoCol: {
+      flex: 1,
+      minWidth: 0
     },
     infoText: {
       color: colors.muted,
@@ -220,53 +231,37 @@ const createStyles = (colors: AppColors) =>
       padding: 12,
       marginBottom: 10
     },
-    horseImage: {
-      width: "100%",
-      height: 170,
-      borderRadius: 12,
-      marginBottom: 10
-    },
-    horseTop: {
+    horseRowTop: {
       flexDirection: "row",
-      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: 12,
+      marginBottom: 6
+    },
+    horseImage: {
+      width: 86,
+      height: 86,
+      borderRadius: 43,
+      backgroundColor: colors.surfaceStrong
+    },
+    horseImagePlaceholder: {
       alignItems: "center",
-      marginBottom: 8,
-      gap: 8
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: colors.border
+    },
+    horseInfoCol: {
+      flex: 1,
+      gap: 2
     },
     horseTitle: {
       color: colors.text,
       fontSize: 16,
       fontWeight: "900",
-      flex: 1
-    },
-    price: {
-      color: colors.success,
-      fontSize: 15,
-      fontWeight: "900"
+      marginBottom: 2
     },
     horseMeta: {
       color: colors.muted,
       fontSize: 13,
       marginBottom: 3
-    },
-    contactRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      marginTop: 8
-    },
-    inlinePill: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      borderRadius: 999,
-      backgroundColor: colors.primarySoft,
-      paddingHorizontal: 10,
-      paddingVertical: 6
-    },
-    inlinePillText: {
-      color: colors.primaryDark,
-      fontSize: 12,
-      fontWeight: "700"
     }
   });

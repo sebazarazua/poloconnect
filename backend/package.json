@@ -16,6 +16,7 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:seed:live-match": "tsx prisma/seed-live-match.ts",
     "prisma:seed:auctions": "tsx prisma/seed-horse-auctions.ts",
+    "prisma:seed:brands-showcase": "tsx prisma/seed-brands-showcase.ts",
     "test": "jest --passWithNoTests"
   },
   "dependencies": {

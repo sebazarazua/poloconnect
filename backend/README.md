@@ -12,10 +12,13 @@ docker compose up -d
 npm run prisma:migrate -- --name init
 npm run prisma:seed
 npm run prisma:seed:auctions
+npm run prisma:seed:brands-showcase
 npm run start:dev
 ```
 
 Nota: `prisma:seed` no crea remates de caballos. Para que existan eventos/caballos (con imagenes), usar `prisma:seed:auctions`.
+
+`prisma:seed:brands-showcase` es opcional y agrega 5 marcas con 5 productos cada una para visualizar el catalogo de marcas con datos de ejemplo.
 
 API local: `http://localhost:4000/api/v1`
 

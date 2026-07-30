@@ -24,6 +24,8 @@ async function main() {
           horseName: "LD Open Crown",
           imageUrl: "https://images.unsplash.com/photo-1553284965-83fd3e82fa5a?auto=format&fit=crop&w=1200&q=80",
           ownerName: "La Dolfina Stud",
+          damName: "Open Candelaria",
+          sireName: "Crown Prince",
           reservePriceCents: 6500000,
           currency: "USD",
           breed: "Polo Argentino",
@@ -38,6 +40,8 @@ async function main() {
           horseName: "LD Roseta II",
           imageUrl: "https://images.unsplash.com/photo-1593179357196-ea11a2e7c119?auto=format&fit=crop&w=1200&q=80",
           ownerName: "La Dolfina Stud",
+          damName: "Roseta I",
+          sireName: "Escorpión",
           reservePriceCents: 4800000,
           currency: "USD",
           breed: "Polo Argentino",
@@ -52,6 +56,8 @@ async function main() {
           horseName: "LD Eclipse",
           imageUrl: "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1200&q=80",
           ownerName: "La Dolfina Stud",
+          damName: "Luna Criolla",
+          sireName: "Eclipse Star",
           reservePriceCents: 7200000,
           currency: "USD",
           breed: "Thoroughbred x Criollo",
@@ -83,6 +89,8 @@ async function main() {
           horseName: "Pilar Golden Dust",
           imageUrl: "https://images.unsplash.com/photo-1534361960057-19889db9621e?auto=format&fit=crop&w=1200&q=80",
           ownerName: "Estancia San Lucas",
+          damName: "Golden Breeze",
+          sireName: "Dust Rider",
           reservePriceCents: 3900000,
           currency: "USD",
           breed: "Polo Argentino",
@@ -97,6 +105,8 @@ async function main() {
           horseName: "Pilar Falcon",
           imageUrl: "https://images.unsplash.com/photo-1586466200437-6f2f3f9b0ed7?auto=format&fit=crop&w=1200&q=80",
           ownerName: "Haras La Esperanza",
+          damName: "Falcon Lady",
+          sireName: "High Falcon",
           reservePriceCents: 3100000,
           currency: "USD",
           breed: "Thoroughbred",
@@ -111,6 +121,8 @@ async function main() {
           horseName: "Pilar South Wind",
           imageUrl: "https://images.unsplash.com/photo-1472396961693-142e6e269027?auto=format&fit=crop&w=1200&q=80",
           ownerName: "Santa Maria Polo Farm",
+          damName: "South Queen",
+          sireName: "Wind Storm",
           reservePriceCents: 4550000,
           currency: "USD",
           breed: "Polo Argentino",
@@ -175,6 +187,8 @@ async function main() {
         coatColor: horse.coatColor,
         contactPhone: horse.contactPhone,
         contactEmail: horse.contactEmail
+        ,damName: horse.damName
+        ,sireName: horse.sireName
       }))
     });
   }

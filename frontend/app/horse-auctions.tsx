@@ -1,25 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Image, Pressable, ScrollView, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Image, Platform, Pressable, ScrollView, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { Card } from "@/components/Card";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { HorseAuctionEvent, listHorseAuctions, resolveAuctionImageUrl } from "@/services/api/horse-auctions";
-
-function formatMoney(cents?: number | null) {
-  if (!cents || cents <= 0) {
-    return null;
-  }
-
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0
-  }).format(cents / 100);
-}
 
 export default function HorseAuctionsScreen() {
   const colors = useThemeColors();
@@ -60,7 +48,7 @@ export default function HorseAuctionsScreen() {
       showBackButton
       onBackPress={() => router.back()}
     >
-      {user?.roles?.some((role) => role === "admin" || role === "superadmin") ? (
+      {Platform.OS === "web" && user?.roles?.some((role) => role === "admin" || role === "superadmin") ? (
         <Pressable style={styles.manageButton} onPress={() => router.push("/horse-auctions-admin" as never)}>
           <Ionicons name="create-outline" size={14} color={colors.primaryDark} />
           <Text style={styles.manageButtonText}>{t("auctions.manage")}</Text>
@@ -83,7 +71,6 @@ export default function HorseAuctionsScreen() {
         ) : null}
 
         {events.map((event) => {
-          const startingPrice = formatMoney(event.startingPriceCents);
           const eventDate = new Date(event.eventDate).toLocaleDateString(locale, {
             day: "2-digit",
             month: "long",
@@ -101,34 +88,36 @@ export default function HorseAuctionsScreen() {
                 })
               }
             >
-              {event.imageUrl ? (
-                <Image source={{ uri: resolveAuctionImageUrl(event.imageUrl) }} style={styles.eventImage} resizeMode="cover" />
-              ) : (
-                <View style={styles.eventImagePlaceholder}>
-                  <Ionicons name="image-outline" size={20} color={colors.muted} />
-                  <Text style={styles.eventImagePlaceholderText}>{t("auctions.noEventImage")}</Text>
+              <View style={styles.eventMainRow}>
+                {event.imageUrl ? (
+                  <Image source={{ uri: resolveAuctionImageUrl(event.imageUrl) }} style={styles.eventImage} resizeMode="cover" />
+                ) : (
+                  <View style={styles.eventImagePlaceholder}>
+                    <Ionicons name="image-outline" size={20} color={colors.muted} />
+                    <Text style={styles.eventImagePlaceholderText}>{t("auctions.noEventImage")}</Text>
+                  </View>
+                )}
+
+                <View style={styles.eventInfoCol}>
+                  <View style={styles.eventTop}>
+                    <View style={styles.tag}>
+                      <Text style={styles.tagText}>{t("auctions.event")}</Text>
+                    </View>
+                    <Text style={styles.eventDate}>{eventDate}</Text>
+                  </View>
+
+                  <Text style={styles.eventTitle}>{event.title}</Text>
+                  <Text style={styles.eventMeta}>{event.venue}</Text>
+
+                  <View style={styles.statsRow}>
+                    <Text style={styles.statsLabel}>{t("auctions.horsesCount", { count: event.horseCount })}</Text>
+                  </View>
+
+                  <View style={styles.footerRow}>
+                    <Ionicons name="call-outline" size={16} color={colors.primary} />
+                    <Text style={styles.contactText}>{event.contactPhone ?? event.contactEmail ?? t("auctions.contactTbd")}</Text>
+                  </View>
                 </View>
-              )}
-
-              <View style={styles.eventTop}>
-                <View style={styles.tag}>
-                  <Text style={styles.tagText}>{t("auctions.event")}</Text>
-                </View>
-                <Text style={styles.eventDate}>{eventDate}</Text>
-              </View>
-
-              <Text style={styles.eventTitle}>{event.title}</Text>
-              <Text style={styles.eventMeta}>{event.organizer}</Text>
-              <Text style={styles.eventMeta}>{`${event.venue} - ${event.city}`}</Text>
-
-              <View style={styles.statsRow}>
-                <Text style={styles.statsLabel}>{t("auctions.horsesCount", { count: event.horseCount })}</Text>
-                {startingPrice ? <Text style={styles.statsValue}>{t("auctions.fromPrice", { price: startingPrice })}</Text> : null}
-              </View>
-
-              <View style={styles.footerRow}>
-                <Ionicons name="call-outline" size={16} color={colors.primary} />
-                <Text style={styles.contactText}>{event.contactPhone ?? event.contactEmail ?? t("auctions.contactTbd")}</Text>
               </View>
             </Pressable>
           );
@@ -172,19 +161,28 @@ const createStyles = (colors: AppColors) =>
       borderColor: colors.border,
       backgroundColor: colors.surface,
       borderRadius: 20,
-      overflow: "hidden",
-      marginBottom: 12
+      marginBottom: 12,
+      padding: 12
     },
     eventCardPressed: {
       backgroundColor: colors.surfaceStrong,
       opacity: 0.9
     },
+    eventMainRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 12
+    },
     eventImage: {
-      width: "100%",
-      height: 170
+      width: 110,
+      height: 110,
+      borderRadius: 16,
+      backgroundColor: colors.surfaceStrong
     },
     eventImagePlaceholder: {
-      height: 120,
+      width: 110,
+      height: 110,
+      borderRadius: 16,
       backgroundColor: colors.surfaceStrong,
       alignItems: "center",
       justifyContent: "center",
@@ -195,13 +193,16 @@ const createStyles = (colors: AppColors) =>
       fontSize: 12,
       fontWeight: "700"
     },
+    eventInfoCol: {
+      flex: 1,
+      minWidth: 0
+    },
     eventTop: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
       marginBottom: 8,
-      paddingHorizontal: 14,
-      paddingTop: 14
+      gap: 8
     },
     tag: {
       paddingHorizontal: 10,
@@ -221,41 +222,32 @@ const createStyles = (colors: AppColors) =>
     },
     eventTitle: {
       color: colors.text,
-      fontSize: 19,
+      fontSize: 17,
       fontWeight: "900",
-      marginBottom: 6,
-      paddingHorizontal: 14
+      marginBottom: 6
     },
     eventMeta: {
       color: colors.muted,
       fontSize: 13,
-      marginBottom: 2,
-      paddingHorizontal: 14
+      marginBottom: 2
     },
     statsRow: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
       marginTop: 10,
-      marginBottom: 10,
-      paddingHorizontal: 14
+      marginBottom: 10
     },
     statsLabel: {
       color: colors.text,
       fontWeight: "700",
       fontSize: 13
     },
-    statsValue: {
-      color: colors.success,
-      fontWeight: "800",
-      fontSize: 13
-    },
     footerRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
-      paddingHorizontal: 14,
-      paddingBottom: 14
+      flexWrap: "wrap"
     },
     contactText: {
       color: colors.primary,

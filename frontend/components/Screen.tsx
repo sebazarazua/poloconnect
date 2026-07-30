@@ -28,6 +28,7 @@ type ScreenProps = PropsWithChildren<{
   eyebrow?: string;
   title: string;
   subtitle?: string;
+  hideHeader?: boolean;
   style?: ViewStyle;
   showBackButton?: boolean;
   onBackPress?: () => void;
@@ -35,7 +36,7 @@ type ScreenProps = PropsWithChildren<{
   scrollViewRef?: any;
 }>;
 
-export function Screen({ children, eyebrow, title, subtitle, style, showBackButton, onBackPress, headerRight, scrollViewRef }: ScreenProps) {
+export function Screen({ children, eyebrow, title, subtitle, hideHeader, style, showBackButton, onBackPress, headerRight, scrollViewRef }: ScreenProps) {
   const colors = useThemeColors();
   const { mode } = useTheme();
   const styles = createStyles(colors);
@@ -160,12 +161,14 @@ export function Screen({ children, eyebrow, title, subtitle, style, showBackButt
           onScroll={handleScroll}
           scrollEventThrottle={16}
         >
-          <View style={styles.header}>
-            {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-            {headerRight ? <View style={styles.headerRight}>{headerRight}</View> : null}
-            <Text style={styles.title}>{title}</Text>
-            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-          </View>
+          {!hideHeader ? (
+            <View style={styles.header}>
+              {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+              {headerRight ? <View style={styles.headerRight}>{headerRight}</View> : null}
+              <Text style={styles.title}>{title}</Text>
+              {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+            </View>
+          ) : null}
           {children}
         </Animated.ScrollView>
       </KeyboardAvoidingView>

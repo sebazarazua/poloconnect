@@ -14,7 +14,11 @@ async function bootstrap() {
   const prefix = config.get<string>("API_PREFIX", "api/v1");
   const corsOrigin = config.get<string>("CORS_ORIGIN", "*");
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: "cross-origin" }
+    })
+  );
   app.enableCors({
     origin: corsOrigin === "*" ? true : corsOrigin.split(",").map((origin) => origin.trim()).filter(Boolean),
     credentials: true

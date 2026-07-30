@@ -609,6 +609,8 @@ model HorseAuctionHorse {
   horseName         String
   imageUrl          String?
   ownerName         String
+  damName           String?
+  sireName          String?
   reservePriceCents Int
   currency          String           @default("USD")
   breed             String?

@@ -13,6 +13,7 @@
     "backend:migrate": "npm --prefix backend run prisma:deploy",
     "backend:seed:auctions": "npm --prefix backend run prisma:seed:auctions",
     "backend:seed:live-match": "npm --prefix backend run prisma:seed:live-match",
+    "backend:seed:brands-showcase": "npm --prefix backend run prisma:seed:brands-showcase",
     "frontend:start": "npm --prefix frontend run start",
     "frontend:android": "npm --prefix frontend run android",
     "frontend:ios": "npm --prefix frontend run ios",

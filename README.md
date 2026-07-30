@@ -47,6 +47,12 @@ Para poblar eventos y caballos con imagenes:
 npm run backend:seed:auctions
 ```
 
+Seed opcional para visualizar el catalogo de marcas con mas volumen (5 marcas con 5 productos cada una):
+
+```bash
+npm run backend:seed:brands-showcase
+```
+
 Tambien podes crear eventos/caballos con fotos reales desde dispositivo en la pantalla Gestionar remates (rol admin/superadmin).
 
 Backend local:

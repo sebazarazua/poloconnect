@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Href, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { Alert, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Screen } from "@/components/Screen";
 import { AppColors, radius, useThemeColors } from "@/constants/theme";
 import { useLocale, type Locale } from "@/contexts/LocaleContext";
@@ -413,9 +413,20 @@ export default function HelpCenterScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const { locale } = useLocale();
-  const copy = helpContent[locale];
+  const baseCopy = helpContent[locale];
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<HelpCategoryId>("all");
+  const copy = useMemo(() => {
+    if (Platform.OS === "web") {
+      return baseCopy;
+    }
+
+    return {
+      ...baseCopy,
+      categories: baseCopy.categories.filter((category) => category.id !== "admin"),
+      articles: baseCopy.articles.filter((article) => article.category !== "admin")
+    };
+  }, [baseCopy]);
   const [expandedArticleId, setExpandedArticleId] = useState(copy.articles[0]?.id ?? "");
   const [expandedFaqId, setExpandedFaqId] = useState(copy.faqs[0]?.id ?? "");
   const normalizedQuery = normalizeText(query.trim());

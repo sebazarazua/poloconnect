@@ -66,6 +66,14 @@ export class UpsertHorseAuctionHorseDto {
   @IsString()
   ownerName!: string;
 
+  @IsOptional()
+  @IsString()
+  damName?: string | null;
+
+  @IsOptional()
+  @IsString()
+  sireName?: string | null;
+
   @Type(() => Number)
   @IsInt()
   @Min(1)

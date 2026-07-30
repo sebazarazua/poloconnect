@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Screen } from "@/components/Screen";
@@ -7,7 +7,7 @@ import { useLocale } from "@/contexts/LocaleContext";
 import { AppColors, useThemeColors } from "@/constants/theme";
 
 export default function AdminLoginScreen() {
-  const { signIn } = useAuth();
+  const { signIn, isAuthenticated } = useAuth();
   const router = useRouter();
   const colors = useThemeColors();
   const styles = createStyles(colors);
@@ -16,14 +16,12 @@ export default function AdminLoginScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  if (Platform.OS !== "web") {
+    return <Redirect href={isAuthenticated ? "/(tabs)" : "/login"} />;
+  }
+
   return (
     <Screen eyebrow="Admin" title={t("adminLogin.title")} subtitle={t("adminLogin.subtitle")} showBackButton onBackPress={() => router.back()}>
-      {Platform.OS !== "web" ? (
-        <View style={styles.infoCard}>
-          <Text style={styles.infoText}>{t("adminLogin.webOnly")}</Text>
-        </View>
-      ) : null}
-
       <View style={styles.formCard}>
         <TextInput style={styles.input} value={identifier} onChangeText={setIdentifier} placeholder={t("adminLogin.identifier")} placeholderTextColor={colors.muted} autoCapitalize="none" />
         <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder={t("auth.login.password")} placeholderTextColor={colors.muted} secureTextEntry />

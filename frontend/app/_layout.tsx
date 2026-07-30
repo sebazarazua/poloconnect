@@ -64,14 +64,18 @@ function PushTokenRegistrar() {
 
 function RootNavigator() {
   const { isAuthenticated } = useAuth();
+  const initialRouteName = isAuthenticated ? "(tabs)" : "login";
 
   return (
-    <Stack initialRouteName="login" screenOptions={{ headerShown: false }}>
+    <Stack initialRouteName={initialRouteName} screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={!isAuthenticated}>
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />
         <Stack.Screen name="admin-login" />
       </Stack.Protected>
+
+      <Stack.Screen name="admin-panel" />
+      <Stack.Screen name="horse-auctions-admin" />
 
       <Stack.Protected guard={isAuthenticated}>
         <Stack.Screen name="(tabs)" />
@@ -82,7 +86,6 @@ function RootNavigator() {
         <Stack.Screen name="match-detail" />
         <Stack.Screen name="horse-auctions" />
         <Stack.Screen name="horse-auction-detail" />
-        <Stack.Screen name="horse-auctions-admin" />
         <Stack.Screen name="product-detail" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="profile" />
@@ -90,7 +93,6 @@ function RootNavigator() {
         <Stack.Screen name="help-center" />
         <Stack.Screen name="team-register" />
         <Stack.Screen name="group-chat" />
-        <Stack.Screen name="admin-panel" />
       </Stack.Protected>
 
       <Stack.Screen name="forgot-password" />

@@ -2,29 +2,46 @@ import { useEffect, useRef, useState } from "react";
 import {
   Image,
   ImageSourcePropType,
+  Linking,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Pressable,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
   View
 } from "react-native";
+import { useRouter } from "expo-router";
 import { useAppDrawer } from "@/components/AppDrawer";
 import { AppColors, useThemeColors } from "@/constants/theme";
+import { parseContentTarget } from "@/services/content-targets";
 
 interface AdCarouselProps {
   images: ImageSourcePropType[];
+  targetUrls?: Array<string | null | undefined>;
   height?: number;
 }
 
-export function AdCarousel({ images, height = 100 }: AdCarouselProps) {
+const BANNER_DESIGN_WIDTH = 390;
+
+function getResponsiveHeight(baseHeight: number, currentWidth: number) {
+  const scaledHeight = Math.round((currentWidth / BANNER_DESIGN_WIDTH) * baseHeight);
+  const minHeight = Math.round(baseHeight * 0.82);
+  const maxHeight = Math.round(baseHeight * 1.45);
+
+  return Math.max(minHeight, Math.min(maxHeight, scaledHeight));
+}
+
+export function AdCarousel({ images, targetUrls = [], height = 100 }: AdCarouselProps) {
   const colors = useThemeColors();
   const styles = createStyles(colors);
+  const router = useRouter();
   const { setDrawerGestureBlocked } = useAppDrawer();
   const carouselRef = useRef<ScrollView>(null);
   const [activeItem, setActiveItem] = useState(0);
   const { width } = useWindowDimensions();
   const bannerWidth = Math.max(width - 40, 280);
+  const bannerHeight = getResponsiveHeight(height, bannerWidth);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -49,6 +66,20 @@ export function AdCarousel({ images, height = 100 }: AdCarouselProps) {
     setDrawerGestureBlocked(false);
   };
 
+  const openSlideTarget = async (index: number) => {
+    const target = parseContentTarget(targetUrls[index]);
+    if (target.kind === "none") {
+      return;
+    }
+
+    if (target.kind === "shop") {
+      router.push({ pathname: "/brand-catalog", params: { id: target.brandId } });
+      return;
+    }
+
+    await Linking.openURL(target.url);
+  };
+
   return (
     <View>
       <ScrollView
@@ -68,15 +99,16 @@ export function AdCarousel({ images, height = 100 }: AdCarouselProps) {
         contentContainerStyle={styles.track}
       >
         {images.map((image, index) => (
-          <View
+          <Pressable
             key={`ad-slide-${index}`}
+            onPress={() => void openSlideTarget(index)}
             style={[
               styles.banner,
-              { width: bannerWidth, height }
+              { width: bannerWidth, height: bannerHeight }
             ]}
           >
             <Image source={image} style={styles.image} resizeMode="cover" />
-          </View>
+          </Pressable>
         ))}
       </ScrollView>
 

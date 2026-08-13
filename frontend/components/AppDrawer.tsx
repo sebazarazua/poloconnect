@@ -78,6 +78,7 @@ export function AppDrawerProvider({ children }: PropsWithChildren) {
   const drawerItems: Array<DrawerItem> = [
     { label: t("drawer.profile"), icon: "person-outline", route: "/profile" },
     { label: t("drawer.favorites"), icon: "heart-outline", route: "/favorites" },
+    { label: t("market.myPosts"), icon: "albums-outline", route: "/market-my-posts" },
     { label: t("drawer.broadcasts"), icon: "play-circle-outline", route: "/broadcast" },
     { label: t("drawer.teamRegister"), icon: "checkmark-circle-outline", route: "/team-register" },
     { label: t("drawer.community"), icon: "people-outline", route: "/(tabs)/community" },

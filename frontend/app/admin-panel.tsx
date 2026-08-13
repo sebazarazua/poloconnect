@@ -1,12 +1,13 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
 import { Redirect, useRouter } from "expo-router";
-import { type ComponentProps, useEffect, useMemo, useState } from "react";
+import { type ComponentProps, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocale } from "@/contexts/LocaleContext";
 import { resolveContentImageSource } from "@/services/content-images";
+import { buildShopTarget, parseContentTarget } from "@/services/content-targets";
 import {
   banCommunityMember,
   createAdminContent,
@@ -36,7 +37,8 @@ import {
   adminListBrandProducts,
   adminCreateBrandProduct,
   adminUpdateBrandProduct,
-  adminDeleteBrandProduct
+  adminDeleteBrandProduct,
+  uploadBrandImage
 } from "@/services/api/brands";
 
 type Tab = "dashboard" | "content" | "community" | "brands" | "auctions" | "tournaments";
@@ -73,6 +75,69 @@ function inferType(section: string, slot: string): AdminContentItem["type"] {
   return "ad";
 }
 
+const brandLogoCropPreviewSize = 220;
+const brandLogoCropOutputSize = 512;
+const brandLogoOffsetLimit = 90;
+
+async function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function cropBrandLogoToBlob(params: {
+  source: string;
+  zoom: number;
+  offsetX: number;
+  offsetY: number;
+  mimeType?: string;
+}) {
+  const { source, zoom, offsetX, offsetY, mimeType = "image/png" } = params;
+
+  return new Promise<Blob>((resolve, reject) => {
+    const image = document.createElement("img");
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = brandLogoCropOutputSize;
+      canvas.height = brandLogoCropOutputSize;
+
+      const context = canvas.getContext("2d");
+      if (!context) {
+        reject(new Error("No se pudo preparar el editor de imagen."));
+        return;
+      }
+
+      const coverScale = Math.max(
+        brandLogoCropOutputSize / image.naturalWidth,
+        brandLogoCropOutputSize / image.naturalHeight
+      );
+
+      const drawWidth = image.naturalWidth * coverScale * zoom;
+      const drawHeight = image.naturalHeight * coverScale * zoom;
+      const scaleFactor = brandLogoCropOutputSize / brandLogoCropPreviewSize;
+      const drawX = (brandLogoCropOutputSize - drawWidth) / 2 + offsetX * scaleFactor;
+      const drawY = (brandLogoCropOutputSize - drawHeight) / 2 + offsetY * scaleFactor;
+
+      context.clearRect(0, 0, brandLogoCropOutputSize, brandLogoCropOutputSize);
+      context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error("No se pudo exportar la imagen."));
+          return;
+        }
+
+        resolve(blob);
+      }, mimeType, 0.92);
+    };
+    image.onerror = () => reject(new Error("No se pudo cargar la imagen seleccionada."));
+    image.src = source;
+  });
+}
+
 export default function AdminPanelScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
@@ -99,6 +164,7 @@ export default function AdminPanelScreen() {
   const [newSortOrder, setNewSortOrder] = useState("1");
   const [newPriority, setNewPriority] = useState("0");
   const [newTargetUrl, setNewTargetUrl] = useState("");
+  const [selectedShopTargetId, setSelectedShopTargetId] = useState("");
   const [newSubtitle, setNewSubtitle] = useState("");
   const [newBody, setNewBody] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -117,6 +183,15 @@ export default function AdminPanelScreen() {
   const [brandForm, setBrandForm] = useState({ name: "", slug: "", description: "", whatsapp: "", phone: "", email: "", website: "", logoUrl: "" });
   const [bpForm, setBpForm] = useState({ name: "", description: "", price: "", imageUrl: "" });
   const [selectedBpId, setSelectedBpId] = useState<string | null>(null);
+  const [bpUploading, setBpUploading] = useState(false);
+  const [brandLogoDraftUrl, setBrandLogoDraftUrl] = useState<string | null>(null);
+  const [brandLogoDraftName, setBrandLogoDraftName] = useState("brand-logo.png");
+  const [brandLogoZoom, setBrandLogoZoom] = useState(1);
+  const [brandLogoOffsetX, setBrandLogoOffsetX] = useState(0);
+  const [brandLogoOffsetY, setBrandLogoOffsetY] = useState(0);
+  const [brandLogoUploading, setBrandLogoUploading] = useState(false);
+  const brandLogoInputRef = useRef<any>(null);
+  const bpImageInputRef = useRef<any>(null);
 
   // Tournaments state
   const [tournaments, setTournaments] = useState<AdminTournament[]>([]);
@@ -202,6 +277,78 @@ export default function AdminPanelScreen() {
     setRoomBans(b);
   };
 
+  const resetBrandLogoEditor = () => {
+    setBrandLogoDraftUrl(null);
+    setBrandLogoDraftName("brand-logo.png");
+    setBrandLogoZoom(1);
+    setBrandLogoOffsetX(0);
+    setBrandLogoOffsetY(0);
+    if (brandLogoInputRef.current) {
+      brandLogoInputRef.current.value = "";
+    }
+  };
+
+  const prepareBrandLogo = async (file?: File | null) => {
+    if (!file) return;
+
+    try {
+      const previewUrl = await readFileAsDataUrl(file);
+      setBrandLogoDraftUrl(previewUrl);
+      setBrandLogoDraftName(file.name || "brand-logo.png");
+      setBrandLogoZoom(1);
+      setBrandLogoOffsetX(0);
+      setBrandLogoOffsetY(0);
+    } catch (error: any) {
+      Alert.alert("Error", error?.message ?? "No se pudo preparar la imagen.");
+    }
+  };
+
+  const uploadPreparedBrandLogo = async () => {
+    if (!brandLogoDraftUrl) {
+      return;
+    }
+
+    try {
+      setBrandLogoUploading(true);
+      const blob = await cropBrandLogoToBlob({
+        source: brandLogoDraftUrl,
+        zoom: brandLogoZoom,
+        offsetX: brandLogoOffsetX,
+        offsetY: brandLogoOffsetY
+      });
+      const safeName = brandLogoDraftName.replace(/\.[^.]+$/, "") || "brand-logo";
+      const file = new File([blob], `${safeName}.png`, { type: "image/png" });
+      const uploadedUrl = await uploadBrandImage(file);
+      setBrandForm((current) => ({ ...current, logoUrl: uploadedUrl }));
+      resetBrandLogoEditor();
+      Alert.alert("Listo", "Logo subido y guardado localmente.");
+    } catch (error: any) {
+      Alert.alert("Error", error?.message ?? "No se pudo subir el logo.");
+    } finally {
+      setBrandLogoUploading(false);
+    }
+  };
+
+  const uploadBrandProductImage = async (file?: File | null) => {
+    if (!file) {
+      return;
+    }
+
+    try {
+      setBpUploading(true);
+      const uploadedUrl = await uploadBrandImage(file);
+      setBpForm((current) => ({ ...current, imageUrl: uploadedUrl }));
+      Alert.alert("Listo", "Imagen de producto subida.");
+    } catch (error: any) {
+      Alert.alert("Error", error?.message ?? "No se pudo subir la imagen del producto.");
+    } finally {
+      setBpUploading(false);
+      if (bpImageInputRef.current) {
+        bpImageInputRef.current.value = "";
+      }
+    }
+  };
+
   useEffect(() => {
     if (!isAdmin) { return; }
     void Promise.all([getAdminDashboard(), listAdminContent(), listCommunityRooms()]).then(([dash, items, nextRooms]) => {
@@ -224,13 +371,18 @@ export default function AdminPanelScreen() {
       setNewBody("");
       setNewImageUrl("");
       setNewTargetUrl("");
+      setSelectedShopTargetId("");
       return;
     }
+
+    const parsedTarget = parseContentTarget(selectedContent.targetUrl ?? "");
+
     setNewTitle(selectedContent.title ?? "");
     setNewSubtitle(selectedContent.subtitle ?? "");
     setNewBody(selectedContent.body ?? "");
     setNewImageUrl(selectedContent.imageUrl ?? "");
-    setNewTargetUrl(selectedContent.targetUrl ?? "");
+    setNewTargetUrl(parsedTarget.kind === "external" ? parsedTarget.url : "");
+    setSelectedShopTargetId(parsedTarget.kind === "shop" ? parsedTarget.brandId : "");
     setNewSection(selectedContent.section);
     setNewSlot(selectedContent.slot);
     setNewType(selectedContent.type);
@@ -253,6 +405,14 @@ export default function AdminPanelScreen() {
   }
 
   const saveContent = async () => {
+    const externalTargetUrl = newTargetUrl.trim();
+    const shopTargetId = selectedShopTargetId.trim();
+
+    if (externalTargetUrl && shopTargetId) {
+      Alert.alert("Error", "Elegí solo un destino: URL externa o shop interno.");
+      return;
+    }
+
     const payload = {
       type: selectedContent?.type ?? activeContentTemplate.type,
       section: selectedContent?.section ?? activeContentTemplate.section,
@@ -261,7 +421,7 @@ export default function AdminPanelScreen() {
       subtitle: selectedContent?.subtitle ?? null,
       body: selectedContent?.body ?? null,
       imageUrl: newImageUrl.trim(),
-      targetUrl: newTargetUrl.trim() || null,
+      targetUrl: shopTargetId ? buildShopTarget(shopTargetId) : externalTargetUrl || null,
       priority: selectedContent?.priority ?? 0,
       sortOrder: selectedContent?.sortOrder ?? (contentItems.filter((item) => item.section === activeContentTemplate.section && item.slot === activeContentTemplate.slot).length + 1),
       isActive: true
@@ -451,7 +611,41 @@ export default function AdminPanelScreen() {
                   </View>
                 </View>
                 <View style={styles.formGrid}>
-                  <LabeledInput label="URL de destino" value={newTargetUrl} onChangeText={setNewTargetUrl} placeholder="https://..." />
+                  <LabeledInput
+                    label="URL externa de destino"
+                    value={newTargetUrl}
+                    onChangeText={(value) => {
+                      setNewTargetUrl(value);
+                      if (value.trim()) {
+                        setSelectedShopTargetId("");
+                      }
+                    }}
+                    placeholder="https://..."
+                  />
+                </View>
+                <View style={styles.fullField}>
+                  <Text style={styles.fieldLabel}>Shop interno de Polo Connect</Text>
+                  <Text style={styles.helperText}>Elegí una tienda existente. Si seleccionás una, se anula la URL externa. Si escribís URL, se deselecciona el shop.</Text>
+                  {brands.length === 0 ? (
+                    <Text style={styles.helperText}>No hay shops disponibles para vincular.</Text>
+                  ) : (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shopSelectorRow}>
+                      {brands.map((brand) => (
+                        <Pressable
+                          key={brand.id}
+                          style={[styles.shopChip, selectedShopTargetId === brand.id && styles.shopChipActive]}
+                          onPress={() => {
+                            setSelectedShopTargetId((current) => current === brand.id ? "" : brand.id);
+                            setNewTargetUrl("");
+                          }}
+                        >
+                          <Text style={[styles.shopChipText, selectedShopTargetId === brand.id && styles.shopChipTextActive]} numberOfLines={1}>
+                            {brand.name}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  )}
                 </View>
                 <View style={styles.fullField}>
                   <Text style={styles.fieldLabel}>Imagen</Text>
@@ -565,6 +759,7 @@ export default function AdminPanelScreen() {
                     setSelectedBrandId(null);
                     setBrandProducts([]);
                     setSelectedBpId(null);
+                    resetBrandLogoEditor();
                   }}>
                     <Ionicons name="add" size={16} color="#fff" />
                     <Text style={styles.btnPrimaryText}>Nueva</Text>
@@ -576,6 +771,7 @@ export default function AdminPanelScreen() {
                     setSelectedBrandId(brand.id);
                     setSelectedBpId(null);
                     setBpForm({ name: "", description: "", price: "", imageUrl: "" });
+                    resetBrandLogoEditor();
                     const prods = await adminListBrandProducts(brand.id).catch(() => []);
                     setBrandProducts(prods);
                   }}>
@@ -604,6 +800,101 @@ export default function AdminPanelScreen() {
               {/* Right: brand form + products */}
               <View style={[styles.panel, { gap: 10 }]}>
                 <Text style={styles.panelTitle}>{selectedBrandId ? "Editar marca" : "Nueva marca"}</Text>
+                <View style={styles.brandLogoEditorCard}>
+                  <Text style={styles.fieldLabel}>Logo de la marca</Text>
+                  <Text style={styles.helperText}>Podés subir una imagen local, ajustarla antes de guardar y queda persistida en el backend.</Text>
+                  <View style={styles.brandLogoEditorRow}>
+                    <View style={styles.brandLogoPreviewFrame}>
+                      {brandLogoDraftUrl || brandForm.logoUrl ? (
+                        <View style={styles.brandLogoPreviewInner}>
+                          <Image
+                            source={resolveContentImageSource(brandLogoDraftUrl || brandForm.logoUrl)}
+                            style={[
+                              styles.brandLogoPreviewImage,
+                              brandLogoDraftUrl ? {
+                                transform: [
+                                  { translateX: brandLogoOffsetX },
+                                  { translateY: brandLogoOffsetY },
+                                  { scale: brandLogoZoom }
+                                ]
+                              } : null
+                            ]}
+                            resizeMode="cover"
+                          />
+                        </View>
+                      ) : (
+                        <View style={styles.brandLogoEmptyState}>
+                          <Ionicons name="image-outline" size={28} color={colors.muted} />
+                          <Text style={styles.helperText}>Todavía no hay logo</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.brandLogoControls}>
+                      <Pressable style={styles.btnPrimary} onPress={() => brandLogoInputRef.current?.click()}>
+                        <Ionicons name="cloud-upload-outline" size={16} color="#fff" />
+                        <Text style={styles.btnPrimaryText}>Elegir logo</Text>
+                      </Pressable>
+                      <input
+                        ref={brandLogoInputRef}
+                        type="file"
+                        accept="image/*"
+                        style={{ display: "none" }}
+                        onChange={async (event: any) => {
+                          const file = event.target.files?.[0] as File | undefined;
+                          await prepareBrandLogo(file ?? null);
+                        }}
+                      />
+
+                      {brandLogoDraftUrl ? (
+                        <>
+                          <View style={styles.sliderGroup}>
+                            <Text style={styles.sliderLabel}>Zoom</Text>
+                            <input
+                              type="range"
+                              min="1"
+                              max="2.6"
+                              step="0.01"
+                              value={String(brandLogoZoom)}
+                              onChange={(event) => setBrandLogoZoom(Number(event.currentTarget.value))}
+                            />
+                          </View>
+                          <View style={styles.sliderGroup}>
+                            <Text style={styles.sliderLabel}>Mover horizontal</Text>
+                            <input
+                              type="range"
+                              min={String(-brandLogoOffsetLimit)}
+                              max={String(brandLogoOffsetLimit)}
+                              step="1"
+                              value={String(brandLogoOffsetX)}
+                              onChange={(event) => setBrandLogoOffsetX(Number(event.currentTarget.value))}
+                            />
+                          </View>
+                          <View style={styles.sliderGroup}>
+                            <Text style={styles.sliderLabel}>Mover vertical</Text>
+                            <input
+                              type="range"
+                              min={String(-brandLogoOffsetLimit)}
+                              max={String(brandLogoOffsetLimit)}
+                              step="1"
+                              value={String(brandLogoOffsetY)}
+                              onChange={(event) => setBrandLogoOffsetY(Number(event.currentTarget.value))}
+                            />
+                          </View>
+                          <View style={styles.actionRow}>
+                            <Pressable style={styles.btnPrimary} onPress={() => { void uploadPreparedBrandLogo(); }} disabled={brandLogoUploading}>
+                              <Ionicons name="checkmark-outline" size={16} color="#fff" />
+                              <Text style={styles.btnPrimaryText}>{brandLogoUploading ? "Subiendo..." : "Usar este logo"}</Text>
+                            </Pressable>
+                            <Pressable style={styles.btnSecondary} onPress={resetBrandLogoEditor}>
+                              <Text style={styles.btnSecondaryText}>Cancelar ajuste</Text>
+                            </Pressable>
+                          </View>
+                        </>
+                      ) : null}
+                    </View>
+                  </View>
+                </View>
                 <LabeledInput label="Nombre *" value={brandForm.name} onChangeText={(v) => setBrandForm((f) => ({ ...f, name: v }))} placeholder="Ej: La Dolfina" />
                 <LabeledInput label="Descripción" value={brandForm.description} onChangeText={(v) => setBrandForm((f) => ({ ...f, description: v }))} />
                 <LabeledInput label="WhatsApp" value={brandForm.whatsapp} onChangeText={(v) => setBrandForm((f) => ({ ...f, whatsapp: v }))} placeholder="+54911..." keyboardType="phone-pad" />
@@ -624,6 +915,7 @@ export default function AdminPanelScreen() {
                     }
                     setBrandForm({ name: "", slug: "", description: "", whatsapp: "", phone: "", email: "", website: "", logoUrl: "" });
                     setSelectedBrandId(null);
+                    resetBrandLogoEditor();
                     Alert.alert("Listo", selectedBrandId ? "Marca actualizada." : "Marca creada.");
                   } catch (err: any) { Alert.alert("Error", err?.message ?? "No se pudo guardar."); }
                 }}>
@@ -665,7 +957,27 @@ export default function AdminPanelScreen() {
                         <LabeledInput label="Nombre *" value={bpForm.name} onChangeText={(v) => setBpForm((f) => ({ ...f, name: v }))} />
                         <LabeledInput label="Descripción *" value={bpForm.description} onChangeText={(v) => setBpForm((f) => ({ ...f, description: v }))} />
                         <LabeledInput label="Precio (opcional)" value={bpForm.price} onChangeText={(v) => setBpForm((f) => ({ ...f, price: v }))} keyboardType="numeric" />
+                        {bpForm.imageUrl ? (
+                          <Image source={resolveContentImageSource(bpForm.imageUrl)} style={styles.brandRowLogo} resizeMode="cover" />
+                        ) : null}
                         <LabeledInput label="URL imagen" value={bpForm.imageUrl} onChangeText={(v) => setBpForm((f) => ({ ...f, imageUrl: v }))} autoCapitalize="none" />
+                        <View style={styles.uploadBox}>
+                          <Ionicons name="image-outline" size={22} color={colors.primaryDark} />
+                          <Text style={styles.uploadLabel}>Subí una imagen local para este producto.</Text>
+                          <Pressable style={styles.btnPrimary} onPress={() => bpImageInputRef.current?.click()}>
+                            <Text style={styles.btnPrimaryText}>{bpUploading ? "Subiendo..." : "Elegir archivo"}</Text>
+                          </Pressable>
+                          <input
+                            ref={bpImageInputRef}
+                            type="file"
+                            accept="image/*"
+                            style={{ display: "none" }}
+                            onChange={async (event: any) => {
+                              const file = event.target.files?.[0] as File | undefined;
+                              await uploadBrandProductImage(file ?? null);
+                            }}
+                          />
+                        </View>
                         <Pressable style={styles.btnPrimary} onPress={async () => {
                           if (!bpForm.name.trim() || !bpForm.description.trim()) { Alert.alert("Error", "Nombre y descripción son requeridos."); return; }
                           const payload = { name: bpForm.name.trim(), description: bpForm.description.trim(), price: bpForm.price ? Number(bpForm.price) : undefined, imageUrl: bpForm.imageUrl || undefined };
@@ -880,6 +1192,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   input: { minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, color: colors.text, paddingHorizontal: 12, paddingVertical: 10 },
   uploadBox: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 14, backgroundColor: colors.surfaceStrong, borderWidth: 1, borderColor: colors.border },
   uploadLabel: { flex: 1, color: colors.text, fontWeight: "700", fontSize: 13 },
+  shopSelectorRow: { gap: 8, paddingVertical: 4, paddingRight: 8 },
+  shopChip: { minHeight: 34, borderRadius: 999, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceStrong, justifyContent: "center", maxWidth: 220 },
+  shopChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  shopChipText: { color: colors.text, fontWeight: "800", fontSize: 12 },
+  shopChipTextActive: { color: "#fff" },
   assetChip: { borderRadius: 999, paddingHorizontal: 10, minHeight: 30, justifyContent: "center", backgroundColor: colors.primarySoft, borderWidth: 1, borderColor: colors.border },
   assetChipText: { color: colors.primaryDark, fontWeight: "800", fontSize: 11 },
   actionRow: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
@@ -923,6 +1240,15 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   brandRowLogo: { width: 38, height: 38, borderRadius: 10 },
   brandRowName: { color: colors.text, fontWeight: "800", fontSize: 13 },
   brandRowMeta: { color: colors.muted, fontSize: 11 },
+  brandLogoEditorCard: { gap: 10, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, padding: 12 },
+  brandLogoEditorRow: { flexDirection: "row", gap: 14, alignItems: "flex-start", flexWrap: "wrap" },
+  brandLogoPreviewFrame: { width: brandLogoCropPreviewSize, height: brandLogoCropPreviewSize, borderRadius: 24, overflow: "hidden", borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceStrong },
+  brandLogoPreviewInner: { flex: 1, overflow: "hidden", borderRadius: 24, backgroundColor: colors.surfaceStrong },
+  brandLogoPreviewImage: { width: "100%", height: "100%" },
+  brandLogoEmptyState: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
+  brandLogoControls: { flex: 1, minWidth: 260, gap: 10 },
+  sliderGroup: { gap: 6 },
+  sliderLabel: { color: colors.text, fontSize: 12, fontWeight: "800" },
 
   // Tournaments
   tournamentRow: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 10, backgroundColor: colors.background, marginBottom: 8, gap: 2 },

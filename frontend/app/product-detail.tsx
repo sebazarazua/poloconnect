@@ -3,9 +3,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Dimensions,
   Image,
   Linking,
-  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -56,6 +56,11 @@ export default function ProductDetailScreen() {
   const cachedProduct = useMemo(() => products.find((item) => item.id === id), [id, products]);
   const [product, setProduct] = useState<Product | undefined>(cachedProduct);
   const [activeTab, setActiveTab] = useState<ProductTab>("detalle");
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [imageCarouselWidth, setImageCarouselWidth] = useState(0);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const imageCarouselRef = useRef<ScrollView>(null);
+  const viewerCarouselRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     setProduct(cachedProduct);
@@ -63,12 +68,35 @@ export default function ProductDetailScreen() {
     void fetchProduct(id).then(setProduct);
   }, [cachedProduct, id]);
 
+  useEffect(() => {
+    setActiveImageIndex(0);
+  }, [product?.id]);
+
+  useEffect(() => {
+    if (!viewerOpen) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      viewerCarouselRef.current?.scrollTo({
+        x: Dimensions.get("window").width * activeImageIndex,
+        animated: false
+      });
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [activeImageIndex, viewerOpen]);
+
   const vendor = product?.seller ?? fallbackVendor;
+  const effectivePhone = product?.contactPhone ?? vendor.phone;
+  const productImages = product?.images?.length ? product.images : [product?.image ?? ""];
+  const activeImage = productImages[activeImageIndex] ?? productImages[0] ?? product?.image ?? "";
+  const carouselPageWidth = imageCarouselWidth || (Dimensions.get("window").width - 32);
 
   const handleCallSeller = async () => {
     if (!product) return;
 
-    const phone = normalizePhone(vendor.phone);
+    const phone = normalizePhone(effectivePhone);
     if (!phone) {
       Alert.alert(t("product.noPhone"));
       return;
@@ -88,7 +116,7 @@ export default function ProductDetailScreen() {
   const handleWhatsappSeller = async () => {
     if (!product) return;
 
-    const phone = whatsappPhone(vendor.phone);
+    const phone = whatsappPhone(effectivePhone);
     if (!phone) {
       Alert.alert(t("product.noPhone"));
       return;
@@ -106,18 +134,6 @@ export default function ProductDetailScreen() {
     await Linking.openURL(waUrl);
   };
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponderCapture: (_evt, gestureState) => gestureState.dx > 6,
-      onMoveShouldSetPanResponderCapture: (_evt, gestureState) => gestureState.dx > 6,
-      onPanResponderRelease: (_evt, gestureState) => {
-        if (gestureState.dx > 40) {
-          router.back();
-        }
-      }
-    })
-  ).current;
-
   if (!product) {
     return (
       <Screen title={t("product.notFoundTitle")} showBackButton onBackPress={() => router.back()}>
@@ -129,7 +145,7 @@ export default function ProductDetailScreen() {
   }
 
   return (
-    <View style={styles.container} {...panResponder.panHandlers}>
+    <View style={styles.container}>
       <Screen
         title={product.name}
         subtitle={`USD ${product.price.toLocaleString()}`}
@@ -138,11 +154,44 @@ export default function ProductDetailScreen() {
       >
         <ScrollView showsVerticalScrollIndicator={false}>
           {/* Product Image */}
-          <View style={styles.imageContainer}>
-            <Image
-              source={{ uri: product.image }}
-              style={styles.productImage}
-            />
+          <View
+            style={styles.imageContainer}
+            onLayout={(event) => {
+              const nextWidth = Math.round(event.nativeEvent.layout.width);
+              if (nextWidth > 0 && nextWidth !== imageCarouselWidth) {
+                setImageCarouselWidth(nextWidth);
+              }
+            }}
+          >
+            <ScrollView
+              ref={imageCarouselRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(event) => {
+                const width = event.nativeEvent.layoutMeasurement.width;
+                if (!width) return;
+                const nextIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+                setActiveImageIndex(nextIndex);
+              }}
+            >
+              {productImages.map((imageUrl, index) => (
+                <Pressable
+                  key={`${imageUrl}-${index}`}
+                  style={[styles.carouselSlide, { width: carouselPageWidth }]}
+                  onPress={() => {
+                    setActiveImageIndex(index);
+                    setViewerOpen(true);
+                  }}
+                >
+                  <Image
+                    source={{ uri: imageUrl }}
+                    style={styles.productImage}
+                    resizeMode="cover"
+                  />
+                </Pressable>
+              ))}
+            </ScrollView>
             <Pressable
               style={styles.favoriteButton}
               onPress={() => toggleFavorite(product.id)}
@@ -153,7 +202,31 @@ export default function ProductDetailScreen() {
                 color={isFavorite(product.id) ? colors.primary : "#ffffff"}
               />
             </Pressable>
+            {productImages.length > 1 ? (
+              <View style={styles.carouselCounterPill}>
+                <Text style={styles.carouselCounterText}>{activeImageIndex + 1}/{productImages.length}</Text>
+              </View>
+            ) : null}
           </View>
+          {productImages.length > 1 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.galleryRow}>
+              {productImages.map((imageUrl, index) => (
+                <Pressable
+                  key={`${imageUrl}-${index}`}
+                  style={[styles.galleryThumbWrap, activeImageIndex === index && styles.galleryThumbWrapActive]}
+                  onPress={() => {
+                    setActiveImageIndex(index);
+                    imageCarouselRef.current?.scrollTo({
+                      x: carouselPageWidth * index,
+                      animated: true
+                    });
+                  }}
+                >
+                  <Image source={{ uri: imageUrl }} style={styles.galleryThumb} resizeMode="cover" />
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : null}
 
           {/* Product Info Card */}
           <View style={styles.infoCard}>
@@ -247,7 +320,7 @@ export default function ProductDetailScreen() {
                 <View style={styles.contactInfo}>
                   <View style={styles.contactRow}>
                     <Ionicons name="call-outline" size={16} color={colors.primary} />
-                    <Text style={styles.contactValue}>{vendor.phone ?? t("product.noPhone")}</Text>
+                    <Text style={styles.contactValue}>{effectivePhone ?? t("product.noPhone")}</Text>
                   </View>
 
                   <View style={styles.contactRow}>
@@ -272,6 +345,43 @@ export default function ProductDetailScreen() {
           ) : null}
         </ScrollView>
       </Screen>
+      {viewerOpen ? (
+        <View style={styles.viewerOverlay}>
+          <Pressable style={styles.viewerCloseBtn} onPress={() => setViewerOpen(false)}>
+            <Ionicons name="close" size={26} color="#fff" />
+          </Pressable>
+          <ScrollView
+            ref={viewerCarouselRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={(event) => {
+              const width = event.nativeEvent.layoutMeasurement.width;
+              if (!width) return;
+              const nextIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+              setActiveImageIndex(nextIndex);
+            }}
+          >
+            {productImages.map((imageUrl, index) => (
+              <ScrollView
+                key={`${imageUrl}-viewer-${index}`}
+                style={styles.viewerPage}
+                contentContainerStyle={styles.viewerPageContent}
+                minimumZoomScale={1}
+                maximumZoomScale={4}
+                showsVerticalScrollIndicator={false}
+                showsHorizontalScrollIndicator={false}
+                centerContent
+              >
+                <Image source={{ uri: imageUrl }} style={styles.viewerImage} resizeMode="contain" />
+              </ScrollView>
+            ))}
+          </ScrollView>
+          <View style={styles.viewerCounterPill}>
+            <Text style={styles.viewerCounterText}>{activeImageIndex + 1}/{productImages.length}</Text>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -299,9 +409,96 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     overflow: "hidden",
     backgroundColor: colors.background
   },
+  carouselSlide: {
+    height: "100%"
+  },
   productImage: {
     width: "100%",
     height: "100%"
+  },
+  carouselCounterPill: {
+    position: "absolute",
+    left: 12,
+    bottom: 12,
+    minHeight: 24,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.55)"
+  },
+  carouselCounterText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  galleryRow: {
+    gap: 8,
+    paddingTop: 2,
+    paddingBottom: 10,
+    paddingHorizontal: 2
+  },
+  galleryThumbWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceStrong
+  },
+  galleryThumbWrapActive: {
+    borderColor: colors.primary,
+    borderWidth: 2
+  },
+  galleryThumb: {
+    width: "100%",
+    height: "100%"
+  },
+  viewerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#000",
+    zIndex: 40
+  },
+  viewerCloseBtn: {
+    position: "absolute",
+    top: 52,
+    right: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 50
+  },
+  viewerPage: {
+    width: Dimensions.get("window").width,
+    height: Dimensions.get("window").height
+  },
+  viewerPageContent: {
+    width: Dimensions.get("window").width,
+    height: Dimensions.get("window").height,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  viewerImage: {
+    width: Dimensions.get("window").width,
+    height: Dimensions.get("window").height * 0.8
+  },
+  viewerCounterPill: {
+    position: "absolute",
+    bottom: 40,
+    alignSelf: "center",
+    minHeight: 28,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.2)"
+  },
+  viewerCounterText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "800"
   },
   favoriteButton: {
     position: "absolute",

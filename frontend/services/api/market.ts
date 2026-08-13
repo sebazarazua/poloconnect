@@ -35,6 +35,9 @@ const categoryFallbackImage: Record<string, string> = {
   inmueble: "https://images.pexels.com/photos/1396132/pexels-photo-1396132.jpeg?auto=compress&cs=tinysrgb&w=1200"
 };
 
+const contactPhoneMarkerPrefix = "<!--pc:contactPhone=";
+const contactPhoneMarkerRegex = /<!--pc:contactPhone=([^>]*)-->/;
+
 function normalizeImageUrl(imageUrl?: string) {
   if (!imageUrl) return "";
 
@@ -56,6 +59,10 @@ function normalizeImageUrl(imageUrl?: string) {
 }
 
 function normalizeProduct(product: Product): Product {
+  const rawDescription = product.description ?? "";
+  const markerMatch = rawDescription.match(contactPhoneMarkerRegex);
+  const contactPhone = markerMatch?.[1]?.trim() ? decodeURIComponent(markerMatch[1].trim()) : undefined;
+  const cleanDescription = rawDescription.replace(contactPhoneMarkerRegex, "").trim();
   const image = normalizeImageUrl(product.image);
   const images = (product.images ?? []).map((entry) => normalizeImageUrl(entry));
   const fallback = categoryFallbackImage[product.category] ?? categoryFallbackImage.equipamiento;
@@ -63,19 +70,51 @@ function normalizeProduct(product: Product): Product {
 
   return {
     ...product,
+    description: cleanDescription,
+    contactPhone,
+    seller: product.seller
+      ? {
+          ...product.seller,
+          phone: contactPhone || product.seller.phone
+        }
+      : product.seller,
     image: resolvedImage,
     images: images.length > 0 ? images : [resolvedImage]
   };
 }
 
+function stripContactPhoneMarker(description: string) {
+  return description.replace(contactPhoneMarkerRegex, "").trim();
+}
+
+function encodeDescription(description: string, contactPhone?: string) {
+  const clean = stripContactPhoneMarker(description);
+  const normalizedPhone = contactPhone?.trim();
+  if (!normalizedPhone) {
+    return clean;
+  }
+
+  return `${clean}\n\n${contactPhoneMarkerPrefix}${encodeURIComponent(normalizedPhone)}-->`;
+}
+
 function toBackendProduct(product: ProductPayload) {
+  const imageUrls = (product.images ?? [])
+    .map((entry) => entry?.trim())
+    .filter((entry): entry is string => Boolean(entry));
+  const mainImage = product.image?.trim() ?? "";
+
+  if (imageUrls.length === 0 && mainImage) {
+    imageUrls.push(mainImage);
+  }
+
   return {
     name: product.name,
-    description: product.description,
+    description: encodeDescription(product.description, product.contactPhone),
     category: product.category,
     status: product.status,
     price: product.price,
-    imageUrl: product.image,
+    imageUrl: mainImage,
+    imageUrls,
     currency: "USD"
   };
 }

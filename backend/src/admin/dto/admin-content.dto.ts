@@ -26,7 +26,7 @@ export class UpsertAdminContentDto {
   @Matches(/^(asset:[a-zA-Z0-9_\-/]+|https?:\/\/.+|\/uploads\/.+)$/)
   imageUrl!: string;
   @IsOptional() @IsString() storageKey?: string;
-  @IsOptional() @IsString() @IsUrl({ require_tld: false }) targetUrl?: string;
+  @IsOptional() @IsString() @Matches(/^(https?:\/\/.+|app:shop\/[a-zA-Z0-9-]+)$/) targetUrl?: string;
   @Type(() => Number) @IsOptional() @IsInt() priority?: number;
   @Type(() => Number) @IsOptional() @IsInt() @Min(0) sortOrder?: number;
   @Type(() => Boolean) @IsOptional() @IsBoolean() isActive?: boolean;

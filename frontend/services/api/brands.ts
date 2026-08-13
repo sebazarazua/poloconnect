@@ -76,12 +76,19 @@ export async function adminDeleteBrandProduct(brandId: string, productId: string
   return apiRequest<{ ok: boolean }>(`/admin/brands/${encodeURIComponent(brandId)}/products/${encodeURIComponent(productId)}`, { method: "DELETE" });
 }
 
-export async function uploadBrandImage(uri: string): Promise<string> {
+export async function uploadBrandImage(fileOrUri: File | Blob | string): Promise<string> {
   const formData = new FormData();
-  const filename = uri.split("/").pop() ?? "image.jpg";
-  const ext = filename.split(".").pop()?.toLowerCase() ?? "jpg";
-  const mimeTypes: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp" };
-  formData.append("file", { uri, name: filename, type: mimeTypes[ext] ?? "image/jpeg" } as any);
+
+  if (typeof fileOrUri === "string") {
+    const filename = fileOrUri.split("/").pop() ?? "image.jpg";
+    const ext = filename.split(".").pop()?.toLowerCase() ?? "jpg";
+    const mimeTypes: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp" };
+    formData.append("file", { uri: fileOrUri, name: filename, type: mimeTypes[ext] ?? "image/jpeg" } as any);
+  } else {
+    const inferredName = typeof File !== "undefined" && fileOrUri instanceof File ? fileOrUri.name : "brand-logo.png";
+    formData.append("file", fileOrUri, inferredName);
+  }
+
   const result = await apiRequest<{ url: string }>("/admin/brands/upload", { method: "POST", body: formData as any, headers: {} });
   return result.url;
 }

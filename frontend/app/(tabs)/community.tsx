@@ -9,7 +9,7 @@ import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useCommunity } from "@/contexts/CommunityContext";
 import type { ChatItem } from "@/contexts/CommunityContext";
-import { getSectionContent } from "@/services/api/content";
+import { type ContentItem, getSectionContent } from "@/services/api/content";
 import { resolveContentImageSource } from "@/services/content-images";
 
 const communityAds = [
@@ -24,16 +24,21 @@ export default function CommunityScreen() {
   const { t } = useLocale();
   const router = useRouter();
   const { joinedChats, recommendedChats, joinChat } = useCommunity();
-  const [remoteAds, setRemoteAds] = useState<string[]>([]);
+  const [remoteAds, setRemoteAds] = useState<ContentItem[]>([]);
 
   useEffect(() => {
     void getSectionContent("community", "ads")
-      .then((items) => setRemoteAds(items.map((item) => item.imageUrl)))
+      .then((items) => setRemoteAds(items))
       .catch(() => setRemoteAds([]));
   }, []);
 
   const adImages = useMemo(
-    () => (remoteAds.length > 0 ? remoteAds.map((uri) => resolveContentImageSource(uri)) : communityAds),
+    () => (remoteAds.length > 0 ? remoteAds.map((item) => resolveContentImageSource(item.imageUrl)) : communityAds),
+    [remoteAds]
+  );
+
+  const adTargetUrls = useMemo(
+    () => (remoteAds.length > 0 ? remoteAds.map((item) => item.targetUrl ?? undefined) : []),
     [remoteAds]
   );
 
@@ -43,7 +48,7 @@ export default function CommunityScreen() {
       title={t("community.title")}
       subtitle={t("community.subtitle")}
     >
-      <AdCarousel images={adImages} height={92} />
+      <AdCarousel images={adImages} targetUrls={adTargetUrls} height={92} />
 
       <SectionTitle title={t("community.joined")} />
       {joinedChats.map((chat: ChatItem) => (

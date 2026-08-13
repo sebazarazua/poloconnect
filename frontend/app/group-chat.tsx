@@ -39,63 +39,6 @@ interface Message {
 
 type IncomingMessage = Omit<Message, "isMe"> & { isMe?: boolean };
 
-// ─── Mock messages ───────────────────────────────────────────────────────────
-
-const CHAT_MESSAGES: Record<string, Message[]> = {
-  palermo: [
-    { id: "1", userId: "martin", userName: "Martín", text: "¿Alguien sabe cuándo hay práctica de polo arena en Roldán?", time: "20:58", isMe: false },
-    { id: "2", userId: "me", userName: "Vos", text: "El martes a las 21 hs. Confirmaron la cancha techada.", time: "21:00", isMe: true },
-    { id: "3", userId: "lucas", userName: "Lucas", text: "¿La convocatoria es para nivel inicial o intermedio?", time: "21:03", isMe: false },
-    { id: "4", userId: "me", userName: "Vos", text: "Intermedio. Están organizando una práctica con rotación por chukkers.", time: "21:05", isMe: true },
-    { id: "5", userId: "sofia", userName: "Sofía", text: "Puedo sumarme si necesitan completar una posición.", time: "21:08", isMe: false },
-    { id: "6", userId: "martin", userName: "Martín", text: "Perfecto, lo consulto con la organización y aviso por acá.", time: "21:10", isMe: false }
-  ],
-  dolfina: [
-    { id: "1", userId: "jose", userName: "José", text: "Voy a Córdoba y tengo lugar para 2 caballos.", time: "08:12", isMe: false },
-    { id: "2", userId: "pedro", userName: "Pedro", text: "Tengo que llevar 2 yeguas a Córdoba capital.", time: "08:15", isMe: false },
-    { id: "3", userId: "jose", userName: "José", text: "Llámame al 234556677.", time: "08:17", isMe: false },
-    { id: "4", userId: "mariana", userName: "Mariana", text: "¿Salís desde Pilar o desde zona norte?", time: "08:19", isMe: false },
-    { id: "5", userId: "jose", userName: "José", text: "Salgo desde Pilar el viernes a la tarde.", time: "08:21", isMe: false },
-    { id: "6", userId: "pedro", userName: "Pedro", text: "Perfecto, te llamo y coordinamos documentación, horario y punto de carga.", time: "08:25", isMe: false }
-  ],
-  mercado: [
-    { id: "1", userId: "fernando", userName: "Fernando", text: "¿Dónde se juega el próximo torneo de roda?", time: "12:02", isMe: false },
-    { id: "2", userId: "julian", userName: "Julián", text: "Necesito comprar una rueda para entrenamiento. ¿Alguna recomendación?", time: "12:06", isMe: false },
-    { id: "3", userId: "pedro", userName: "Pedro", text: "Hoy hay práctica en Ellerstina a las 17 hs, con cupos limitados.", time: "12:12", isMe: false },
-    { id: "4", userId: "fernando", userName: "Fernando", text: "Me interesa participar. ¿Puedo confirmar asistencia?", time: "12:16", isMe: false },
-    { id: "5", userId: "pedro", userName: "Pedro", text: "Sí, hay un cupo disponible. Lleva casco y equipo completo.", time: "12:18", isMe: false },
-    { id: "6", userId: "julian", userName: "Julián", text: "Después pasen contacto del proveedor de ruedas, por favor.", time: "12:21", isMe: false }
-  ],
-  hurlingham: [
-    { id: "1", userId: "nico", userName: "Nico", text: "¿Dónde hay una práctica en Luján esta tarde?", time: "14:47", isMe: false },
-    { id: "2", userId: "me", userName: "Vos", text: "En La Ensenada hay cupo para tres jugadores a las 15 hs.", time: "14:50", isMe: true },
-    { id: "3", userId: "cata", userName: "Cata", text: "¿De cuántos goles es la práctica?", time: "14:52", isMe: false },
-    { id: "4", userId: "me", userName: "Vos", text: "Bajo handicap, ideal para 0 a 4 goles.", time: "14:54", isMe: true },
-    { id: "5", userId: "nico", userName: "Nico", text: "Me sirve. Confirmo mi asistencia si todavía hay disponibilidad.", time: "14:56", isMe: false },
-    { id: "6", userId: "cata", userName: "Cata", text: "Avísenme si queda un cupo, estoy cerca de Luján.", time: "14:59", isMe: false }
-  ],
-  noticias: [
-    { id: "1", userId: "gonza", userName: "Gonzalo Reyes", text: "Nueva clasificación de handicap publicada por la AAP 📋", time: "08:30", isMe: false },
-    { id: "2", userId: "cami", userName: "Camila Méndez", text: "Varios jugadores subieron este mes, el nivel sigue creciendo", time: "08:33", isMe: false },
-    { id: "3", userId: "me", userName: "Vos", text: "¿Alguien sabe si habrá cambios en el formato del Abierto?", time: "08:35", isMe: true },
-    { id: "4", userId: "gonza", userName: "Gonzalo Reyes", text: "Se rumorea que van a agregar una fase de grupos antes de cuartos", time: "08:37", isMe: false },
-    { id: "5", userId: "cami", userName: "Camila Méndez", text: "Eso haría el torneo más largo pero mucho más emocionante", time: "08:39", isMe: false },
-    { id: "6", userId: "me", userName: "Vos", text: "Totalmente de acuerdo, más partidos siempre es mejor 🏆", time: "08:40", isMe: true },
-    { id: "7", userId: "gonza", userName: "Gonzalo Reyes", text: "Lo confirmarían en la reunión de la AAP del próximo mes", time: "08:43", isMe: false }
-  ],
-  tortugas: [
-    { id: "1", userId: "rami", userName: "Ramiro Vidal", text: "El campo de Tortugas está impecable para el torneo 🌿", time: "13:00", isMe: false },
-    { id: "2", userId: "sofi", userName: "Sofía López", text: "Las canchas las acondicionaron toda la semana pasada", time: "13:02", isMe: false },
-    { id: "3", userId: "me", userName: "Vos", text: "¿A qué hora abre el predio para el público?", time: "13:05", isMe: true },
-    { id: "4", userId: "emilio", userName: "Emilio Roca", text: "A partir de las 10:00 en todos los días de partido", time: "13:06", isMe: false },
-    { id: "5", userId: "rami", userName: "Ramiro Vidal", text: "Hay servicio de catering y zona VIP nueva este año", time: "13:08", isMe: false },
-    { id: "6", userId: "sofi", userName: "Sofía López", text: "El torneo tiene equipos de hasta 20 de handicap", time: "13:10", isMe: false },
-    { id: "7", userId: "me", userName: "Vos", text: "Va a ser tremendo el nivel!", time: "13:12", isMe: true },
-    { id: "8", userId: "emilio", userName: "Emilio Roca", text: "Primer partido el viernes 6 de junio a las 14:00", time: "13:14", isMe: false },
-    { id: "9", userId: "rami", userName: "Ramiro Vidal", text: "Los esperamos a todos! 🐎", time: "13:15", isMe: false }
-  ]
-};
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const USER_COLORS = [

@@ -8,6 +8,7 @@ import {
   Keyboard,
   Linking,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,6 +16,7 @@ import {
 } from "react-native";
 import { Screen } from "@/components/Screen";
 import { AppColors, useTheme, useThemeColors } from "@/constants/theme";
+import { useAuth } from "@/contexts/AuthContext";
 import { useLocale } from "@/contexts/LocaleContext";
 import { uploadProductImage } from "@/services/api/market";
 import { type ProductStatus, type MarketCategory } from "@/services/market";
@@ -25,6 +27,7 @@ const productStates: ProductStatus[] = ["Nuevo", "Usado", "Reacondicionado"];
 type PublishCategory = Exclude<MarketCategory, "todos">;
 
 const publishCategories: PublishCategory[] = ["equipamiento", "indumentaria", "vehiculos", "inmueble"];
+const maxProductImages = 10;
 
 export default function MarketPublishScreen() {
   const colors = useThemeColors();
@@ -32,15 +35,19 @@ export default function MarketPublishScreen() {
   const styles = createStyles(colors);
   const router = useRouter();
   const { t } = useLocale();
+  const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { products, addProduct, updateProduct, deleteProduct } = useMarket();
   const existingProduct = useMemo(() => products.find((product) => product.id === id), [id, products]);
-  const [imageUrl, setImageUrl] = useState("");
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [manualImageUrl, setManualImageUrl] = useState("");
   const [name, setName] = useState("");
   const [selectedState, setSelectedState] = useState<ProductStatus>("Nuevo");
   const [selectedCategory, setSelectedCategory] = useState<PublishCategory>("equipamiento");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
+  const [useAccountPhone, setUseAccountPhone] = useState(true);
+  const [customContactPhone, setCustomContactPhone] = useState("");
   const nameInputRef = useRef<TextInput>(null);
   const priceInputRef = useRef<TextInput>(null);
   const descriptionInputRef = useRef<TextInput>(null);
@@ -51,13 +58,43 @@ export default function MarketPublishScreen() {
       return;
     }
 
-    setImageUrl(existingProduct.image);
+    const nextImages = (existingProduct.images ?? []).filter((entry) => Boolean(entry?.trim()));
+    setImageUrls(nextImages.length > 0 ? nextImages : (existingProduct.image ? [existingProduct.image] : []));
+    setManualImageUrl("");
     setName(existingProduct.name);
     setSelectedState(existingProduct.status);
     setSelectedCategory(existingProduct.category);
     setPrice(String(existingProduct.price));
     setDescription(existingProduct.description);
+    setCustomContactPhone(existingProduct.contactPhone ?? "");
+    setUseAccountPhone(!existingProduct.contactPhone);
   }, [existingProduct]);
+
+  const addImageUrl = (url: string) => {
+    const normalized = url.trim();
+    if (!normalized) return;
+
+    setImageUrls((current) => {
+      if (current.includes(normalized)) {
+        return current;
+      }
+      return [...current, normalized];
+    });
+  };
+
+  const appendImageUrls = (urls: string[]) => {
+    setImageUrls((current) => {
+      const next = [...current];
+      urls.forEach((url) => {
+        const normalized = url.trim();
+        if (!normalized) return;
+        if (next.includes(normalized)) return;
+        if (next.length >= maxProductImages) return;
+        next.push(normalized);
+      });
+      return next;
+    });
+  };
 
   const normalizedPrice = Number(price.replace(/[^0-9.]/g, ""));
 
@@ -70,14 +107,33 @@ export default function MarketPublishScreen() {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      allowsMultipleSelection: true,
+      selectionLimit: maxProductImages,
       quality: 0.8
     });
 
-    if (result.canceled || !result.assets[0]?.uri) return;
+    if (result.canceled || (result.assets?.length ?? 0) === 0) return;
 
-    const uploadedUrl = await uploadProductImage(result.assets[0].uri);
-    setImageUrl(uploadedUrl);
+    const availableSlots = Math.max(0, maxProductImages - imageUrls.length);
+    if (availableSlots === 0) {
+      Alert.alert("Límite alcanzado", `Podés subir hasta ${maxProductImages} fotos por publicación.`);
+      return;
+    }
+
+    const selectedAssets = result.assets.slice(0, availableSlots);
+    const uploadedUrls: string[] = [];
+
+    for (const asset of selectedAssets) {
+      if (!asset.uri) continue;
+      const uploadedUrl = await uploadProductImage(asset.uri);
+      uploadedUrls.push(uploadedUrl);
+    }
+
+    appendImageUrls(uploadedUrls);
+
+    if (result.assets.length > selectedAssets.length) {
+      Alert.alert("Límite alcanzado", `Solo se agregaron ${selectedAssets.length} fotos porque el límite es ${maxProductImages}.`);
+    }
   };
 
   const uploadImageFromCamera = async () => {
@@ -95,7 +151,7 @@ export default function MarketPublishScreen() {
     if (result.canceled || !result.assets[0]?.uri) return;
 
     const uploadedUrl = await uploadProductImage(result.assets[0].uri);
-    setImageUrl(uploadedUrl);
+    appendImageUrls([uploadedUrl]);
   };
 
   const handlePickImage = () => {
@@ -122,13 +178,13 @@ export default function MarketPublishScreen() {
 
   const isSubmitDisabled = useMemo(() => {
     return (
-      !imageUrl.trim() ||
+      imageUrls.length === 0 ||
       !name.trim() ||
       !description.trim() ||
       !Number.isFinite(normalizedPrice) ||
       normalizedPrice <= 0
     );
-  }, [description, imageUrl, name, normalizedPrice]);
+  }, [description, imageUrls.length, name, normalizedPrice]);
 
   return (
     <Screen
@@ -166,10 +222,10 @@ export default function MarketPublishScreen() {
 
       <View style={styles.form}>
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>{t("marketPublish.image")}</Text>
-          <Pressable style={[styles.uploadBox, imageUrl ? styles.uploadBoxWithImage : null]} onPress={handlePickImage}>
-            {imageUrl ? (
-              <Image source={{ uri: imageUrl }} style={styles.uploadPreview} resizeMode="cover" />
+          <Text style={styles.sectionLabel}>{t("marketPublish.image")} ({imageUrls.length}/{maxProductImages})</Text>
+          <Pressable style={[styles.uploadBox, imageUrls.length > 0 ? styles.uploadBoxWithImage : null]} onPress={handlePickImage}>
+            {imageUrls.length > 0 ? (
+              <Image source={{ uri: imageUrls[0] }} style={styles.uploadPreview} resizeMode="cover" />
             ) : (
               <>
                 <Ionicons name="cloud-upload-outline" size={30} color={colors.primaryDark} />
@@ -178,17 +234,50 @@ export default function MarketPublishScreen() {
               </>
             )}
           </Pressable>
+          {imageUrls.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageGalleryRow}>
+              {imageUrls.map((url, index) => (
+                <View key={`${url}-${index}`} style={styles.galleryThumbWrap}>
+                  <Image source={{ uri: url }} style={styles.galleryThumb} resizeMode="cover" />
+                  <View style={styles.thumbOrderBadge}>
+                    <Text style={styles.thumbOrderText}>{index + 1}</Text>
+                  </View>
+                  <Pressable
+                    style={styles.removeThumbBtn}
+                    onPress={() => {
+                      setImageUrls((current) => current.filter((_, currentIndex) => currentIndex !== index));
+                    }}
+                  >
+                    <Ionicons name="close" size={14} color="#fff" />
+                  </Pressable>
+                </View>
+              ))}
+            </ScrollView>
+          ) : null}
           <TextInput
             style={styles.input}
             placeholder={t("marketPublish.imageUrl")}
             placeholderTextColor={colors.muted}
-            value={imageUrl}
-            onChangeText={setImageUrl}
+            value={manualImageUrl}
+            onChangeText={setManualImageUrl}
             autoCapitalize="none"
             autoCorrect={false}
-            returnKeyType="next"
-            onSubmitEditing={() => nameInputRef.current?.focus()}
+            returnKeyType="done"
+            onSubmitEditing={() => {
+              addImageUrl(manualImageUrl);
+              setManualImageUrl("");
+            }}
           />
+          <Pressable
+            style={styles.descriptionDoneButton}
+            onPress={() => {
+              addImageUrl(manualImageUrl);
+              setManualImageUrl("");
+            }}
+          >
+            <Text style={styles.descriptionDoneText}>Agregar URL como foto</Text>
+          </Pressable>
+          <Text style={styles.helperText}>El orden queda según selección: la foto 1 será la portada.</Text>
         </View>
 
         <View style={styles.sectionCard}>
@@ -290,17 +379,52 @@ export default function MarketPublishScreen() {
           </View>
         </View>
 
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionLabel}>Teléfono de contacto</Text>
+          <Text style={styles.uploadText}>Elegí si querés usar tu número de cuenta o uno específico de esta publicación.</Text>
+          <View style={styles.stateRow}>
+            <Pressable
+              style={[styles.stateChip, useAccountPhone && styles.stateChipActive]}
+              onPress={() => setUseAccountPhone(true)}
+            >
+              <Text style={[styles.stateChipText, useAccountPhone && styles.stateChipTextActive]}>
+                Usar el de mi cuenta{user?.phone ? ` (${user.phone})` : ""}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.stateChip, !useAccountPhone && styles.stateChipActive]}
+              onPress={() => setUseAccountPhone(false)}
+            >
+              <Text style={[styles.stateChipText, !useAccountPhone && styles.stateChipTextActive]}>
+                Usar otro número
+              </Text>
+            </Pressable>
+          </View>
+          {!useAccountPhone ? (
+            <TextInput
+              style={styles.input}
+              placeholder="Ej: +54 11 5555-5555"
+              placeholderTextColor={colors.muted}
+              value={customContactPhone}
+              onChangeText={setCustomContactPhone}
+              keyboardType="phone-pad"
+            />
+          ) : null}
+        </View>
+
         <Pressable
           style={[styles.publishButton, isSubmitDisabled && styles.publishButtonDisabled]}
           disabled={isSubmitDisabled}
           onPress={async () => {
             const payload = {
-              image: imageUrl.trim(),
+              image: imageUrls[0]?.trim() ?? "",
+              images: imageUrls,
               name: name.trim(),
               price: normalizedPrice,
               status: selectedState,
               description: description.trim(),
-              category: selectedCategory
+              category: selectedCategory,
+              contactPhone: useAccountPhone ? undefined : customContactPhone.trim() || undefined
             };
 
             try {
@@ -449,6 +573,52 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     textAlign: "center"
+  },
+  imageGalleryRow: {
+    gap: 8,
+    paddingVertical: 4
+  },
+  galleryThumbWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 12,
+    overflow: "hidden",
+    position: "relative",
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceStrong
+  },
+  galleryThumb: {
+    width: "100%",
+    height: "100%"
+  },
+  removeThumbBtn: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.65)"
+  },
+  thumbOrderBadge: {
+    position: "absolute",
+    left: 4,
+    bottom: 4,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(10, 26, 47, 0.8)"
+  },
+  thumbOrderText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "800"
   },
   input: {
     minHeight: 48,

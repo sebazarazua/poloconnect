@@ -26,13 +26,23 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getHomeContent } from "@/services/api/content";
 import { listMatches } from "@/services/api/matches";
 import { resolveContentImageSource } from "@/services/content-images";
+import { parseContentTarget } from "@/services/content-targets";
 import { Match } from "@/services/matches";
 
 const screenHorizontalPadding = 40;
 const featuredMatchBackground = require("../../assets/home-match-bg.png");
-const poloHubUrl = "https://polohub.net/";
 const matchSlideDurationMs = 7000;
 const newsSlideDurationMs = 4300;
+const homePrimaryBannerDesignWidth = 390;
+const homePrimaryBannerBaseHeight = 146;
+
+function getResponsiveBannerHeight(baseHeight: number, currentWidth: number) {
+  const scaledHeight = Math.round((currentWidth / homePrimaryBannerDesignWidth) * baseHeight);
+  const minHeight = Math.round(baseHeight * 0.82);
+  const maxHeight = Math.round(baseHeight * 1.45);
+
+  return Math.max(minHeight, Math.min(maxHeight, scaledHeight));
+}
 
 const fallbackAds = [
   require("../../assets/ads/home/hero-1.png"),
@@ -45,6 +55,11 @@ const fallbackCompactAds = [
   require("../../assets/ads/home/compact-2.png"),
   require("../../assets/ads/home/compact-3.png")
 ];
+
+type HomeAdItem = {
+  imageUrl: string;
+  targetUrl?: string;
+};
 
 export default function HomeScreen() {
   const colors = useThemeColors();
@@ -59,16 +74,28 @@ export default function HomeScreen() {
   const [activeHero, setActiveHero] = useState(0);
   const { width } = useWindowDimensions();
   const bannerWidth = Math.max(width - screenHorizontalPadding, 280);
+  const primaryBannerHeight = getResponsiveBannerHeight(homePrimaryBannerBaseHeight, bannerWidth);
   const welcomeName = user?.firstName?.trim() || "Adrian";
-  const [homeContent, setHomeContent] = useState<{ heroAds: string[]; compactAds: string[]; news: Array<{ title: string; subtitle?: string; body?: string; imageUrl: string; targetUrl?: string }> }>({
+  const [homeContent, setHomeContent] = useState<{ heroAds: HomeAdItem[]; compactAds: HomeAdItem[]; news: Array<{ title: string; subtitle?: string; body?: string; imageUrl: string; targetUrl?: string }> }>({
     heroAds: [],
     compactAds: [],
     news: []
   });
   const [liveMatches, setLiveMatches] = useState<Match[]>([]);
 
-  const openPoloHub = () => {
-    Linking.openURL(poloHubUrl);
+  const openTargetUrl = async (targetUrl?: string) => {
+    const target = parseContentTarget(targetUrl);
+
+    if (target.kind === "none") {
+      return;
+    }
+
+    if (target.kind === "shop") {
+      router.push({ pathname: "/brand-catalog", params: { id: target.brandId } });
+      return;
+    }
+
+    await Linking.openURL(target.url);
   };
   const openFeaturedMatch = (id: string) => {
     router.push({
@@ -81,8 +108,8 @@ export default function HomeScreen() {
     void getHomeContent()
       .then((payload) => {
         setHomeContent({
-          heroAds: payload.heroAds.map((item) => item.imageUrl),
-          compactAds: payload.compactAds.map((item) => item.imageUrl),
+          heroAds: payload.heroAds.map((item) => ({ imageUrl: item.imageUrl, targetUrl: item.targetUrl ?? undefined })),
+          compactAds: payload.compactAds.map((item) => ({ imageUrl: item.imageUrl, targetUrl: item.targetUrl ?? undefined })),
           news: payload.news.map((item) => ({
             title: item.title ?? t("home.fallbackNewsTitle"),
             subtitle: item.subtitle ?? t("home.fallbackNewsCategory"),
@@ -108,8 +135,10 @@ export default function HomeScreen() {
       .catch(() => setLiveMatches([]));
   }, [t]);
 
-  const ads = homeContent.heroAds.length > 0 ? homeContent.heroAds.map((uri) => resolveContentImageSource(uri)) : fallbackAds;
-  const compactAds = homeContent.compactAds.length > 0 ? homeContent.compactAds.map((uri) => resolveContentImageSource(uri)) : fallbackCompactAds;
+  const ads = homeContent.heroAds.length > 0 ? homeContent.heroAds.map((ad) => resolveContentImageSource(ad.imageUrl)) : fallbackAds;
+  const adTargetUrls = homeContent.heroAds.length > 0 ? homeContent.heroAds.map((ad) => ad.targetUrl) : [];
+  const compactAds = homeContent.compactAds.length > 0 ? homeContent.compactAds.map((ad) => resolveContentImageSource(ad.imageUrl)) : fallbackCompactAds;
+  const compactAdTargetUrls = homeContent.compactAds.length > 0 ? homeContent.compactAds.map((ad) => ad.targetUrl) : [];
 
   const quickAccessItems = [
     { key: "calendar", label: t("home.calendar"), icon: "calendar-outline" },
@@ -327,7 +356,7 @@ export default function HomeScreen() {
                 styles.newsHero,
                 { width: bannerWidth }
               ]}
-              onPress={() => Linking.openURL(item.targetUrl ?? poloHubUrl)}
+              onPress={() => void openTargetUrl(item.targetUrl)}
             >
               {item.imageUrl ? (
                 <Image
@@ -430,12 +459,13 @@ export default function HomeScreen() {
         contentContainerStyle={styles.adsTrack}
       >
         {ads.map((ad, index) => (
-          <View
+          <Pressable
             key={`home-hero-${index}`}
-            style={[styles.adBanner, { width: bannerWidth }]}
+            onPress={() => void openTargetUrl(adTargetUrls[index])}
+            style={[styles.adBanner, { width: bannerWidth, height: primaryBannerHeight }]}
           >
             <Image source={ad} style={styles.adImage} resizeMode="cover" />
-          </View>
+          </Pressable>
         ))}
       </ScrollView>
       <View style={styles.dots}>
@@ -476,7 +506,7 @@ export default function HomeScreen() {
           </Pressable>
         ))}
       </View>
-      <AdCarousel images={compactAds} height={90} />
+      <AdCarousel images={compactAds} targetUrls={compactAdTargetUrls} height={90} />
     </Screen>
   );
 }
@@ -584,7 +614,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginBottom: 8
   },
   adBanner: {
-    height: 146,
     borderRadius: 18,
     backgroundColor: colors.surfaceStrong,
     overflow: "hidden"

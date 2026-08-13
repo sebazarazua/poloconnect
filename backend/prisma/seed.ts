@@ -86,78 +86,14 @@ async function main() {
   // El seed base no debe dejar partidos live de demo activos.
   await prisma.match.deleteMany({ where: { externalCode: "2-1" } });
 
-  await prisma.product.deleteMany({ where: { sellerId: user.id } });
-
-  const products = [
-    [
-      "Silla Butet Usada",
-      3200,
-      "equipamiento",
-      "Usado",
-      "Silla profesional en buen estado.",
-      "https://images.pexels.com/photos/1174104/pexels-photo-1174104.jpeg?auto=compress&cs=tinysrgb&w=1200"
-    ],
-    [
-      "Casco Kep Italia",
-      980,
-      "equipamiento",
-      "Nuevo",
-      "Casco liviano y ventilado.",
-      "https://images.pexels.com/photos/163452/sport-treadmill-tor-route-163452.jpeg?auto=compress&cs=tinysrgb&w=1200"
-    ],
-    [
-      "Camisa La Martina Oficial",
-      120,
-      "indumentaria",
-      "Nuevo",
-      "Camisa oficial para competencia.",
-      "https://images.pexels.com/photos/1124465/pexels-photo-1124465.jpeg?auto=compress&cs=tinysrgb&w=1200"
-    ],
-    [
-      "Vehiculo Transporte",
-      15000,
-      "vehiculos",
-      "Usado",
-      "Vehículo adaptado para caballos y equipamiento.",
-      "https://images.pexels.com/photos/1592384/pexels-photo-1592384.jpeg?auto=compress&cs=tinysrgb&w=1200"
-    ]
-  ] as const;
-  for (const [title, price, category, condition, description, imageUrl] of products) {
-    const product = await prisma.product.create({
-      data: {
-        sellerId: user.id,
-        title,
-        priceCents: price * 100,
-        category,
-        condition,
-        description,
-        status: "active"
-      }
-    });
-    await prisma.productImage.create({ data: { productId: product.id, url: imageUrl, position: 1 } });
-  }
-
   for (const room of [
     ["palermo", "Comunidad Polo Arena", "Partidos, horarios y convocatorias de polo arena.", "trophy-outline", "#d8ecff", false],
     ["dolfina", "Comunidad Logística Caballos", "Coordinación de traslados, cupos y viajes compartidos.", "radio-outline", "#e8f7f4", false],
     ["mercado", "Comunidad Roda Polo", "Torneos, ruedas, prácticas y partidos abiertos.", "swap-horizontal-outline", "#fff4dc", false],
     ["hurlingham", "Comunidad Bajo Buenos Aires", "Prácticas, canchas y jugadores disponibles por zona.", "calendar-outline", "#eaf5ff", true]
   ] as const) {
-    const chat = await prisma.chatRoom.upsert({ where: { externalCode: room[0] }, update: {}, create: { externalCode: room[0], title: room[1], description: room[2], kind: "general", icon: room[3], tone: room[4], isRecommended: room[5] } });
-    if (!room[5]) {
-      await prisma.chatMembership.upsert({ where: { roomId_userId: { roomId: chat.id, userId: user.id } }, update: {}, create: { roomId: chat.id, userId: user.id } });
-      await prisma.chatMessage.upsert({ where: { roomId_messageNumber: { roomId: chat.id, messageNumber: BigInt(1) } }, update: {}, create: { roomId: chat.id, userId: user.id, messageNumber: BigInt(1), body: "Bienvenido a la comunidad.", bodySanitized: "Bienvenido a la comunidad." } });
-    }
+    await prisma.chatRoom.upsert({ where: { externalCode: room[0] }, update: {}, create: { externalCode: room[0], title: room[1], description: room[2], kind: "general", icon: room[3], tone: room[4], isRecommended: room[5] } });
   }
-
-  await prisma.notification.createMany({
-    data: [
-      { userId: user.id, kind: "tournament", title: "Nuevo torneo disponible", body: "La Dolfina Polo Ranch abrió inscripciones." },
-      { userId: user.id, kind: "match", title: "Partido en vivo ahora", body: "La Dolfina vs Ellerstina está transmitiendo." },
-      { userId: user.id, kind: "market", title: "Tu publicación fue aprobada", body: "Tu aviso quedó activo." }
-    ],
-    skipDuplicates: true
-  });
 
   const homeHeroAds = [
     { sortOrder: 1, imageUrl: "asset:home/hero-1", targetUrl: "https://polohub.net/" },

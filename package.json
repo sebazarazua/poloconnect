@@ -5,7 +5,9 @@
   "scripts": {
     "start": "npm --prefix frontend run start",
     "dev:up": "npm run ports:free && npm run infra:up && npm run backend:migrate && npm run dev:apps",
+    "dev:up:phone": "npm run ports:free && npm run infra:up && npm run backend:migrate && npm run dev:apps:phone",
     "dev:apps": "concurrently -n backend,frontend -c blue,green \"npm run backend:dev\" \"npm run frontend:start\"",
+    "dev:apps:phone": "concurrently -n backend,expo-go -c blue,green \"npm run backend:dev\" \"npm run frontend:start:tunnel\"",
     "dev:down": "npm run infra:down",
     "ports:free": "kill-port 4000 8081",
     "infra:up": "docker compose -f backend/docker-compose.yml up -d",
@@ -15,6 +17,8 @@
     "backend:seed:live-match": "npm --prefix backend run prisma:seed:live-match",
     "backend:seed:brands-showcase": "npm --prefix backend run prisma:seed:brands-showcase",
     "frontend:start": "npm --prefix frontend run start",
+    "frontend:start:tunnel": "npm --prefix frontend run start:tunnel",
+    "frontend:start:lan": "npm --prefix frontend run start:lan",
     "frontend:android": "npm --prefix frontend run android",
     "frontend:ios": "npm --prefix frontend run ios",
     "frontend:web": "npm --prefix frontend run web",
@@ -26,7 +30,7 @@
     "typecheck:all": "npm run typecheck:frontend && npm run typecheck:backend"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1",
+    "concurrently": "^9.2.4",
     "kill-port": "^2.0.1",
     "@types/react": "~19.2.14",
     "typescript": "~6.0.3"

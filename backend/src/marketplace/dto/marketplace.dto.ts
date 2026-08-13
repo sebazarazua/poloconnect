@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsIn, IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { IsArray, IsIn, IsNumber, IsOptional, IsString, Min } from "class-validator";
 import { PaginationDto } from "../../common/dto/pagination.dto";
 
 export class ProductQueryDto extends PaginationDto {
@@ -17,6 +17,7 @@ export class ProductUpsertDto {
   @Type(() => Number) @IsNumber() @Min(1) price!: number;
   @IsOptional() @IsString() currency?: string;
   @IsOptional() @IsString() imageUrl?: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) imageUrls?: string[];
   @IsOptional() @IsString() location?: string;
 }
 

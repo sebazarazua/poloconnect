@@ -70,10 +70,6 @@ export default function SettingsScreen() {
         const nextSettings = await getMySettings();
         if (!cancelled) {
           setSettings(nextSettings);
-          setMode(nextSettings.theme as ThemeMode);
-          if (nextSettings.locale === "es-AR" || nextSettings.locale === "en-US") {
-            setLocale(nextSettings.locale);
-          }
         }
       } finally {
         if (!cancelled) {
@@ -87,7 +83,7 @@ export default function SettingsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [setLocale, setMode]);
+  }, []);
 
   const persistSettings = async (nextSettings: UserSettings) => {
     setSaving(true);

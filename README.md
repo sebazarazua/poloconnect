@@ -1,95 +1,229 @@
 # Polo Connect
 
-Workspace ordenado en dos partes:
+Paso a paso definitivo para levantar la app, poder registrarte, loguearte y usar Expo Go sin depender del agente.
 
-- `frontend/`: app Expo / React Native / TypeScript con Expo Router.
-- `backend/`: API NestJS + Prisma + PostgreSQL, con Redis para soporte.
+## Comandos probados (copiar y pegar)
 
-El front usa Contexts y datos mock en memoria para auth, market, community y matches. El back real vive en `backend/src` y ya tiene Docker para la base y Redis.
-
-## Como correr
+1. Preparacion (una sola vez):
 
 ```bash
 npm install
-npm run frontend:start
+copy backend\.env.example backend\.env
+copy frontend\.env.example frontend\.env
+npm --prefix frontend install --legacy-peer-deps
 ```
 
-## Levantar toda la app de una
-
-Comando unico desde la raiz del repo:
+2. Levantar backend:
 
 ```bash
-npm install
-npm run dev:up
+npm run ports:free
+npm run infra:up
+npm run backend:migrate
+npm run backend:dev
 ```
 
-Esto hace en orden:
-- Libera puertos de desarrollo (4000 backend, 8081 frontend) si estaban ocupados.
-- Levanta Postgres y Redis via Docker Compose.
-- Ejecuta migraciones de Prisma en backend.
-- Arranca backend (watch) y frontend Expo en paralelo.
-
-Nota: el script intenta liberar esos puertos automaticamente. Si tenes algo importante corriendo en 4000/8081, detenelo manualmente antes de usar `npm run dev:up`.
-
-Para bajar infraestructura Docker:
-
-```bash
-npm run dev:down
-```
-
-## Remates de caballos sin mock
-
-Los remates NO se crean con el seed general. Si no corres el seed especifico, la seccion queda vacia.
-
-Para poblar eventos y caballos con imagenes:
-
-```bash
-npm run backend:seed:auctions
-```
-
-Seed opcional para visualizar el catalogo de marcas con mas volumen (5 marcas con 5 productos cada una):
-
-```bash
-npm run backend:seed:brands-showcase
-```
-
-Tambien podes crear eventos/caballos con fotos reales desde dispositivo en la pantalla Gestionar remates (rol admin/superadmin).
-
-Backend local:
-
-```bash
-cd backend
-npm install
-docker compose up -d
-npm run dev
-```
-
-## Auth real (mail + Google + Apple)
-
-1. Backend:
-
-```bash
-cd backend
-copy .env.example .env
-```
-
-Completar en `backend/.env`:
-
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
-- `APPLE_OAUTH_CLIENT_ID` (o `APPLE_OAUTH_CLIENT_IDS` separado por comas para Expo Go + build)
-
-2. Frontend:
+3. En otra terminal, levantar Expo Go con QR:
 
 ```bash
 cd frontend
-copy .env.example .env
+npm run start:tunnel
 ```
 
-Completar en `frontend/.env`:
+4. Validar login seed en app:
 
-- `EXPO_PUBLIC_API_URL`
-- `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
-- `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`
-- `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`
+- identifier: polo.connect
+- password: PoloConnect123!
 
-3. Levantar backend y frontend de nuevo para tomar variables.
+## 1) Requisitos
+
+- Node.js 20+
+- npm 10+
+- Docker Desktop encendido
+- Expo Go en el telefono (si usaras celular)
+
+## 2) Setup inicial (una sola vez)
+
+Desde la raiz del repo:
+
+```bash
+npm install
+copy backend\.env.example backend\.env
+copy frontend\.env.example frontend\.env
+```
+
+Luego instalar frontend (importante en este repo):
+
+```bash
+npm --prefix frontend install --legacy-peer-deps
+```
+
+## 3) Configuracion minima obligatoria de .env
+
+En backend/.env dejar estos valores locales:
+
+```env
+PORT=4000
+API_PREFIX=api/v1
+DATABASE_URL=postgresql://poloconnect:poloconnect@localhost:5432/poloconnect?schema=public
+REDIS_URL=redis://localhost:6379
+JWT_ACCESS_SECRET=replace-with-a-random-secret-at-least-32-chars
+```
+
+En frontend/.env usar UNO de estos escenarios.
+
+Escenario PC local (simulador web/dev en la misma maquina):
+
+```env
+EXPO_PUBLIC_API_URL=http://localhost:4000/api/v1
+```
+
+Escenario telefono con Expo Go (recomendado para uso real):
+
+```env
+EXPO_PUBLIC_API_URL=http://TU_IP_LOCAL:4000/api/v1
+```
+
+Para obtener TU_IP_LOCAL en Windows (PowerShell):
+
+```powershell
+$ip=(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch 'Loopback|vEthernet|WSL|Hyper-V' -and $_.IPAddress -match '^192\.|^10\.|^172\.(1[6-9]|2[0-9]|3[0-1])\.' } | Select-Object -First 1 -ExpandProperty IPAddress); if (-not $ip) { $ip=(ipconfig | Select-String -Pattern 'IPv4 Address|Direccion IPv4|Dirección IPv4' | Select-Object -First 1).ToString().Split(':')[-1].Trim() }; $ip
+```
+
+## 4) Arranque recomendado (definitivo)
+
+Este flujo evita problemas de QR oculto por logs mezclados.
+
+Terminal 1 (raiz):
+
+```bash
+npm run ports:free
+npm run infra:up
+npm run backend:migrate
+npm run backend:dev
+```
+
+Terminal 2 (separada):
+
+```bash
+cd frontend
+npm run start:tunnel
+```
+
+Atencion: el comando es start:tunnel (sin espacio). No usar start: tunnel.
+
+Si pregunta por puerto ocupado, responde Y para cambiar (por ejemplo 8082).
+
+Cuando este bien, veras:
+
+- Metro waiting on exp://...
+- un QR en terminal
+
+## 5) Como abrir en Expo Go
+
+1. Abri Expo Go en el telefono.
+2. Escanea el QR de la terminal donde corriste start:tunnel.
+3. Si no queres QR, abre el link exp://... que aparece en esa terminal.
+
+## 6) Verificacion rapida de salud
+
+En otra terminal, desde la raiz:
+
+```bash
+curl http://localhost:4000/api/v1/health
+docker ps
+```
+
+Debe responder status ok y contenedores postgres/redis en healthy.
+
+## 7) Registro y login
+
+Registro:
+
+- Usa la pantalla Register de la app.
+- Debe funcionar si backend esta arriba y EXPO_PUBLIC_API_URL apunta bien.
+
+Login con usuario seed:
+
+```bash
+npm --prefix backend run prisma:seed
+```
+
+Credenciales:
+
+- identifier: polo.connect (o adrian@poloconnect.app)
+- password: PoloConnect123!
+
+## 8) Datos demo para usar mas modulos
+
+```bash
+npm run backend:seed:auctions
+npm run backend:seed:brands-showcase
+npm run backend:seed:live-match
+```
+
+## 9) Uso desde PC (web)
+
+La app general esta bloqueada en web por defecto.
+
+Admin web SI habilitado con credenciales:
+
+- /admin-login
+- /admin-panel
+
+Si necesitas habilitar web general solo para desarrollo:
+
+En frontend/.env:
+
+```env
+EXPO_PUBLIC_ENABLE_WEB_DEV=true
+```
+
+Y luego:
+
+```bash
+cd frontend
+npm run web
+```
+
+## 10) Errores comunes y solucion
+
+No aparece QR:
+
+- Corre Expo en terminal separada con npm run start:tunnel.
+- Si pide cambiar puerto, responde Y.
+
+Error npm ERR! Missing script: "start:":
+
+- Ocurre por escribir npm run start: tunnel.
+- Usa npm run start:tunnel.
+
+Error ERESOLVE en frontend:
+
+- Ejecuta npm --prefix frontend install --legacy-peer-deps.
+
+Login/registro falla en telefono:
+
+- No usar localhost en frontend/.env.
+- Usar la IP local de la PC.
+- Reiniciar backend y Expo luego de cambiar .env.
+
+Network request failed:
+
+- Verifica que celular y PC tengan conectividad.
+- Revisa firewall de Windows para puerto 4000.
+
+## 11) Comandos utiles
+
+```bash
+npm run dev:up
+npm run dev:up:phone
+npm run dev:down
+npm run backend:dev
+npm run frontend:start:tunnel
+npm run backend:migrate
+npm run typecheck
+```
+
+## 12) Nota sobre Expo
+
+Si aparece advertencia de version esperada de expo (ejemplo ~54.0.36), no siempre bloquea el arranque ni el login.

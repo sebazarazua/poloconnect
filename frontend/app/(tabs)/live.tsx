@@ -16,7 +16,7 @@ import { AppColors, useThemeColors } from "@/constants/theme";
 import { formatLiveDate } from "@/constants/i18n";
 import { getTeamLogoSource } from "@/constants/teamLogos";
 import { useLocale } from "@/contexts/LocaleContext";
-import { getSectionContent } from "@/services/api/content";
+import { type ContentItem, getSectionContent } from "@/services/api/content";
 import { resolveContentImageSource } from "@/services/content-images";
 import { listMatches } from "@/services/api/matches";
 
@@ -67,7 +67,7 @@ export default function LiveScreen() {
     return date;
   }, []);
   const [matches, setMatches] = useState<Match[]>([]);
-  const [remoteAds, setRemoteAds] = useState<string[]>([]);
+  const [remoteAds, setRemoteAds] = useState<ContentItem[]>([]);
 
   useEffect(() => {
     void listMatches(selectedDate).then(setMatches);
@@ -75,12 +75,17 @@ export default function LiveScreen() {
 
   useEffect(() => {
     void getSectionContent("live", "ads")
-      .then((items) => setRemoteAds(items.map((item) => item.imageUrl)))
+      .then((items) => setRemoteAds(items))
       .catch(() => setRemoteAds([]));
   }, []);
 
   const adImages = useMemo(
-    () => (remoteAds.length > 0 ? remoteAds.map((uri) => resolveContentImageSource(uri)) : liveAds),
+    () => (remoteAds.length > 0 ? remoteAds.map((item) => resolveContentImageSource(item.imageUrl)) : liveAds),
+    [remoteAds]
+  );
+
+  const adTargetUrls = useMemo(
+    () => (remoteAds.length > 0 ? remoteAds.map((item) => item.targetUrl ?? undefined) : []),
     [remoteAds]
   );
 
@@ -121,7 +126,7 @@ export default function LiveScreen() {
       title={t("live.title")}
       subtitle={t("live.subtitle")}
     >
-      <AdCarousel images={adImages} height={95} />
+      <AdCarousel images={adImages} targetUrls={adTargetUrls} height={95} />
 
       {/* Header con navegación de fechas */}
       <View style={styles.dateHeaderContainer}>

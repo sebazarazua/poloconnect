@@ -1,16 +1,19 @@
-import { Stack } from "expo-router";
+import { Redirect, Stack, usePathname } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { LocaleProvider } from "@/contexts/LocaleContext";
+import { LocaleProvider, useLocale } from "@/contexts/LocaleContext";
 import { MarketProvider } from "@/contexts/MarketContext";
 import { CommunityProvider } from "@/contexts/CommunityContext";
 import { ThemeProvider, useTheme } from "@/constants/theme";
+import { getMySettings } from "@/services/api/settings";
 
 export default function RootLayout() {
+  const allowWebDev = process.env.EXPO_PUBLIC_ENABLE_WEB_DEV === "true";
+
   return (
     <ThemeProvider>
       <SafeAreaProvider>
@@ -19,8 +22,9 @@ export default function RootLayout() {
             <MarketProvider>
               <CommunityProvider>
                 <ThemedStatusBar />
+                <UserPreferencesHydrator />
                 <PushTokenRegistrar />
-                <RootNavigator />
+                <RootNavigator allowWebDev={allowWebDev} />
               </CommunityProvider>
             </MarketProvider>
           </LocaleProvider>
@@ -28,6 +32,50 @@ export default function RootLayout() {
       </SafeAreaProvider>
     </ThemeProvider>
   );
+}
+
+function UserPreferencesHydrator() {
+  const { isAuthenticated, user } = useAuth();
+  const { setMode } = useTheme();
+  const { setLocale } = useLocale();
+  const hydratedUserId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) {
+      hydratedUserId.current = null;
+      return;
+    }
+
+    if (hydratedUserId.current === user.id) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void getMySettings()
+      .then((settings) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (settings.theme === "dark" || settings.theme === "light") {
+          setMode(settings.theme);
+        }
+
+        if (settings.locale === "es-AR" || settings.locale === "en-US") {
+          setLocale(settings.locale);
+        }
+
+        hydratedUserId.current = user.id;
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, setLocale, setMode, user?.id]);
+
+  return null;
 }
 
 function ThemedStatusBar() {
@@ -62,9 +110,17 @@ function PushTokenRegistrar() {
   return null;
 }
 
-function RootNavigator() {
+function RootNavigator({ allowWebDev }: { allowWebDev: boolean }) {
   const { isAuthenticated } = useAuth();
+  const pathname = usePathname();
   const initialRouteName = isAuthenticated ? "(tabs)" : "login";
+
+  const isWebAdminOnlyMode = Platform.OS === "web" && !allowWebDev;
+  const isAdminPath = pathname === "/admin-login" || pathname === "/admin-panel" || pathname === "/horse-auctions-admin";
+
+  if (isWebAdminOnlyMode && !isAdminPath) {
+    return <Redirect href="/admin-login" />;
+  }
 
   return (
     <Stack initialRouteName={initialRouteName} screenOptions={{ headerShown: false }}>

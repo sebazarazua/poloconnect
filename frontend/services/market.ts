@@ -14,6 +14,7 @@ export type Product = {
   status: ProductStatus;
   publicationStatus?: string;
   description: string;
+  contactPhone?: string;
   seller?: {
     id: string;
     name: string;

@@ -9,6 +9,19 @@ import { ContactSellerDto, ProductQueryDto, ProductUpsertDto } from "./dto/marke
 export class MarketplaceService {
   constructor(private readonly prisma: PrismaService, private readonly config: ConfigService) {}
 
+  private normalizeImageInputs(body: ProductUpsertDto) {
+    const fromList = (body.imageUrls ?? [])
+      .map((entry) => entry?.trim())
+      .filter((entry): entry is string => Boolean(entry));
+    const single = body.imageUrl?.trim();
+
+    if (fromList.length > 0) {
+      return fromList;
+    }
+
+    return single ? [single] : [];
+  }
+
   async listProducts(userId: string, query: ProductQueryDto) {
     const limit = Number(query.limit ?? 20);
     const where: any = { deletedAt: null };
@@ -43,6 +56,8 @@ export class MarketplaceService {
       throw new InternalServerErrorException("Marketplace payment link is not configured.");
     }
 
+    const imageUrls = this.normalizeImageInputs(body);
+
     const product = await this.prisma.product.create({
       data: {
         sellerId: user.id,
@@ -54,7 +69,14 @@ export class MarketplaceService {
         currency: body.currency ?? "USD",
         status: isAdmin ? "active" : "pending_review",
         location: body.location,
-        images: body.imageUrl ? { create: { url: body.imageUrl.trim(), position: 1 } } : undefined
+        images: imageUrls.length > 0
+          ? {
+              create: imageUrls.map((url, index) => ({
+                url,
+                position: index + 1
+              }))
+            }
+          : undefined
       },
       include: { images: true, favorites: true, seller: true }
     });
@@ -73,6 +95,8 @@ export class MarketplaceService {
     const current = await this.prisma.product.findUnique({ where: { id } });
     if (!current || current.deletedAt) throw new NotFoundException("Product not found.");
     if (current.sellerId !== user.id && !user.roles.includes("admin")) throw new ForbiddenException("Product ownership required.");
+    const imageUrls = this.normalizeImageInputs(body);
+
     const product = await this.prisma.product.update({
       where: { id },
       data: {
@@ -87,9 +111,20 @@ export class MarketplaceService {
       },
       include: { images: true, favorites: { where: { userId: user.id } }, seller: true }
     });
-    if (body.imageUrl) {
-      await this.prisma.productImage.upsert({ where: { productId_position: { productId: id, position: 1 } }, update: { url: body.imageUrl }, create: { productId: id, position: 1, url: body.imageUrl } });
+
+    if (imageUrls.length > 0) {
+      await this.prisma.$transaction([
+        this.prisma.productImage.deleteMany({ where: { productId: id } }),
+        this.prisma.productImage.createMany({
+          data: imageUrls.map((url, index) => ({
+            productId: id,
+            url,
+            position: index + 1
+          }))
+        })
+      ]);
     }
+
     return this.getProduct(user.id, id);
   }
 

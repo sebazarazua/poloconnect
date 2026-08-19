@@ -56,6 +56,21 @@ Opcional para aceptar multiples audiencias (por ejemplo Expo Go + build real):
 
 Este valor debe coincidir con el `aud` del token de Apple (Service ID o Bundle ID segun configuracion en Apple Developer).
 
+## Almacenamiento de medios (S3)
+
+Los uploads (avatares, productos, remates de caballos, contenido admin) se guardan en S3. Variables requeridas en `.env`:
+
+- `S3_BUCKET`
+- `S3_ACCESS_KEY`
+- `S3_SECRET_KEY`
+- `S3_REGION`
+- `S3_ENDPOINT` (opcional, para S3-compatible como MinIO/DigitalOcean Spaces)
+- `S3_FORCE_PATH_STYLE` (opcional, `true` para endpoints S3-compatible)
+
+Sin `MEDIA_BASE_URL`, el backend sirve los archivos el mismo a traves de `GET /api/v1/media/*`, haciendo proxy directo a S3 (no requiere el bucket publico).
+
+**CloudFront queda en stand-by** para una futura iteracion. Cuando se habilite, alcanza con setear `MEDIA_BASE_URL` al dominio de la distribucion (por ej. `https://dxxxxxxxxxxxx.cloudfront.net`) para que las URLs de medios se sirvan via CDN en lugar del proxy propio; no requiere cambios de codigo.
+
 ## Modulos incluidos
 
 - Auth con JWT access + refresh rotativo.

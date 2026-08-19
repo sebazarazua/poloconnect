@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { RequestUser } from "../common/decorators/current-user.decorator";
+import { MediaService } from "../common/media/media.service";
 import { PrismaService } from "../database/prisma.service";
 import { UpsertHorseAuctionEventDto, UpsertHorseAuctionHorseDto } from "./dto/upsert-horse-auction-event.dto";
 
 @Injectable()
 export class HorseAuctionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly media: MediaService) {}
 
   async list() {
     const events = await this.prisma.horseAuctionEvent.findMany({
@@ -115,11 +116,13 @@ export class HorseAuctionsService {
   }
 
   async adminCreateEvent(user: RequestUser, dto: UpsertHorseAuctionEventDto) {
+    const imageUrl = await this.normalizeMediaImage("horse-auctions/events", dto.imageUrl);
+
     return this.prisma.horseAuctionEvent.create({
       data: {
         slug: dto.slug,
         title: dto.title,
-        imageUrl: this.normalizeNullable(dto.imageUrl),
+        imageUrl,
         organizer: dto.organizer,
         venue: dto.venue,
         city: dto.city,
@@ -137,13 +140,14 @@ export class HorseAuctionsService {
 
   async adminUpdateEvent(user: RequestUser, eventId: string, dto: UpsertHorseAuctionEventDto) {
     await this.ensureEventExists(eventId);
+    const imageUrl = await this.normalizeMediaImage("horse-auctions/events", dto.imageUrl);
 
     return this.prisma.horseAuctionEvent.update({
       where: { id: eventId },
       data: {
         slug: dto.slug,
         title: dto.title,
-        imageUrl: this.normalizeNullable(dto.imageUrl),
+        imageUrl,
         organizer: dto.organizer,
         venue: dto.venue,
         city: dto.city,
@@ -176,13 +180,14 @@ export class HorseAuctionsService {
 
   async adminCreateHorse(user: RequestUser, eventId: string, dto: UpsertHorseAuctionHorseDto) {
     await this.ensureEventExists(eventId);
+    const imageUrl = await this.normalizeMediaImage("horse-auctions/horses", dto.imageUrl);
 
     return this.prisma.horseAuctionHorse.create({
       data: {
         eventId,
         lotNumber: dto.lotNumber ?? null,
         horseName: dto.horseName,
-        imageUrl: this.normalizeNullable(dto.imageUrl),
+        imageUrl,
         ownerName: dto.ownerName,
         damName: this.normalizeNullable(dto.damName),
         sireName: this.normalizeNullable(dto.sireName),
@@ -205,13 +210,14 @@ export class HorseAuctionsService {
     }
 
     await this.ensureEventExists(horse.eventId);
+    const imageUrl = await this.normalizeMediaImage("horse-auctions/horses", dto.imageUrl);
 
     return this.prisma.horseAuctionHorse.update({
       where: { id: horseId },
       data: {
         lotNumber: dto.lotNumber ?? null,
         horseName: dto.horseName,
-        imageUrl: this.normalizeNullable(dto.imageUrl),
+        imageUrl,
         ownerName: dto.ownerName,
         damName: this.normalizeNullable(dto.damName),
         sireName: this.normalizeNullable(dto.sireName),
@@ -251,5 +257,11 @@ export class HorseAuctionsService {
   private normalizeNullable(value?: string | null) {
     const trimmed = value?.trim();
     return trimmed ? trimmed : null;
+  }
+
+  private async normalizeMediaImage(scope: string, value?: string | null) {
+    const trimmed = value?.trim();
+    if (!trimmed) return null;
+    return this.media.ensureStoredMediaUrl(scope, trimmed, { allowGoogleImport: true });
   }
 }

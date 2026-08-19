@@ -296,37 +296,60 @@ model TournamentRegistrationPlayer {
 }
 
 model Match {
-  id              String        @id @default(uuid()) @db.Uuid
-  externalCode    String?       @unique
-  tournamentId    String?       @db.Uuid
-  clubId          String?       @db.Uuid
-  team1Id         String        @db.Uuid
-  team2Id         String        @db.Uuid
-  scheduledAt     DateTime
-  status          MatchStatus   @default(upcoming)
-  score1          Int           @default(0)
-  score2          Int           @default(0)
-  currentChukker  Int?
-  totalChukkers   Int           @default(6)
-  competitionName String?
-  youtubeUrl      String?
-  videoPreviewUrl String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  deletedAt       DateTime?
-  version         Int           @default(1)
-  tournament      Tournament?   @relation(fields: [tournamentId], references: [id])
-  club            Club?         @relation(fields: [clubId], references: [id])
-  team1           Team          @relation("Team1Matches", fields: [team1Id], references: [id])
-  team2           Team          @relation("Team2Matches", fields: [team2Id], references: [id])
-  lineups         MatchLineup[]
-  stats           MatchStat[]
-  events          MatchEvent[]
+  id                String        @id @default(uuid()) @db.Uuid
+  externalCode      String?       @unique
+  tournamentId      String?       @db.Uuid
+  clubId            String?       @db.Uuid
+  team1Id           String        @db.Uuid
+  team2Id           String        @db.Uuid
+  scheduledAt       DateTime
+  endsAt            DateTime?
+  status            MatchStatus   @default(upcoming)
+  score1            Int           @default(0)
+  score2            Int           @default(0)
+  currentChukker    Int?
+  totalChukkers     Int           @default(6)
+  competitionName   String?
+  youtubeUrl        String?
+  videoPreviewUrl   String?
+  backgroundImageUrl String?
+  refereeMain       String?
+  refereeAssistant  String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  deletedAt         DateTime?
+  version           Int           @default(1)
+  tournament        Tournament?   @relation(fields: [tournamentId], references: [id])
+  club              Club?         @relation(fields: [clubId], references: [id])
+  team1             Team          @relation("Team1Matches", fields: [team1Id], references: [id])
+  team2             Team          @relation("Team2Matches", fields: [team2Id], references: [id])
+  lineups           MatchLineup[]
+  stats             MatchStat[]
+  events            MatchEvent[]
 
   @@index([scheduledAt, status])
   @@index([status, scheduledAt])
   @@index([tournamentId])
   @@index([clubId])
+}
+
+// Generic home-carousel highlight (interview, pre-match, etc.) that is not a
+// Match: only ever surfaces in the home hero carousel while "live", never in
+// the Live tab or Tournaments.
+model SpotlightEvent {
+  id                 String    @id @default(uuid()) @db.Uuid
+  title              String
+  description        String?
+  scheduledAt        DateTime
+  endsAt             DateTime?
+  youtubeUrl         String?
+  backgroundImageUrl String?
+  createdBy          String?   @db.Uuid
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+
+  @@index([scheduledAt, endsAt])
 }
 
 model MatchLineup {

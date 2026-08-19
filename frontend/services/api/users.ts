@@ -14,11 +14,31 @@ export type UploadableImage = {
 
 export function resolveUploadedUrl(url?: string | null) {
   if (!url) return undefined;
-  if (/^https?:\/\//i.test(url)) return url;
 
   const apiUrl = getApiUrl();
   const origin = apiUrl.replace(/\/api\/.*$/, "");
-  return `${origin}${url.startsWith("/") ? url : `/${url}`}`;
+  const normalizePath = (value: string) => {
+    if (value.startsWith("/api/")) return value;
+    if (value.startsWith("/media/")) return `/api/v1${value}`;
+    return value;
+  };
+
+  if (/^https?:\/\//i.test(url)) {
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(url)) {
+      try {
+        const parsed = new URL(url);
+        const normalizedPath = normalizePath(parsed.pathname);
+        return `${origin}${normalizedPath}${parsed.search}${parsed.hash}`;
+      } catch {
+        return url.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, origin);
+      }
+    }
+
+    return url;
+  }
+
+  const path = url.startsWith("/") ? url : `/${url}`;
+  return `${origin}${normalizePath(path)}`;
 }
 
 export async function updateMyProfile(payload: UpdateProfilePayload) {

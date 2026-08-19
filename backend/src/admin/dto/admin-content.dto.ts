@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString, IsUrl, Matches, MaxLength, Min } from "class-validator";
+import { IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString, Matches, MaxLength, Min } from "class-validator";
 
 export enum AdminContentType {
   logo = "logo",
@@ -23,7 +23,7 @@ export class UpsertAdminContentDto {
   @IsOptional() @IsString() @MaxLength(240) subtitle?: string;
   @IsOptional() @IsString() @MaxLength(2400) body?: string;
   @IsString()
-  @Matches(/^(asset:[a-zA-Z0-9_\-/]+|https?:\/\/.+|\/uploads\/.+)$/)
+  @Matches(/^(asset:[a-zA-Z0-9_\-/]+|https?:\/\/.+|\/(?:api\/v1\/)?(?:uploads|media)\/.+)$/)
   imageUrl!: string;
   @IsOptional() @IsString() storageKey?: string;
   @IsOptional() @IsString() @Matches(/^(https?:\/\/.+|app:shop\/[a-zA-Z0-9-]+)$/) targetUrl?: string;

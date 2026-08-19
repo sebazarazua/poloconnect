@@ -1,4 +1,4 @@
-export type MatchStatus = "live" | "upcoming" | "finished";
+export type MatchStatus = "live" | "upcoming" | "finished" | "cancelled";
 
 export interface Match {
   id: string;
@@ -6,6 +6,8 @@ export interface Match {
   time: string;
   team1: string;
   team2: string;
+  team1LogoUrl?: string;
+  team2LogoUrl?: string;
   score1: number;
   score2: number;
   competition: string;
@@ -13,6 +15,9 @@ export interface Match {
   chukker?: string;
   club: string;
   date: Date;
+  scheduledAt?: string;
+  endsAt?: string;
+  backgroundImageUrl?: string;
 }
 
 export const MATCHES: Match[] = [

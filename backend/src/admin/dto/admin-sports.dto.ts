@@ -1,12 +1,5 @@
 import { Type } from "class-transformer";
-import { IsDateString, IsEnum, IsInt, IsOptional, IsString, MaxLength, Min } from "class-validator";
-
-export enum AdminMatchStatus {
-  upcoming = "upcoming",
-  live = "live",
-  finished = "finished",
-  cancelled = "cancelled"
-}
+import { IsDateString, IsInt, IsOptional, IsString, MaxLength, Min } from "class-validator";
 
 export class UpsertTournamentDto {
   @IsString() @MaxLength(140) name!: string;
@@ -31,13 +24,26 @@ export class UpsertMatchDto {
   @IsString() team1Id!: string;
   @IsString() team2Id!: string;
   @IsDateString() scheduledAt!: string;
-  @IsEnum(AdminMatchStatus) status!: AdminMatchStatus;
+  @IsOptional() @IsDateString() endsAt?: string;
   @Type(() => Number) @IsOptional() @IsInt() @Min(0) score1?: number;
   @Type(() => Number) @IsOptional() @IsInt() @Min(0) score2?: number;
   @Type(() => Number) @IsOptional() @IsInt() @Min(1) totalChukkers?: number;
   @Type(() => Number) @IsOptional() @IsInt() @Min(1) currentChukker?: number;
   @IsOptional() @IsString() competitionName?: string;
   @IsOptional() @IsString() youtubeUrl?: string;
+  @IsOptional() @IsString() backgroundImageUrl?: string;
+}
+
+export class UpdateMatchDto {
+  @IsOptional() @IsString() tournamentId?: string;
+  @IsOptional() @IsString() clubId?: string;
+  @IsOptional() @IsString() team1Id?: string;
+  @IsOptional() @IsString() team2Id?: string;
+  @IsOptional() @IsDateString() scheduledAt?: string;
+  @IsOptional() @IsDateString() endsAt?: string;
+  @IsOptional() @IsString() competitionName?: string;
+  @IsOptional() @IsString() youtubeUrl?: string;
+  @IsOptional() @IsString() backgroundImageUrl?: string;
 }
 
 export class UpsertMatchStatDto {
@@ -45,4 +51,39 @@ export class UpsertMatchStatDto {
   @IsString() label!: string;
   @IsString() team1Value!: string;
   @IsString() team2Value!: string;
+}
+
+export class CreateTeamDto {
+  @IsString() @MaxLength(140) name!: string;
+  @IsOptional() @IsString() logoUrl?: string;
+}
+
+export class LineupPlayerDto {
+  @IsString() @MaxLength(140) name!: string;
+  @Type(() => Number) @IsOptional() handicap?: number;
+}
+
+export class UpsertLineupDto {
+  team1!: LineupPlayerDto[];
+  team2!: LineupPlayerDto[];
+  @IsOptional() @IsString() @MaxLength(140) refereeMain?: string;
+  @IsOptional() @IsString() @MaxLength(140) refereeAssistant?: string;
+}
+
+export class UpsertSpotlightEventDto {
+  @IsString() @MaxLength(140) title!: string;
+  @IsOptional() @IsString() @MaxLength(280) description?: string;
+  @IsDateString() scheduledAt!: string;
+  @IsOptional() @IsDateString() endsAt?: string;
+  @IsOptional() @IsString() youtubeUrl?: string;
+  @IsOptional() @IsString() backgroundImageUrl?: string;
+}
+
+export class UpdateSpotlightEventDto {
+  @IsOptional() @IsString() @MaxLength(140) title?: string;
+  @IsOptional() @IsString() @MaxLength(280) description?: string;
+  @IsOptional() @IsDateString() scheduledAt?: string;
+  @IsOptional() @IsDateString() endsAt?: string;
+  @IsOptional() @IsString() youtubeUrl?: string;
+  @IsOptional() @IsString() backgroundImageUrl?: string;
 }

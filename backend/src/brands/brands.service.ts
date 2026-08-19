@@ -1,10 +1,11 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { MediaService } from "../common/media/media.service";
 import { PrismaService } from "../database/prisma.service";
 import { UpsertBrandDto, UpsertBrandProductDto } from "./dto/brands.dto";
 
 @Injectable()
 export class BrandsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly media: MediaService) {}
 
   async listBrands() {
     const brands = await this.prisma.brand.findMany({
@@ -54,11 +55,15 @@ export class BrandsService {
   }
 
   async adminCreateBrand(dto: UpsertBrandDto) {
+    const logoUrl = dto.logoUrl
+      ? await this.media.ensureStoredMediaUrl("brands", dto.logoUrl, { allowGoogleImport: true })
+      : null;
+
     return this.prisma.brand.create({
       data: {
         name: dto.name.trim(),
         slug: dto.slug.trim().toLowerCase(),
-        logoUrl: dto.logoUrl,
+        logoUrl,
         description: dto.description,
         whatsapp: dto.whatsapp,
         phone: dto.phone,
@@ -72,12 +77,16 @@ export class BrandsService {
 
   async adminUpdateBrand(id: string, dto: UpsertBrandDto) {
     await this.ensureBrand(id);
+    const logoUrl = dto.logoUrl
+      ? await this.media.ensureStoredMediaUrl("brands", dto.logoUrl, { allowGoogleImport: true })
+      : null;
+
     return this.prisma.brand.update({
       where: { id },
       data: {
         name: dto.name.trim(),
         slug: dto.slug.trim().toLowerCase(),
-        logoUrl: dto.logoUrl,
+        logoUrl,
         description: dto.description,
         whatsapp: dto.whatsapp,
         phone: dto.phone,
@@ -105,6 +114,10 @@ export class BrandsService {
 
   async adminCreateBrandProduct(brandId: string, dto: UpsertBrandProductDto) {
     await this.ensureBrand(brandId);
+    const imageUrl = dto.imageUrl
+      ? await this.media.ensureStoredMediaUrl("brand-products", dto.imageUrl, { allowGoogleImport: true })
+      : null;
+
     return this.prisma.brandProduct.create({
       data: {
         brandId,
@@ -112,7 +125,7 @@ export class BrandsService {
         description: dto.description.trim(),
         priceCents: dto.price != null ? Math.round(dto.price * 100) : null,
         currency: dto.currency ?? "USD",
-        imageUrl: dto.imageUrl,
+        imageUrl,
         isActive: dto.isActive ?? true,
         sortOrder: dto.sortOrder ?? 0
       }
@@ -121,6 +134,10 @@ export class BrandsService {
 
   async adminUpdateBrandProduct(brandId: string, productId: string, dto: UpsertBrandProductDto) {
     await this.ensureBrandProduct(brandId, productId);
+    const imageUrl = dto.imageUrl
+      ? await this.media.ensureStoredMediaUrl("brand-products", dto.imageUrl, { allowGoogleImport: true })
+      : null;
+
     return this.prisma.brandProduct.update({
       where: { id: productId },
       data: {
@@ -128,7 +145,7 @@ export class BrandsService {
         description: dto.description.trim(),
         priceCents: dto.price != null ? Math.round(dto.price * 100) : null,
         currency: dto.currency ?? "USD",
-        imageUrl: dto.imageUrl,
+        imageUrl,
         isActive: dto.isActive ?? true,
         sortOrder: dto.sortOrder ?? 0
       }

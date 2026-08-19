@@ -1,25 +1,37 @@
 import { ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { RequestUser } from "../common/decorators/current-user.decorator";
+import { MediaService } from "../common/media/media.service";
 import { page, PaginationDto } from "../common/dto/pagination.dto";
 import { PrismaService } from "../database/prisma.service";
 import { ContactSellerDto, ProductQueryDto, ProductUpsertDto } from "./dto/marketplace.dto";
 
 @Injectable()
 export class MarketplaceService {
-  constructor(private readonly prisma: PrismaService, private readonly config: ConfigService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+    private readonly media: MediaService
+  ) {}
 
-  private normalizeImageInputs(body: ProductUpsertDto) {
+  private async normalizeImageInputs(body: ProductUpsertDto) {
     const fromList = (body.imageUrls ?? [])
       .map((entry) => entry?.trim())
       .filter((entry): entry is string => Boolean(entry));
     const single = body.imageUrl?.trim();
 
-    if (fromList.length > 0) {
-      return fromList;
+    const inputs = fromList.length > 0 ? fromList : single ? [single] : [];
+    const normalized: string[] = [];
+
+    for (const input of inputs) {
+      normalized.push(await this.media.ensureStoredMediaUrl("products", input, { allowGoogleImport: true }));
     }
 
-    return single ? [single] : [];
+    return normalized;
+  }
+
+  private storageKeyFromUrl(url: string) {
+    return this.media.extractStorageKeyFromUrl(url);
   }
 
   async listProducts(userId: string, query: ProductQueryDto) {
@@ -56,7 +68,7 @@ export class MarketplaceService {
       throw new InternalServerErrorException("Marketplace payment link is not configured.");
     }
 
-    const imageUrls = this.normalizeImageInputs(body);
+    const imageUrls = await this.normalizeImageInputs(body);
 
     const product = await this.prisma.product.create({
       data: {
@@ -73,6 +85,7 @@ export class MarketplaceService {
           ? {
               create: imageUrls.map((url, index) => ({
                 url,
+                storageKey: this.storageKeyFromUrl(url) ?? undefined,
                 position: index + 1
               }))
             }
@@ -95,7 +108,7 @@ export class MarketplaceService {
     const current = await this.prisma.product.findUnique({ where: { id } });
     if (!current || current.deletedAt) throw new NotFoundException("Product not found.");
     if (current.sellerId !== user.id && !user.roles.includes("admin")) throw new ForbiddenException("Product ownership required.");
-    const imageUrls = this.normalizeImageInputs(body);
+    const imageUrls = await this.normalizeImageInputs(body);
 
     const product = await this.prisma.product.update({
       where: { id },
@@ -119,6 +132,7 @@ export class MarketplaceService {
           data: imageUrls.map((url, index) => ({
             productId: id,
             url,
+            storageKey: this.storageKeyFromUrl(url) ?? undefined,
             position: index + 1
           }))
         })

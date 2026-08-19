@@ -14,7 +14,7 @@ import { AdCarousel } from "@/components/AdCarousel";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { formatLiveDate } from "@/constants/i18n";
-import { getTeamLogoSource } from "@/constants/teamLogos";
+import { resolveTeamLogoSource } from "@/constants/teamLogos";
 import { useLocale } from "@/contexts/LocaleContext";
 import { type ContentItem, getSectionContent } from "@/services/api/content";
 import { resolveContentImageSource } from "@/services/content-images";
@@ -25,10 +25,12 @@ interface Match {
   time: string;
   team1: string;
   team2: string;
+  team1LogoUrl?: string;
+  team2LogoUrl?: string;
   score1: number;
   score2: number;
   competition: string;
-  status: "live" | "upcoming" | "finished";
+  status: "live" | "upcoming" | "finished" | "cancelled";
   chukker?: string;
   club: string;
   date: Date;
@@ -236,7 +238,7 @@ export default function LiveScreen() {
                       <View style={styles.teamBlock}>
                         <View style={styles.teamLogoPlaceholder}>
                           <Image
-                            source={getTeamLogoSource(match.team1)}
+                            source={resolveTeamLogoSource(match.team1, match.team1LogoUrl)}
                             style={styles.teamLogoImg}
                             resizeMode="cover"
                           />
@@ -256,7 +258,7 @@ export default function LiveScreen() {
                       <View style={styles.teamBlock}>
                         <View style={styles.teamLogoPlaceholder}>
                           <Image
-                            source={getTeamLogoSource(match.team2)}
+                            source={resolveTeamLogoSource(match.team2, match.team2LogoUrl)}
                             style={styles.teamLogoImg}
                             resizeMode="cover"
                           />

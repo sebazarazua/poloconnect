@@ -5,6 +5,7 @@ import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useMarket } from "@/contexts/MarketContext";
+import { resolveUploadedUrl } from "@/services/api/users";
 
 export default function MarketMyPostsScreen() {
   const colors = useThemeColors();
@@ -31,7 +32,7 @@ export default function MarketMyPostsScreen() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
           {myProducts.map((product) => (
             <View key={product.id} style={styles.card}>
-              <Image source={{ uri: product.image }} style={styles.image} />
+              <Image source={{ uri: resolveUploadedUrl(product.image) ?? product.image }} style={styles.image} />
 
               <View style={styles.body}>
                 <Text style={styles.name} numberOfLines={2}>

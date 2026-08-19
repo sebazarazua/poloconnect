@@ -3,8 +3,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
-  ImageBackground,
-  Linking,
   PanResponder,
   Pressable,
   StyleSheet,
@@ -12,73 +10,16 @@ import {
   View
 } from "react-native";
 import { Screen } from "@/components/Screen";
+import { YouTubeLivePlayer } from "@/components/YouTubeLivePlayer";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
-import { getTeamLogoSource } from "@/constants/teamLogos";
+import { resolveTeamLogoSource } from "@/constants/teamLogos";
 import { getMatchById } from "@/services/matches";
 import { fetchMatch, type MatchDetail } from "@/services/api/matches";
 
-const videoPreview = require("../assets/home-match-bg.png");
 const youtubeLiveUrl = "https://www.youtube.com/live/zY3JUrfPtTo";
 
 type MatchTab = "live" | "stats" | "lineups" | "comments";
-
-const stats = [
-  { label: "Goles", left: "5", right: "3", leftValue: 62, rightValue: 38 },
-  { label: "Tiros al arco", left: "12", right: "8", leftValue: 60, rightValue: 40 },
-  { label: "Faltas", left: "4", right: "6", leftValue: 40, rightValue: 60 },
-  { label: "Penales convertidos", left: "2", right: "1", leftValue: 67, rightValue: 33 },
-  { label: "Posesion del balon", left: "58%", right: "42%", leftValue: 58, rightValue: 42 },
-  { label: "Metros recorridos", left: "14.2k", right: "11.8k", leftValue: 55, rightValue: 45 }
-];
-
-const lineups = {
-  left: [
-    { number: 1, name: "Adolfo Cambiaso", goals: "+2 goles" },
-    { number: 2, name: "David Stirling", goals: "+1 goles" },
-    { number: 3, name: "Juan Martin Nero", goals: "+2 goles" },
-    { number: 4, name: "Pablo Mac Donough", goals: "0 goles" }
-  ],
-  right: [
-    { number: 1, name: "Gonzalo Pieres Jr.", goals: "+1 goles" },
-    { number: 2, name: "Facundo Pieres", goals: "+1 goles" },
-    { number: 3, name: "Nicolas Pieres", goals: "+1 goles" },
-    { number: 4, name: "Mariano Aguerre", goals: "0 goles" }
-  ]
-};
-
-const comments = [
-  {
-    time: "72:00",
-    title: "Gol de La Dolfina",
-    text: "Adolfo Cambiaso convierte desde mitad de cancha tras una gran jugada colectiva."
-  },
-  {
-    time: "68:45",
-    title: "Falta",
-    text: "Facundo Pieres comete infraccion sobre David Stirling. Penal para La Dolfina."
-  },
-  {
-    time: "64:10",
-    title: "Gol de La Dolfina",
-    text: "Juan Martin Nero define tras un penal ejecutado rapidamente."
-  },
-  {
-    time: "58:20",
-    title: "Gol de Ellerstina",
-    text: "Gonzalo Pieres Jr. anota en transicion rapida y descuenta para Ellerstina."
-  },
-  {
-    time: "48:00",
-    title: "Inicio chukker 3",
-    text: "Comienza el tercer chukker. La Dolfina mantiene la ventaja."
-  },
-  {
-    time: "42:15",
-    title: "Gol de La Dolfina",
-    text: "David Stirling amplia la diferencia con una corrida individual."
-  }
-];
 
 export default function MatchDetailScreen() {
   const colors = useThemeColors();
@@ -111,7 +52,7 @@ export default function MatchDetailScreen() {
     <View style={styles.container} {...panResponder.panHandlers}>
       <Screen
         title={t("match.title")}
-        subtitle={`${match.club} - ${match.time} hs`}
+        subtitle={`${match.club ? `${match.club} - ` : ""}${match.date.toLocaleDateString("es-AR", { day: "numeric", month: "long" })}, ${match.time} hs`}
         showBackButton
         onBackPress={() => router.back()}
       >
@@ -119,7 +60,6 @@ export default function MatchDetailScreen() {
           <View style={styles.scoreHeader}>
             <Text style={styles.competition}>{match.competition.toUpperCase()}</Text>
           </View>
-          <Text style={styles.chukker}>{match.chukker ?? t("match.upcoming")}</Text>
           {match.status === "live" ? (
             <View style={styles.liveBadgeWrap}>
               <View style={styles.liveBadge}>
@@ -130,11 +70,11 @@ export default function MatchDetailScreen() {
           ) : null}
 
           <View style={styles.scoreRow}>
-            <TeamSummary name={match.team1} initials={getInitials(match.team1)} />
+            <TeamSummary name={match.team1} logoUrl={match.team1LogoUrl} initials={getInitials(match.team1)} />
             <Text style={styles.score}>
               {match.score1} - {match.score2}
             </Text>
-            <TeamSummary name={match.team2} initials={getInitials(match.team2)} />
+            <TeamSummary name={match.team2} logoUrl={match.team2LogoUrl} initials={getInitials(match.team2)} />
           </View>
         </View>
 
@@ -158,15 +98,15 @@ export default function MatchDetailScreen() {
         </View>
 
         {activeTab === "live" ? <LivePanel youtubeUrl={match.youtubeUrl} /> : null}
-        {activeTab === "stats" ? <StatsPanel leftTeam={match.team1} rightTeam={match.team2} items={match.stats ?? stats} /> : null}
-        {activeTab === "lineups" ? <LineupsPanel leftTeam={match.team1} rightTeam={match.team2} items={match.lineups ?? lineups} /> : null}
-        {activeTab === "comments" ? <CommentsPanel items={match.comments ?? comments} /> : null}
+        {activeTab === "stats" ? <StatsPanel leftTeam={match.team1} rightTeam={match.team2} items={match.stats ?? []} /> : null}
+        {activeTab === "lineups" ? <LineupsPanel leftTeam={match.team1} rightTeam={match.team2} items={match.lineups ?? { left: [], right: [] }} referees={match.referees} /> : null}
+        {activeTab === "comments" ? <CommentsPanel items={match.comments ?? []} /> : null}
       </Screen>
     </View>
   );
 }
 
-function TeamSummary({ name, initials }: { name: string; initials: string }) {
+function TeamSummary({ name, logoUrl, initials }: { name: string; logoUrl?: string; initials: string }) {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const { t } = useLocale();
@@ -175,7 +115,7 @@ function TeamSummary({ name, initials }: { name: string; initials: string }) {
     <View style={styles.teamSummary}>
       <View style={styles.teamLogo}>
         <Image
-          source={getTeamLogoSource(name, 116)}
+          source={resolveTeamLogoSource(name, logoUrl, 116)}
           style={styles.teamLogoImg}
           resizeMode="cover"
         />
@@ -188,58 +128,23 @@ function TeamSummary({ name, initials }: { name: string; initials: string }) {
 }
 
 function LivePanel({ youtubeUrl = youtubeLiveUrl }: { youtubeUrl?: string }) {
-  const colors = useThemeColors();
-  const styles = createStyles(colors);
-  const { t } = useLocale();
+  const styles = createStyles(useThemeColors());
 
-  return (
-    <View>
-      <ImageBackground
-        source={videoPreview}
-        style={styles.videoCard}
-        imageStyle={styles.videoImage}
-        resizeMode="cover"
-      >
-        <View style={styles.videoOverlay}>
-          <Pressable
-            style={styles.playButton}
-            onPress={() => Linking.openURL(youtubeUrl)}
-            accessibilityRole="button"
-            accessibilityLabel={t("match.openYoutube")}
-          >
-            <Ionicons name="play" size={38} color="#ffffff" />
-          </Pressable>
-          <View style={styles.videoFooter}>
-            <Text style={styles.liveVideoText}>LIVE</Text>
-            <View style={styles.progressTrack}>
-              <View style={styles.progressFill} />
-              <View style={styles.progressThumb} />
-            </View>
-            <Text style={styles.videoTime}>72:00</Text>
-          </View>
-        </View>
-      </ImageBackground>
-
-      <Text style={styles.panelTitle}>{t("match.chukkers")}</Text>
-      <View style={styles.chukkerTrack}>
-        {[1, 2, 3, 4, 5, 6, 7].map((item) => (
-          <View key={item} style={styles.chukkerStepWrap}>
-            <View style={[styles.chukkerStep, item === 3 && styles.activeChukkerStep]}>
-              <Text style={[styles.chukkerStepText, item === 3 && styles.activeChukkerStepText]}>
-                {item}
-              </Text>
-            </View>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
+  return <YouTubeLivePlayer videoUrl={youtubeUrl} style={styles.videoCard} />;
 }
 
-function StatsPanel({ leftTeam, rightTeam, items }: { leftTeam: string; rightTeam: string; items: typeof stats }) {
+function StatsPanel({ leftTeam, rightTeam, items }: { leftTeam: string; rightTeam: string; items: NonNullable<MatchDetail["stats"]> }) {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const { t } = useLocale();
+
+  if (items.length === 0) {
+    return (
+      <View style={styles.panel}>
+        <Text style={styles.emptyStateText}>{t("match.statsUnavailable")}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.panel}>
@@ -269,10 +174,35 @@ function StatsPanel({ leftTeam, rightTeam, items }: { leftTeam: string; rightTea
   );
 }
 
-function LineupsPanel({ leftTeam, rightTeam, items }: { leftTeam: string; rightTeam: string; items: typeof lineups }) {
+type LineupItem = { number: number; name: string; handicap?: number; goals?: string };
+
+function LineupsPanel({
+  leftTeam,
+  rightTeam,
+  items,
+  referees
+}: {
+  leftTeam: string;
+  rightTeam: string;
+  items: { left: LineupItem[]; right: LineupItem[] };
+  referees?: { main?: string; assistant?: string };
+}) {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const { t } = useLocale();
+  const hasLineups = items.left.length > 0 || items.right.length > 0;
+  const refereeEntries = [
+    referees?.main ? { role: t("match.referee.main"), name: referees.main } : null,
+    referees?.assistant ? { role: t("match.referee.assistant"), name: referees.assistant } : null
+  ].filter(Boolean) as Array<{ role: string; name: string }>;
+
+  if (!hasLineups) {
+    return (
+      <View style={styles.panel}>
+        <Text style={styles.emptyStateText}>{t("match.lineupsUnavailable")}</Text>
+      </View>
+    );
+  }
 
   return (
     <View>
@@ -280,31 +210,28 @@ function LineupsPanel({ leftTeam, rightTeam, items }: { leftTeam: string; rightT
         <LineupCard team={leftTeam} players={items.left} />
         <LineupCard team={rightTeam} players={items.right} />
       </View>
-      <View style={styles.refereeCard}>
-        <Text style={styles.refereeTitle}>{t("match.referees")}</Text>
-        <View style={styles.refereeGrid}>
-          {["Martin Pascual", "Esteban Ferrari", "Juan Bollini"].map((name) => (
-            <View key={name} style={styles.refereeItem}>
-              <Text style={styles.refereeRole}>{t("match.field")}</Text>
-              <Text style={styles.refereeName}>{name}</Text>
-            </View>
-          ))}
+      {refereeEntries.length > 0 ? (
+        <View style={styles.refereeCard}>
+          <Text style={styles.refereeTitle}>{t("match.referees")}</Text>
+          <View style={styles.refereeGrid}>
+            {refereeEntries.map((entry) => (
+              <View key={entry.role} style={styles.refereeItem}>
+                <Text style={styles.refereeRole}>{entry.role}</Text>
+                <Text style={styles.refereeName}>{entry.name}</Text>
+              </View>
+            ))}
+          </View>
         </View>
-      </View>
+      ) : null}
     </View>
   );
 }
 
-function LineupCard({
-  team,
-  players
-}: {
-  team: string;
-  players: { number: number; name: string; goals: string }[];
-}) {
+function LineupCard({ team, players }: { team: string; players: LineupItem[] }) {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const { t } = useLocale();
+  const totalHandicap = players.reduce((sum, player) => sum + (player.handicap ?? 0), 0);
 
   return (
     <View style={styles.lineupCard}>
@@ -313,10 +240,12 @@ function LineupCard({
         <View key={player.name} style={styles.playerCard}>
           <Text style={styles.playerNumber}>{t("match.playerNumber", { number: player.number })}</Text>
           <Text style={styles.playerName}>{player.name}</Text>
-          <Text style={styles.playerGoals}>{player.goals}</Text>
+          <Text style={styles.playerGoals}>{player.handicap !== undefined ? `${player.handicap} hcp` : ""}</Text>
         </View>
       ))}
-      <Text style={styles.handicap}>{t("match.totalHandicap", { value: 10 })}</Text>
+      {players.some((player) => player.handicap !== undefined) ? (
+        <Text style={styles.handicap}>{t("match.totalHandicap", { value: totalHandicap })}</Text>
+      ) : null}
     </View>
   );
 }
@@ -326,6 +255,15 @@ type MatchComment = { id?: string; time?: string; title: string; text: string; t
 function CommentsPanel({ items }: { items: MatchComment[] }) {
   const colors = useThemeColors();
   const styles = createStyles(colors);
+  const { t } = useLocale();
+
+  if (items.length === 0) {
+    return (
+      <View style={styles.panel}>
+        <Text style={styles.emptyStateText}>{t("match.commentsUnavailable")}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.panel}>
@@ -465,7 +403,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     color: colors.primary
   },
   videoCard: {
-    height: 198,
     borderRadius: 16,
     overflow: "hidden",
     backgroundColor: colors.primaryDark,
@@ -575,6 +512,12 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   },
   panel: {
     marginBottom: 10
+  },
+  emptyStateText: {
+    color: colors.muted,
+    fontSize: 14,
+    textAlign: "center",
+    paddingVertical: 24
   },
   statsTeams: {
     flexDirection: "row",

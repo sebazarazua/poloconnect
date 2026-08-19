@@ -154,3 +154,179 @@ export async function createAdminTournament(payload: UpsertAdminTournamentPayloa
     body: JSON.stringify(payload)
   });
 }
+
+export type AdminTeam = {
+  id: string;
+  name: string;
+  logoUrl?: string | null;
+};
+
+export type AdminMatch = {
+  id: string;
+  externalCode?: string | null;
+  tournamentId?: string | null;
+  clubId?: string | null;
+  team1Id: string;
+  team2Id: string;
+  team1: { id: string; name: string; logoUrl?: string | null };
+  team2: { id: string; name: string; logoUrl?: string | null };
+  tournament?: { id: string; name: string } | null;
+  scheduledAt: string;
+  endsAt?: string | null;
+  status: "upcoming" | "live" | "finished" | "cancelled";
+  score1: number;
+  score2: number;
+  currentChukker?: number | null;
+  totalChukkers: number;
+  competitionName?: string | null;
+  youtubeUrl?: string | null;
+  backgroundImageUrl?: string | null;
+};
+
+export type UpsertAdminMatchPayload = {
+  externalCode?: string;
+  tournamentId?: string;
+  team1Id: string;
+  team2Id: string;
+  scheduledAt: string;
+  endsAt?: string;
+  score1?: number;
+  score2?: number;
+  totalChukkers?: number;
+  currentChukker?: number;
+  competitionName?: string;
+  youtubeUrl?: string;
+  backgroundImageUrl?: string;
+};
+
+export type UpdateAdminMatchPayload = Partial<Omit<UpsertAdminMatchPayload, "externalCode">>;
+
+export async function listAdminTeams() {
+  return apiRequest<AdminTeam[]>("/admin/sports/teams");
+}
+
+export async function createAdminTeam(payload: { name: string; logoUrl?: string }) {
+  return apiRequest<AdminTeam>("/admin/sports/teams", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteAdminTeam(id: string) {
+  return apiRequest<{ ok: boolean }>(`/admin/sports/teams/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+}
+
+export async function uploadAdminTeamLogo(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return apiRequest<{ url: string }>("/admin/sports/teams/upload", {
+    method: "POST",
+    body: formData
+  });
+}
+
+export async function listAdminMatches() {
+  return apiRequest<AdminMatch[]>("/admin/sports/matches");
+}
+
+export async function createAdminMatch(payload: UpsertAdminMatchPayload) {
+  return apiRequest<AdminMatch>("/admin/sports/matches", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateAdminMatch(id: string, payload: UpdateAdminMatchPayload) {
+  return apiRequest<AdminMatch>(`/admin/sports/matches/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteAdminMatch(id: string) {
+  return apiRequest<{ ok: boolean }>(`/admin/sports/matches/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+}
+
+export async function uploadAdminMatchImage(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return apiRequest<{ url: string }>("/admin/sports/matches/upload", {
+    method: "POST",
+    body: formData
+  });
+}
+
+export type AdminSpotlightEvent = {
+  id: string;
+  title: string;
+  description?: string | null;
+  scheduledAt: string;
+  endsAt?: string | null;
+  youtubeUrl?: string | null;
+  backgroundImageUrl?: string | null;
+};
+
+export type UpsertAdminSpotlightEventPayload = {
+  title: string;
+  description?: string;
+  scheduledAt: string;
+  endsAt?: string;
+  youtubeUrl?: string;
+  backgroundImageUrl?: string;
+};
+
+export async function listAdminSpotlightEvents() {
+  return apiRequest<AdminSpotlightEvent[]>("/admin/sports/events");
+}
+
+export async function createAdminSpotlightEvent(payload: UpsertAdminSpotlightEventPayload) {
+  return apiRequest<AdminSpotlightEvent>("/admin/sports/events", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateAdminSpotlightEvent(id: string, payload: Partial<UpsertAdminSpotlightEventPayload>) {
+  return apiRequest<AdminSpotlightEvent>(`/admin/sports/events/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteAdminSpotlightEvent(id: string) {
+  return apiRequest<{ ok: boolean }>(`/admin/sports/events/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+}
+
+export async function uploadAdminSpotlightEventImage(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return apiRequest<{ url: string }>("/admin/sports/events/upload", {
+    method: "POST",
+    body: formData
+  });
+}
+
+export async function upsertAdminMatchStat(matchId: string, payload: { statKey: string; label: string; team1Value: string; team2Value: string }) {
+  return apiRequest<{ ok: boolean }>(`/admin/sports/matches/${encodeURIComponent(matchId)}/stats`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export type LineupPlayerInput = { name: string; handicap?: number };
+
+export async function setAdminMatchLineup(matchId: string, payload: { team1: LineupPlayerInput[]; team2: LineupPlayerInput[]; refereeMain?: string; refereeAssistant?: string }) {
+  return apiRequest<{ ok: boolean }>(`/admin/sports/matches/${encodeURIComponent(matchId)}/lineups`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}

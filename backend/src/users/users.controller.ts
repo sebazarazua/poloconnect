@@ -1,28 +1,14 @@
 import { BadRequestException, Body, Controller, Get, Patch, Post, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { existsSync, mkdirSync } from "fs";
-import { diskStorage } from "multer";
-import { extname, join } from "path";
+import { memoryStorage } from "multer";
 import { CurrentUser, RequestUser } from "../common/decorators/current-user.decorator";
 import { CsrfGuard } from "../common/guards/csrf.guard";
 import { PrismaService } from "../database/prisma.service";
+import { MediaService } from "../common/media/media.service";
 
 @Controller("users")
 export class UsersController {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private static storageName(req: any, file: any, callback: (error: Error | null, filename: string) => void) {
-    const safeExt = extname(file.originalname || "").replace(/[^a-zA-Z0-9.]/g, "") || ".jpg";
-    callback(null, `${req.user?.sub ?? "user"}-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
-  }
-
-  private static avatarDestination(_req: any, _file: any, callback: (error: Error | null, destination: string) => void) {
-    const destination = join(process.cwd(), "uploads", "avatars");
-    if (!existsSync(destination)) {
-      mkdirSync(destination, { recursive: true });
-    }
-    callback(null, destination);
-  }
+  constructor(private readonly prisma: PrismaService, private readonly media: MediaService) {}
 
   private static imageFileFilter(_req: any, file: any, callback: (error: Error | null, acceptFile: boolean) => void) {
     if (!String(file.mimetype).startsWith("image/")) {
@@ -84,20 +70,16 @@ export class UsersController {
   @Post("me/avatar")
   @UseInterceptors(
     FileInterceptor("file", {
-      storage: diskStorage({ destination: UsersController.avatarDestination, filename: UsersController.storageName }),
+      storage: memoryStorage(),
       fileFilter: UsersController.imageFileFilter,
       limits: { fileSize: 6 * 1024 * 1024 }
     })
   )
   async uploadAvatar(@CurrentUser() user: RequestUser, @UploadedFile() file: any) {
-    if (!file) {
-      throw new BadRequestException("Image file is required.");
-    }
-
-    const path = `/uploads/avatars/${file.filename}`;
+    const uploaded = await this.media.uploadImage("avatars", file);
     const data = await this.prisma.user.update({
       where: { id: user.id },
-      data: { avatarUrl: path },
+      data: { avatarUrl: uploaded.url },
       include: { roles: { include: { role: true } } }
     });
 

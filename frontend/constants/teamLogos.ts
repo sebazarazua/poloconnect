@@ -8,6 +8,7 @@
  */
 import type { ImageSourcePropType } from "react-native";
 import { getTeamLogoUrl } from "@/services/matches";
+import { resolveContentImageSource } from "@/services/content-images";
 
 const LOCAL_LOGOS: Partial<Record<string, ImageSourcePropType>> = {
   "La Dolfina":       require("../assets/teams/la-dolfina.png"),
@@ -36,3 +37,19 @@ export function getTeamLogoSource(
 ): ImageSourcePropType {
   return LOCAL_LOGOS[teamName] ?? { uri: getTeamLogoUrl(teamName, size) };
 }
+
+/**
+ * Como getTeamLogoSource, pero prioriza el logo real subido desde el panel
+ * admin (logoUrl) antes que el logo local o el avatar generado.
+ */
+export function resolveTeamLogoSource(
+  teamName: string,
+  logoUrl?: string | null,
+  size = 128
+): ImageSourcePropType {
+  if (logoUrl) {
+    return resolveContentImageSource(logoUrl);
+  }
+  return getTeamLogoSource(teamName, size);
+}
+

@@ -1,8 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { diskStorage } from "multer";
-import { extname } from "path";
+import { memoryStorage } from "multer";
 import { CurrentUser, RequestUser } from "../common/decorators/current-user.decorator";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CsrfGuard } from "../common/guards/csrf.guard";
@@ -11,17 +9,13 @@ import { UpsertBrandDto, UpsertBrandProductDto } from "../brands/dto/brands.dto"
 import { AdminService } from "./admin.service";
 import { AdminContentQueryDto, UpsertAdminContentDto } from "./dto/admin-content.dto";
 import { AdminCommunityBanDto, AdminCommunityMembershipDto } from "./dto/admin-community.dto";
-import { UpsertMatchDto, UpsertMatchStatDto, UpsertTournamentDto } from "./dto/admin-sports.dto";
+import { UpsertMatchDto, UpsertMatchStatDto, UpsertTournamentDto, CreateTeamDto, UpdateMatchDto, UpsertSpotlightEventDto, UpdateSpotlightEventDto, UpsertLineupDto } from "./dto/admin-sports.dto";
+import { MediaService } from "../common/media/media.service";
 
 @Roles("admin", "superadmin")
 @Controller("admin")
 export class AdminController {
-  constructor(private readonly admin: AdminService, private readonly config: ConfigService, private readonly brandsService: BrandsService) {}
-
-  private static storageName(_req: any, file: any, callback: (error: Error | null, filename: string) => void) {
-    const safeExt = extname(file.originalname || "").replace(/[^a-zA-Z0-9.]/g, "") || ".bin";
-    callback(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
-  }
+  constructor(private readonly admin: AdminService, private readonly brandsService: BrandsService, private readonly media: MediaService) {}
 
   @Get("dashboard")
   dashboard() {
@@ -55,15 +49,12 @@ export class AdminController {
   @Post("content/upload")
   @UseInterceptors(
     FileInterceptor("file", {
-      storage: diskStorage({ destination: "uploads", filename: AdminController.storageName }),
+      storage: memoryStorage(),
       limits: { fileSize: 8 * 1024 * 1024 }
     })
   )
   uploadContentImage(@UploadedFile() file: any) {
-    const baseUrl = this.config.get<string>("PUBLIC_BASE_URL")?.trim();
-    const path = `/uploads/${file.filename}`;
-    const url = baseUrl ? `${baseUrl.replace(/\/$/, "")}${path}` : path;
-    return { url, filename: file.filename, mimetype: file.mimetype, size: file.size };
+    return this.media.uploadImage("content", file);
   }
 
   @Get("community/rooms")
@@ -133,9 +124,104 @@ export class AdminController {
   }
 
   @UseGuards(CsrfGuard)
+  @Put("sports/matches/:matchId")
+  updateMatch(@CurrentUser() user: RequestUser, @Param("matchId") matchId: string, @Body() dto: UpdateMatchDto) {
+    return this.admin.updateMatch(user, matchId, dto);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Delete("sports/matches/:matchId")
+  deleteMatch(@CurrentUser() user: RequestUser, @Param("matchId") matchId: string) {
+    return this.admin.deleteMatch(user, matchId);
+  }
+
+  @UseGuards(CsrfGuard)
   @Put("sports/matches/:matchId/stats")
   upsertMatchStat(@CurrentUser() user: RequestUser, @Param("matchId") matchId: string, @Body() dto: UpsertMatchStatDto) {
     return this.admin.upsertMatchStat(user, matchId, dto);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Put("sports/matches/:matchId/lineups")
+  setMatchLineup(@CurrentUser() user: RequestUser, @Param("matchId") matchId: string, @Body() dto: UpsertLineupDto) {
+    return this.admin.setMatchLineup(user, matchId, dto);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Post("sports/matches/upload")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: 8 * 1024 * 1024 }
+    })
+  )
+  uploadMatchImage(@UploadedFile() file: any) {
+    return this.media.uploadImage("matches", file);
+  }
+
+  @Get("sports/teams")
+  listTeams() {
+    return this.admin.listTeams();
+  }
+
+  @UseGuards(CsrfGuard)
+  @Post("sports/teams")
+  createTeam(@CurrentUser() user: RequestUser, @Body() dto: CreateTeamDto) {
+    return this.admin.createTeam(user, dto);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Delete("sports/teams/:teamId")
+  deleteTeam(@CurrentUser() user: RequestUser, @Param("teamId") teamId: string) {
+    return this.admin.deleteTeam(user, teamId);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Post("sports/teams/upload")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: 8 * 1024 * 1024 }
+    })
+  )
+  uploadTeamLogo(@UploadedFile() file: any) {
+    return this.media.uploadImage("teams", file);
+  }
+
+  // Generic home-carousel highlight events (interviews, pre-match, etc.)
+  @Get("sports/events")
+  listSpotlightEvents() {
+    return this.admin.listSpotlightEvents();
+  }
+
+  @UseGuards(CsrfGuard)
+  @Post("sports/events")
+  createSpotlightEvent(@CurrentUser() user: RequestUser, @Body() dto: UpsertSpotlightEventDto) {
+    return this.admin.createSpotlightEvent(user, dto);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Put("sports/events/:eventId")
+  updateSpotlightEvent(@CurrentUser() user: RequestUser, @Param("eventId") eventId: string, @Body() dto: UpdateSpotlightEventDto) {
+    return this.admin.updateSpotlightEvent(user, eventId, dto);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Delete("sports/events/:eventId")
+  deleteSpotlightEvent(@CurrentUser() user: RequestUser, @Param("eventId") eventId: string) {
+    return this.admin.deleteSpotlightEvent(user, eventId);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Post("sports/events/upload")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: 8 * 1024 * 1024 }
+    })
+  )
+  uploadSpotlightEventImage(@UploadedFile() file: any) {
+    return this.media.uploadImage("events", file);
   }
 
   // Brands
@@ -163,7 +249,7 @@ export class AdminController {
   @Post("brands/upload")
   @UseInterceptors(
     FileInterceptor("file", {
-      storage: diskStorage({ destination: "uploads", filename: AdminController.storageName }),
+      storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
         if (!String(file.mimetype).startsWith("image/")) { cb(new BadRequestException("Only images allowed."), false); return; }
         cb(null, true);
@@ -172,10 +258,7 @@ export class AdminController {
     })
   )
   uploadBrandImage(@UploadedFile() file: any) {
-    if (!file) throw new BadRequestException("Image file is required.");
-    const baseUrl = this.config.get<string>("PUBLIC_BASE_URL")?.trim();
-    const path = `/uploads/${file.filename}`;
-    return { url: baseUrl ? `${baseUrl.replace(/\/$/, "")}${path}` : path };
+    return this.media.uploadImage("brands", file);
   }
 
   @Get("brands/:brandId/products")

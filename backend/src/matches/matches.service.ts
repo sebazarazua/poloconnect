@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { page } from "../common/dto/pagination.dto";
+import { computeEffectiveMatchStatus } from "../common/utils/match-status.util";
 import { PrismaService } from "../database/prisma.service";
 import { MatchesQueryDto, UpdateLiveStateDto } from "./dto/matches.dto";
 
@@ -14,15 +15,18 @@ export class MatchesService {
   async list(query: MatchesQueryDto) {
     const limit = Number(query.limit ?? 50);
     const where: any = { deletedAt: null };
-    if (query.status) where.status = query.status;
     if (query.date) {
-      const start = new Date(`${query.date}T00:00:00.000Z`);
-      const end = new Date(start);
-      end.setUTCDate(end.getUTCDate() + 1);
+      // query.date is an Argentina-local calendar day (YYYY-MM-DD); anchor the
+      // window to that timezone's midnight, not UTC midnight.
+      const start = new Date(`${query.date}T00:00:00.000-03:00`);
+      const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
       where.scheduledAt = { gte: start, lt: end };
     }
-    const matches = await this.prisma.match.findMany({ where, include: this.include(), orderBy: { scheduledAt: "asc" }, take: limit + 1 });
-    return page(matches.map((match) => this.toMatchDto(match)), limit);
+    // Status is derived from scheduledAt/endsAt at read time (see computeEffectiveStatus),
+    // so filtering by status happens in-memory after the fetch, not in the SQL where clause.
+    const matches = await this.prisma.match.findMany({ where, include: this.include(), orderBy: { scheduledAt: "asc" }, take: query.date ? undefined : 300 });
+    const filtered = query.status ? matches.filter((match) => computeEffectiveMatchStatus(match) === query.status) : matches;
+    return page(filtered.map((match) => this.toMatchDto(match)), limit);
   }
 
   async detail(id: string) {
@@ -31,6 +35,7 @@ export class MatchesService {
       ...this.toMatchDto(match),
       stats: match.stats.map((stat: any) => ({ label: stat.label, left: stat.team1Value, right: stat.team2Value, leftValue: Number(stat.team1Percent ?? 0), rightValue: Number(stat.team2Percent ?? 0) })),
       lineups: this.toLineups(match),
+      referees: { main: match.refereeMain ?? undefined, assistant: match.refereeAssistant ?? undefined },
       comments: match.events.map((event: any) => ({ id: event.id, time: event.matchClock, title: event.title, text: event.body, type: event.eventType })),
       youtubeUrl: match.youtubeUrl,
       videoPreviewUrl: match.videoPreviewUrl
@@ -47,7 +52,7 @@ export class MatchesService {
   async broadcasts(query: MatchesQueryDto) {
     const limit = Number(query.limit ?? 50);
     const matches = await this.prisma.match.findMany({ where: { deletedAt: null, youtubeUrl: { not: null } }, include: this.include(), orderBy: { scheduledAt: "desc" }, take: limit + 1 });
-    return page(matches.map((match) => ({ ...this.toMatchDto(match), youtubeUrl: match.youtubeUrl, dateLabel: match.scheduledAt.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" }) })), limit);
+    return page(matches.map((match) => ({ ...this.toMatchDto(match), youtubeUrl: match.youtubeUrl, dateLabel: match.scheduledAt.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" }) })), limit);
   }
 
   async updateLiveState(userId: string, id: string, body: UpdateLiveStateDto) {
@@ -78,23 +83,30 @@ export class MatchesService {
     return {
       id: match.id,
       externalCode: match.externalCode,
-      time: match.scheduledAt.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false }),
+      time: match.scheduledAt.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" }),
       team1: match.team1.name,
       team2: match.team2.name,
+      team1LogoUrl: match.team1.logoUrl ?? undefined,
+      team2LogoUrl: match.team2.logoUrl ?? undefined,
       score1: match.score1,
       score2: match.score2,
       competition: match.competitionName ?? match.tournament?.name ?? "Partido",
-      status: match.status,
+      status: computeEffectiveMatchStatus(match),
       chukker: match.currentChukker ? `${match.currentChukker} de ${match.totalChukkers}` : undefined,
       club: match.club?.name ?? "",
-      date: match.scheduledAt.toISOString().slice(0, 10)
+      // Argentina-local calendar day, not the raw UTC date (which can roll over
+      // to the next/previous day near midnight ART).
+      date: match.scheduledAt.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }),
+      scheduledAt: match.scheduledAt.toISOString(),
+      endsAt: match.endsAt ? match.endsAt.toISOString() : undefined,
+      backgroundImageUrl: match.backgroundImageUrl ?? undefined
     };
   }
 
   private toLineups(match: any) {
     const grouped = { left: [] as any[], right: [] as any[] };
     for (const lineup of match.lineups ?? []) {
-      const item = { number: lineup.shirtNumber ?? lineup.position, name: lineup.player.displayName, goals: lineup.goalsLabel ?? "0 goles" };
+      const item = { number: lineup.shirtNumber ?? lineup.position, name: lineup.player.displayName, handicap: lineup.player.handicap !== null && lineup.player.handicap !== undefined ? Number(lineup.player.handicap) : undefined, goals: lineup.goalsLabel ?? undefined };
       if (lineup.teamId === match.team1Id) grouped.left.push(item);
       if (lineup.teamId === match.team2Id) grouped.right.push(item);
     }

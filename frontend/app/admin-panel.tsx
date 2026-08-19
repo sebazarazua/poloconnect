@@ -21,12 +21,32 @@ import {
   removeCommunityMember,
   createAdminTournament,
   listAdminTournaments,
+  createAdminTeam,
+  listAdminTeams,
+  deleteAdminTeam,
+  uploadAdminTeamLogo,
+  createAdminMatch,
+  updateAdminMatch,
+  deleteAdminMatch,
+  listAdminMatches,
+  uploadAdminMatchImage,
+  setAdminMatchLineup,
+  listAdminSpotlightEvents,
+  createAdminSpotlightEvent,
+  updateAdminSpotlightEvent,
+  deleteAdminSpotlightEvent,
+  uploadAdminSpotlightEventImage,
   unbanCommunityMember,
   updateAdminContent,
   uploadAdminContentImage,
   type AdminContentItem,
-  type AdminTournament
+  type AdminTournament,
+  type AdminTeam,
+  type AdminMatch,
+  type AdminSpotlightEvent
 } from "@/services/api/admin";
+import { fetchMatch, updateMatchLiveState } from "@/services/api/matches";
+import { fromArgentinaDateTimeInputs, toArgentinaDateTimeInputs } from "@/utils/argentinaTime";
 import {
   type Brand,
   type BrandProduct,
@@ -41,7 +61,7 @@ import {
   uploadBrandImage
 } from "@/services/api/brands";
 
-type Tab = "dashboard" | "content" | "community" | "brands" | "auctions" | "tournaments";
+type Tab = "dashboard" | "content" | "community" | "brands" | "auctions" | "tournaments" | "matches" | "events";
 
 const contentSections = [
   { section: "branding", slot: "app_logo", titleKey: "adminPanel.section.logoTitle" as const, subtitleKey: "adminPanel.section.logoText" as const },
@@ -58,6 +78,13 @@ const contentTypeLabelKeys: Record<AdminContentItem["type"], "adminPanel.type.lo
   banner: "adminPanel.type.banner",
   news: "adminPanel.type.news",
   generic: "adminPanel.type.generic"
+};
+
+const matchStatusLabels: Record<"upcoming" | "live" | "finished" | "cancelled", string> = {
+  upcoming: "Por disputarse",
+  live: "En vivo",
+  finished: "Finalizado",
+  cancelled: "Cancelado"
 };
 
 function slugify(value: string) {
@@ -217,6 +244,67 @@ export default function AdminPanelScreen() {
     return roles.includes("admin") || roles.includes("superadmin");
   }, [user?.roles]);
 
+  // Teams state (used to build match slides: name + logo)
+  const [teams, setTeams] = useState<AdminTeam[]>([]);
+  const [teamSaving, setTeamSaving] = useState(false);
+  const [teamForm, setTeamForm] = useState({ name: "", logoUrl: "" });
+  const [teamLogoUploading, setTeamLogoUploading] = useState(false);
+  const [teamSearchQuery, setTeamSearchQuery] = useState("");
+
+  // Matches state (live broadcast scheduling). Status is never chosen here: it's
+  // derived automatically from scheduledAt + durationMinutes (see backend).
+  const [matches, setMatches] = useState<AdminMatch[]>([]);
+  const [matchSaving, setMatchSaving] = useState(false);
+  const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
+  const emptyMatchForm = {
+    team1Id: "",
+    team2Id: "",
+    tournamentId: "",
+    scheduledDate: "",
+    scheduledTime: "",
+    durationMinutes: "",
+    competitionName: "",
+    youtubeUrl: "",
+    backgroundImageUrl: ""
+  };
+  const [matchForm, setMatchForm] = useState(emptyMatchForm);
+  const [matchImageUploading, setMatchImageUploading] = useState(false);
+  const [matchScoreDrafts, setMatchScoreDrafts] = useState<Record<string, { score1: string; score2: string; currentChukker: string }>>({});
+  const [matchScoreSavingId, setMatchScoreSavingId] = useState<string | null>(null);
+  const [tournamentSearchQuery, setTournamentSearchQuery] = useState("");
+
+  // Lineup/referees + comment composer for the match being edited
+  const emptyLineupSlots = () => Array.from({ length: 4 }, () => ({ name: "", handicap: "" }));
+  const [lineupForm, setLineupForm] = useState({ team1: emptyLineupSlots(), team2: emptyLineupSlots(), refereeMain: "", refereeAssistant: "" });
+  const [lineupSaving, setLineupSaving] = useState(false);
+  const [commentForm, setCommentForm] = useState({ title: "", body: "" });
+  const [commentSaving, setCommentSaving] = useState(false);
+
+  // Spotlight events state (generic home-carousel highlights: interview, pre-match, etc.)
+  const [spotlightEvents, setSpotlightEvents] = useState<AdminSpotlightEvent[]>([]);
+  const [eventSaving, setEventSaving] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const emptyEventForm = {
+    title: "",
+    description: "",
+    scheduledDate: "",
+    scheduledTime: "",
+    durationMinutes: "",
+    youtubeUrl: "",
+    backgroundImageUrl: ""
+  };
+  const [eventForm, setEventForm] = useState(emptyEventForm);
+  const [eventImageUploading, setEventImageUploading] = useState(false);
+
+  const filteredTeamsForSearch = useMemo(
+    () => teams.filter((team) => team.name.toLowerCase().includes(teamSearchQuery.trim().toLowerCase())),
+    [teams, teamSearchQuery]
+  );
+  const filteredTournamentsForSearch = useMemo(
+    () => tournaments.filter((tournament) => tournament.name.toLowerCase().includes(tournamentSearchQuery.trim().toLowerCase())),
+    [tournaments, tournamentSearchQuery]
+  );
+
   const selectedContent = useMemo(() => contentItems.find((i) => i.id === selectedContentId) ?? null, [contentItems, selectedContentId]);
 
   const activeContentTemplate = useMemo(() => {
@@ -360,6 +448,9 @@ export default function AdminPanelScreen() {
     });
     void adminListBrands().then(setBrands).catch(() => {});
     void listAdminTournaments().then(setTournaments).catch(() => {});
+    void listAdminTeams().then(setTeams).catch(() => {});
+    void listAdminMatches().then(setMatches).catch(() => {});
+    void listAdminSpotlightEvents().then(setSpotlightEvents).catch(() => {});
   }, [isAdmin, router]);
 
   useEffect(() => { if (selectedRoomId) void refreshRoomModeration(selectedRoomId); }, [selectedRoomId]);
@@ -417,9 +508,9 @@ export default function AdminPanelScreen() {
       type: selectedContent?.type ?? activeContentTemplate.type,
       section: selectedContent?.section ?? activeContentTemplate.section,
       slot: selectedContent?.slot ?? activeContentTemplate.slot,
-      title: selectedContent?.title ?? null,
-      subtitle: selectedContent?.subtitle ?? null,
-      body: selectedContent?.body ?? null,
+      title: newTitle.trim() || null,
+      subtitle: newSubtitle.trim() || null,
+      body: newBody.trim() || null,
       imageUrl: newImageUrl.trim(),
       targetUrl: shopTargetId ? buildShopTarget(shopTargetId) : externalTargetUrl || null,
       priority: selectedContent?.priority ?? 0,
@@ -505,13 +596,308 @@ export default function AdminPanelScreen() {
     }
   };
 
+  const saveTeam = async () => {
+    if (!teamForm.name.trim()) {
+      Alert.alert("Error", "El nombre del equipo es obligatorio.");
+      return;
+    }
+
+    try {
+      setTeamSaving(true);
+      await createAdminTeam({
+        name: teamForm.name.trim(),
+        logoUrl: teamForm.logoUrl.trim() || undefined
+      });
+
+      const next = await listAdminTeams();
+      setTeams(next);
+      setTeamForm({ name: "", logoUrl: "" });
+      Alert.alert("Listo", "Equipo creado correctamente.");
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "No se pudo crear el equipo.");
+    } finally {
+      setTeamSaving(false);
+    }
+  };
+
+  const removeTeam = async (team: AdminTeam) => {
+    try {
+      await deleteAdminTeam(team.id);
+      const next = await listAdminTeams();
+      setTeams(next);
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "No se pudo eliminar el equipo.");
+    }
+  };
+
+  const startEditMatch = (match: AdminMatch) => {
+    const scheduled = new Date(match.scheduledAt);
+    const durationMinutes = match.endsAt
+      ? Math.round((new Date(match.endsAt).getTime() - scheduled.getTime()) / 60000)
+      : undefined;
+    const { date, time } = toArgentinaDateTimeInputs(scheduled);
+
+    setEditingMatchId(match.id);
+    setMatchForm({
+      team1Id: match.team1Id,
+      team2Id: match.team2Id,
+      tournamentId: match.tournamentId ?? "",
+      scheduledDate: date,
+      scheduledTime: time,
+      durationMinutes: durationMinutes ? String(durationMinutes) : "",
+      competitionName: match.competitionName ?? "",
+      youtubeUrl: match.youtubeUrl ?? "",
+      backgroundImageUrl: match.backgroundImageUrl ?? ""
+    });
+    setCommentForm({ title: "", body: "" });
+
+    void fetchMatch(match.id).then((detail) => {
+      const toSlots = (items?: Array<{ name: string; handicap?: number }>) => {
+        const slots = emptyLineupSlots();
+        (items ?? []).slice(0, 4).forEach((p, i) => { slots[i] = { name: p.name, handicap: p.handicap !== undefined ? String(p.handicap) : "" }; });
+        return slots;
+      };
+      setLineupForm({
+        team1: toSlots(detail.lineups?.left),
+        team2: toSlots(detail.lineups?.right),
+        refereeMain: detail.referees?.main ?? "",
+        refereeAssistant: detail.referees?.assistant ?? ""
+      });
+    }).catch(() => {});
+  };
+
+  const cancelEditMatch = () => {
+    setEditingMatchId(null);
+    setMatchForm(emptyMatchForm);
+    setLineupForm({ team1: emptyLineupSlots(), team2: emptyLineupSlots(), refereeMain: "", refereeAssistant: "" });
+  };
+
+  const saveLineup = async () => {
+    if (!editingMatchId) return;
+    const toPayload = (slots: typeof lineupForm.team1) =>
+      slots
+        .filter((s) => s.name.trim())
+        .map((s) => ({ name: s.name.trim(), handicap: s.handicap.trim() ? Number(s.handicap) : undefined }));
+
+    try {
+      setLineupSaving(true);
+      await setAdminMatchLineup(editingMatchId, {
+        team1: toPayload(lineupForm.team1),
+        team2: toPayload(lineupForm.team2),
+        refereeMain: lineupForm.refereeMain.trim() || undefined,
+        refereeAssistant: lineupForm.refereeAssistant.trim() || undefined
+      });
+      Alert.alert("Listo", "Formación y árbitros guardados.");
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "No se pudo guardar la formación.");
+    } finally {
+      setLineupSaving(false);
+    }
+  };
+
+  const postComment = async () => {
+    if (!editingMatchId || !commentForm.title.trim() || !commentForm.body.trim()) {
+      Alert.alert("Error", "Completá título y texto del comentario.");
+      return;
+    }
+    try {
+      setCommentSaving(true);
+      await updateMatchLiveState(editingMatchId, { title: commentForm.title.trim(), body: commentForm.body.trim() });
+      setCommentForm({ title: "", body: "" });
+      Alert.alert("Listo", "Comentario agregado.");
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "No se pudo agregar el comentario.");
+    } finally {
+      setCommentSaving(false);
+    }
+  };
+
+  const removeMatch = async (match: AdminMatch) => {
+    try {
+      await deleteAdminMatch(match.id);
+      const next = await listAdminMatches();
+      setMatches(next);
+      if (editingMatchId === match.id) cancelEditMatch();
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "No se pudo eliminar el partido.");
+    }
+  };
+
+  const saveMatch = async () => {
+    if (!matchForm.team1Id || !matchForm.team2Id) {
+      Alert.alert("Error", "Elegí los dos equipos que van a jugar.");
+      return;
+    }
+    if (matchForm.team1Id === matchForm.team2Id) {
+      Alert.alert("Error", "Los dos equipos tienen que ser distintos.");
+      return;
+    }
+    if (!matchForm.scheduledDate.trim() || !matchForm.scheduledTime.trim()) {
+      Alert.alert("Error", "La fecha y hora del partido son obligatorias.");
+      return;
+    }
+
+    const scheduledAt = fromArgentinaDateTimeInputs(matchForm.scheduledDate.trim(), matchForm.scheduledTime.trim());
+    if (Number.isNaN(scheduledAt.getTime())) {
+      Alert.alert("Error", "La fecha/hora del partido no es válida.");
+      return;
+    }
+
+    let endsAt: Date | undefined;
+    const durationMinutes = Number(matchForm.durationMinutes);
+    if (matchForm.durationMinutes.trim() && durationMinutes > 0) {
+      endsAt = new Date(scheduledAt.getTime() + durationMinutes * 60000);
+    }
+
+    const payload = {
+      team1Id: matchForm.team1Id,
+      team2Id: matchForm.team2Id,
+      tournamentId: matchForm.tournamentId || undefined,
+      scheduledAt: scheduledAt.toISOString(),
+      endsAt: endsAt?.toISOString(),
+      competitionName: matchForm.competitionName.trim() || undefined,
+      youtubeUrl: matchForm.youtubeUrl.trim() || undefined,
+      backgroundImageUrl: matchForm.backgroundImageUrl.trim() || undefined
+    };
+
+    try {
+      setMatchSaving(true);
+      if (editingMatchId) {
+        await updateAdminMatch(editingMatchId, payload);
+      } else {
+        await createAdminMatch(payload);
+      }
+
+      const next = await listAdminMatches();
+      setMatches(next);
+      cancelEditMatch();
+      Alert.alert("Listo", editingMatchId ? "Partido actualizado correctamente." : "Partido creado correctamente.");
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "No se pudo guardar el partido.");
+    } finally {
+      setMatchSaving(false);
+    }
+  };
+
+  const getMatchScoreDraft = (match: AdminMatch) =>
+    matchScoreDrafts[match.id] ?? {
+      score1: String(match.score1),
+      score2: String(match.score2),
+      currentChukker: match.currentChukker ? String(match.currentChukker) : ""
+    };
+
+  const saveMatchScore = async (match: AdminMatch) => {
+    const draft = getMatchScoreDraft(match);
+    try {
+      setMatchScoreSavingId(match.id);
+      await updateMatchLiveState(match.id, {
+        score1: Number(draft.score1) || 0,
+        score2: Number(draft.score2) || 0,
+        currentChukker: draft.currentChukker.trim() ? Number(draft.currentChukker) : undefined
+      });
+      const next = await listAdminMatches();
+      setMatches(next);
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "No se pudo actualizar el partido.");
+    } finally {
+      setMatchScoreSavingId(null);
+    }
+  };
+
+  const startEditEvent = (event: AdminSpotlightEvent) => {
+    const scheduled = new Date(event.scheduledAt);
+    const durationMinutes = event.endsAt
+      ? Math.round((new Date(event.endsAt).getTime() - scheduled.getTime()) / 60000)
+      : undefined;
+    const { date, time } = toArgentinaDateTimeInputs(scheduled);
+
+    setEditingEventId(event.id);
+    setEventForm({
+      title: event.title,
+      description: event.description ?? "",
+      scheduledDate: date,
+      scheduledTime: time,
+      durationMinutes: durationMinutes ? String(durationMinutes) : "",
+      youtubeUrl: event.youtubeUrl ?? "",
+      backgroundImageUrl: event.backgroundImageUrl ?? ""
+    });
+  };
+
+  const cancelEditEvent = () => {
+    setEditingEventId(null);
+    setEventForm(emptyEventForm);
+  };
+
+  const removeEvent = async (event: AdminSpotlightEvent) => {
+    try {
+      await deleteAdminSpotlightEvent(event.id);
+      const next = await listAdminSpotlightEvents();
+      setSpotlightEvents(next);
+      if (editingEventId === event.id) cancelEditEvent();
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "No se pudo eliminar el evento.");
+    }
+  };
+
+  const saveEvent = async () => {
+    if (!eventForm.title.trim()) {
+      Alert.alert("Error", "El título del evento es obligatorio.");
+      return;
+    }
+    if (!eventForm.scheduledDate.trim() || !eventForm.scheduledTime.trim()) {
+      Alert.alert("Error", "La fecha y hora del evento son obligatorias.");
+      return;
+    }
+
+    const scheduledAt = fromArgentinaDateTimeInputs(eventForm.scheduledDate.trim(), eventForm.scheduledTime.trim());
+    if (Number.isNaN(scheduledAt.getTime())) {
+      Alert.alert("Error", "La fecha/hora del evento no es válida.");
+      return;
+    }
+
+    let endsAt: Date | undefined;
+    const durationMinutes = Number(eventForm.durationMinutes);
+    if (eventForm.durationMinutes.trim() && durationMinutes > 0) {
+      endsAt = new Date(scheduledAt.getTime() + durationMinutes * 60000);
+    }
+
+    const payload = {
+      title: eventForm.title.trim(),
+      description: eventForm.description.trim() || undefined,
+      scheduledAt: scheduledAt.toISOString(),
+      endsAt: endsAt?.toISOString(),
+      youtubeUrl: eventForm.youtubeUrl.trim() || undefined,
+      backgroundImageUrl: eventForm.backgroundImageUrl.trim() || undefined
+    };
+
+    try {
+      setEventSaving(true);
+      if (editingEventId) {
+        await updateAdminSpotlightEvent(editingEventId, payload);
+      } else {
+        await createAdminSpotlightEvent(payload);
+      }
+
+      const next = await listAdminSpotlightEvents();
+      setSpotlightEvents(next);
+      cancelEditEvent();
+      Alert.alert("Listo", editingEventId ? "Evento actualizado correctamente." : "Evento creado correctamente.");
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "No se pudo guardar el evento.");
+    } finally {
+      setEventSaving(false);
+    }
+  };
+
   const tabs: Array<{ key: Tab; label: string; icon: keyof typeof Ionicons.glyphMap; count?: number }> = [
     { key: "dashboard", label: "Dashboard", icon: "grid-outline" },
     { key: "content", label: "Contenido", icon: "images-outline", count: contentItems.length },
     { key: "community", label: "Comunidad", icon: "people-outline", count: rooms.length },
     { key: "brands", label: "Marcas", icon: "pricetags-outline", count: brands.length },
     { key: "auctions", label: "Remates", icon: "ribbon-outline" },
-    { key: "tournaments", label: "Torneos", icon: "trophy-outline", count: tournaments.length }
+    { key: "tournaments", label: "Torneos", icon: "trophy-outline", count: tournaments.length },
+    { key: "matches", label: "Partidos", icon: "football-outline", count: matches.length },
+    { key: "events", label: "Eventos", icon: "sparkles-outline", count: spotlightEvents.length }
   ];
 
   return (
@@ -649,11 +1035,11 @@ export default function AdminPanelScreen() {
                 </View>
                 <View style={styles.fullField}>
                   <Text style={styles.fieldLabel}>Imagen</Text>
-                  <TextInput style={styles.input} value={newImageUrl} onChangeText={setNewImageUrl} placeholderTextColor={colors.muted} placeholder="Pegá una URL o subí una imagen" autoCapitalize="none" />
+                  <Text style={styles.helperText}>Solo se aceptan archivos subidos (se guardan en S3).</Text>
                 </View>
                 <View style={styles.uploadBox}>
                   <Ionicons name="cloud-upload-outline" size={22} color={colors.primaryDark} />
-                  <Text style={styles.uploadLabel}>Subí una imagen desde la PC o pegá una única URL.</Text>
+                  <Text style={styles.uploadLabel}>Subí una imagen desde la PC para guardarla en S3.</Text>
                   <Pressable style={styles.btnPrimary} onPress={() => (document as any).getElementById("admin-upload-input")?.click()}>
                     <Text style={styles.btnPrimaryText}>{uploading ? "Subiendo..." : "Elegir archivo"}</Text>
                   </Pressable>
@@ -960,7 +1346,7 @@ export default function AdminPanelScreen() {
                         {bpForm.imageUrl ? (
                           <Image source={resolveContentImageSource(bpForm.imageUrl)} style={styles.brandRowLogo} resizeMode="cover" />
                         ) : null}
-                        <LabeledInput label="URL imagen" value={bpForm.imageUrl} onChangeText={(v) => setBpForm((f) => ({ ...f, imageUrl: v }))} autoCapitalize="none" />
+                        <Text style={styles.helperText}>La imagen se define solo por subida de archivo.</Text>
                         <View style={styles.uploadBox}>
                           <Ionicons name="image-outline" size={22} color={colors.primaryDark} />
                           <Text style={styles.uploadLabel}>Subí una imagen local para este producto.</Text>
@@ -1110,6 +1496,310 @@ export default function AdminPanelScreen() {
           </View>
         )}
 
+        {/* ── MATCHES (live broadcast) ── */}
+        {activeTab === "matches" && (
+          <View style={styles.section}>
+            <View style={styles.twoCol}>
+              <View style={styles.panel}>
+                <Text style={styles.panelTitle}>Crear equipo</Text>
+                <Text style={styles.sectionLead}>Nombre y logo del equipo para usarlo en los partidos.</Text>
+                <View style={styles.formGrid}>
+                  <LabeledInput label="Nombre *" value={teamForm.name} onChangeText={(v) => setTeamForm((f) => ({ ...f, name: v }))} placeholder="Ej: La Dolfina" />
+                </View>
+                <View style={styles.uploadBox}>
+                  {teamForm.logoUrl ? <Image source={resolveContentImageSource(teamForm.logoUrl)} style={styles.contentPreview} resizeMode="contain" /> : null}
+                  <Ionicons name="cloud-upload-outline" size={22} color={colors.primaryDark} />
+                  <Text style={styles.uploadLabel}>Subí el logo del equipo (se guarda en S3).</Text>
+                  <Pressable style={styles.btnPrimary} onPress={() => (document as any).getElementById("admin-team-logo-input")?.click()}>
+                    <Text style={styles.btnPrimaryText}>{teamLogoUploading ? "Subiendo..." : "Elegir archivo"}</Text>
+                  </Pressable>
+                  <input type="file" accept="image/*" style={{ display: "none" }} id="admin-team-logo-input" onChange={async (e: any) => {
+                    const file = e.target.files?.[0]; if (!file) return;
+                    setTeamLogoUploading(true);
+                    try { const u = await uploadAdminTeamLogo(file); setTeamForm((f) => ({ ...f, logoUrl: u.url })); }
+                    finally { setTeamLogoUploading(false); }
+                  }} />
+                </View>
+                <Pressable style={styles.btnPrimary} onPress={() => { void saveTeam(); }} disabled={teamSaving}>
+                  <Ionicons name="save-outline" size={16} color="#fff" />
+                  <Text style={styles.btnPrimaryText}>{teamSaving ? "Guardando..." : "Guardar equipo"}</Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.panel}>
+                <Text style={styles.panelTitle}>Equipos cargados ({teams.length})</Text>
+                <LabeledInput label="Buscar equipo" value={teamSearchQuery} onChangeText={setTeamSearchQuery} placeholder="Escribí un nombre..." autoCapitalize="none" />
+                <ScrollView style={{ maxHeight: 360, marginTop: 8 }}>
+                  {filteredTeamsForSearch.map((team) => (
+                    <View key={team.id} style={[styles.tournamentRow, { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                        {team.logoUrl ? <Image source={resolveContentImageSource(team.logoUrl)} style={{ width: 32, height: 32, borderRadius: 8 }} resizeMode="cover" /> : null}
+                        <Text style={styles.tournamentName}>{team.name}</Text>
+                      </View>
+                      <Pressable onPress={() => { void removeTeam(team); }}>
+                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                      </Pressable>
+                    </View>
+                  ))}
+                  {filteredTeamsForSearch.length === 0 ? <Text style={styles.emptyText}>{teams.length === 0 ? "Todavía no hay equipos cargados." : "Ningún equipo coincide con la búsqueda."}</Text> : null}
+                </ScrollView>
+              </View>
+            </View>
+
+            <View style={styles.twoCol}>
+              <View style={styles.panel}>
+                <Text style={styles.panelTitle}>{editingMatchId ? "Editar / reprogramar partido" : "Programar partido en vivo"}</Text>
+                <Text style={styles.sectionLead}>El estado (por disputarse / en vivo / finalizado) se calcula solo según la fecha, hora y duración; no se elige a mano. Para cancelar un partido, eliminalo de la lista. Para posponerlo, editalo y cambiá la fecha/hora.</Text>
+
+                <Text style={styles.fieldLabel}>Buscar equipo</Text>
+                <LabeledInput label="" value={teamSearchQuery} onChangeText={setTeamSearchQuery} placeholder="Escribí para filtrar los equipos..." autoCapitalize="none" />
+
+                <Text style={styles.fieldLabel}>Equipo 1 *</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shopSelectorRow}>
+                  {filteredTeamsForSearch.map((team) => (
+                    <Pressable key={team.id} style={[styles.shopChip, matchForm.team1Id === team.id && styles.shopChipActive]} onPress={() => setMatchForm((f) => ({ ...f, team1Id: team.id }))}>
+                      <Text style={[styles.shopChipText, matchForm.team1Id === team.id && styles.shopChipTextActive]} numberOfLines={1}>{team.name}</Text>
+                    </Pressable>
+                  ))}
+                  {teams.length === 0 ? <Text style={styles.helperText}>Creá al menos dos equipos primero.</Text> : null}
+                </ScrollView>
+
+                <Text style={styles.fieldLabel}>Equipo 2 *</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shopSelectorRow}>
+                  {filteredTeamsForSearch.map((team) => (
+                    <Pressable key={team.id} style={[styles.shopChip, matchForm.team2Id === team.id && styles.shopChipActive]} onPress={() => setMatchForm((f) => ({ ...f, team2Id: team.id }))}>
+                      <Text style={[styles.shopChipText, matchForm.team2Id === team.id && styles.shopChipTextActive]} numberOfLines={1}>{team.name}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+
+                <Text style={styles.fieldLabel}>Buscar torneo</Text>
+                <LabeledInput label="" value={tournamentSearchQuery} onChangeText={setTournamentSearchQuery} placeholder="Escribí para filtrar los torneos..." autoCapitalize="none" />
+
+                <Text style={styles.fieldLabel}>Torneo (opcional)</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shopSelectorRow}>
+                  <Pressable style={[styles.shopChip, matchForm.tournamentId === "" && styles.shopChipActive]} onPress={() => setMatchForm((f) => ({ ...f, tournamentId: "" }))}>
+                    <Text style={[styles.shopChipText, matchForm.tournamentId === "" && styles.shopChipTextActive]}>Ninguno</Text>
+                  </Pressable>
+                  {filteredTournamentsForSearch.map((tournament) => (
+                    <Pressable key={tournament.id} style={[styles.shopChip, matchForm.tournamentId === tournament.id && styles.shopChipActive]} onPress={() => setMatchForm((f) => ({ ...f, tournamentId: tournament.id }))}>
+                      <Text style={[styles.shopChipText, matchForm.tournamentId === tournament.id && styles.shopChipTextActive]} numberOfLines={1}>{tournament.name}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+
+                <View style={styles.formGrid}>
+                  <LabeledInput label="Fecha (YYYY-MM-DD) *" value={matchForm.scheduledDate} onChangeText={(v) => setMatchForm((f) => ({ ...f, scheduledDate: v }))} placeholder="2026-09-12" />
+                  <LabeledInput label="Hora (HH:MM, hora Argentina) *" value={matchForm.scheduledTime} onChangeText={(v) => setMatchForm((f) => ({ ...f, scheduledTime: v }))} placeholder="14:00" />
+                  <LabeledInput label="Duración (minutos, opcional)" value={matchForm.durationMinutes} onChangeText={(v) => setMatchForm((f) => ({ ...f, durationMinutes: v }))} keyboardType="numeric" placeholder="120" />
+                  <LabeledInput label="Nombre de competencia (opcional)" value={matchForm.competitionName} onChangeText={(v) => setMatchForm((f) => ({ ...f, competitionName: v }))} placeholder="129° Abierto Argentino de Polo" />
+                  <LabeledInput label="Link de YouTube" value={matchForm.youtubeUrl} onChangeText={(v) => setMatchForm((f) => ({ ...f, youtubeUrl: v }))} placeholder="https://www.youtube.com/live/..." autoCapitalize="none" />
+                </View>
+                <Text style={styles.helperText}>Sin duración, el partido queda "en vivo" hasta que lo edites o lo elimines.</Text>
+
+                <View style={styles.uploadBox}>
+                  {matchForm.backgroundImageUrl ? <Image source={resolveContentImageSource(matchForm.backgroundImageUrl)} style={styles.contentPreview} resizeMode="cover" /> : null}
+                  <Ionicons name="image-outline" size={22} color={colors.primaryDark} />
+                  <Text style={styles.uploadLabel}>Imagen de fondo del slide (opcional; si no subís una, se usa la imagen genérica de partido en vivo).</Text>
+                  <Pressable style={styles.btnPrimary} onPress={() => (document as any).getElementById("admin-match-bg-input")?.click()}>
+                    <Text style={styles.btnPrimaryText}>{matchImageUploading ? "Subiendo..." : "Elegir archivo"}</Text>
+                  </Pressable>
+                  <input type="file" accept="image/*" style={{ display: "none" }} id="admin-match-bg-input" onChange={async (e: any) => {
+                    const file = e.target.files?.[0]; if (!file) return;
+                    setMatchImageUploading(true);
+                    try { const u = await uploadAdminMatchImage(file); setMatchForm((f) => ({ ...f, backgroundImageUrl: u.url })); }
+                    finally { setMatchImageUploading(false); }
+                  }} />
+                </View>
+
+                <View style={styles.actionRow}>
+                  <Pressable style={styles.btnPrimary} onPress={() => { void saveMatch(); }} disabled={matchSaving}>
+                    <Ionicons name="save-outline" size={16} color="#fff" />
+                    <Text style={styles.btnPrimaryText}>{matchSaving ? "Guardando..." : editingMatchId ? "Guardar cambios" : "Guardar partido"}</Text>
+                  </Pressable>
+                  {editingMatchId ? (
+                    <Pressable style={styles.btnSecondary} onPress={cancelEditMatch}>
+                      <Text style={styles.btnSecondaryText}>Cancelar edición</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                {editingMatchId ? (
+                  <View style={{ marginTop: 20 }}>
+                    <Text style={styles.panelTitle}>Formación y árbitros</Text>
+                    <Text style={styles.sectionLead}>Nombre completo y handicap de cada jugador (hasta 4 por equipo). Se crean como jugadores reales si no existían.</Text>
+                    <View style={styles.formGrid}>
+                      {(["team1", "team2"] as const).map((teamKey) => (
+                        <View key={teamKey} style={{ width: "100%" }}>
+                          <Text style={styles.fieldLabel}>{teamKey === "team1" ? "Local" : "Visitante"}</Text>
+                          <View style={styles.formGrid}>
+                            {lineupForm[teamKey].map((slot, index) => (
+                              <View key={index} style={{ flexDirection: "row", gap: 8, width: "100%" }}>
+                                <LabeledInput
+                                  label={`Jugador ${index + 1}`}
+                                  value={slot.name}
+                                  onChangeText={(v) => setLineupForm((f) => { const next = { ...f, [teamKey]: [...f[teamKey]] }; next[teamKey][index] = { ...next[teamKey][index], name: v }; return next; })}
+                                  placeholder="Nombre completo"
+                                />
+                                <LabeledInput
+                                  label="Handicap"
+                                  value={slot.handicap}
+                                  onChangeText={(v) => setLineupForm((f) => { const next = { ...f, [teamKey]: [...f[teamKey]] }; next[teamKey][index] = { ...next[teamKey][index], handicap: v }; return next; })}
+                                  keyboardType="numeric"
+                                  placeholder="0-10"
+                                />
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                    <View style={styles.formGrid}>
+                      <LabeledInput label="Árbitro principal" value={lineupForm.refereeMain} onChangeText={(v) => setLineupForm((f) => ({ ...f, refereeMain: v }))} placeholder="Nombre completo" />
+                      <LabeledInput label="Árbitro asistente" value={lineupForm.refereeAssistant} onChangeText={(v) => setLineupForm((f) => ({ ...f, refereeAssistant: v }))} placeholder="Nombre completo" />
+                    </View>
+                    <Pressable style={styles.btnPrimary} onPress={() => { void saveLineup(); }} disabled={lineupSaving}>
+                      <Text style={styles.btnPrimaryText}>{lineupSaving ? "Guardando..." : "Guardar formación"}</Text>
+                    </Pressable>
+
+                    <Text style={[styles.panelTitle, { marginTop: 20 }]}>Agregar comentario</Text>
+                    <View style={styles.formGrid}>
+                      <LabeledInput label="Título" value={commentForm.title} onChangeText={(v) => setCommentForm((f) => ({ ...f, title: v }))} placeholder="Ej: Gol de La Dolfina" />
+                      <LabeledInput label="Texto" value={commentForm.body} onChangeText={(v) => setCommentForm((f) => ({ ...f, body: v }))} placeholder="Detalle del comentario" />
+                    </View>
+                    <Pressable style={styles.btnPrimary} onPress={() => { void postComment(); }} disabled={commentSaving}>
+                      <Text style={styles.btnPrimaryText}>{commentSaving ? "Guardando..." : "Agregar comentario"}</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+
+              <View style={styles.panel}>
+                <Text style={styles.panelTitle}>Partidos cargados ({matches.length})</Text>
+                <Text style={styles.helperText}>Actualizá marcador y chukker mientras se juega. El estado se calcula solo.</Text>
+                <ScrollView style={{ maxHeight: 700 }}>
+                  {matches.map((match) => {
+                    const draft = getMatchScoreDraft(match);
+                    return (
+                      <View key={match.id} style={styles.tournamentRow}>
+                        <Text style={styles.tournamentName}>{match.team1.name} vs {match.team2.name}</Text>
+                        <Text style={styles.tournamentMeta}>{new Date(match.scheduledAt).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour12: false })}{match.endsAt ? ` → ${new Date(match.endsAt).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour12: false })}` : ""}</Text>
+                        {match.tournament ? <Text style={styles.tournamentMeta}>Torneo: {match.tournament.name}</Text> : null}
+                        <Text style={styles.tournamentMeta}>Estado: {matchStatusLabels[match.status]}</Text>
+                        <View style={{ flexDirection: "row", gap: 8, marginTop: 6 }}>
+                          <TextInput
+                            value={draft.score1}
+                            onChangeText={(v) => setMatchScoreDrafts((d) => ({ ...d, [match.id]: { ...getMatchScoreDraft(match), score1: v } }))}
+                            keyboardType="numeric"
+                            style={styles.scoreInput}
+                          />
+                          <Text style={styles.tournamentMeta}>-</Text>
+                          <TextInput
+                            value={draft.score2}
+                            onChangeText={(v) => setMatchScoreDrafts((d) => ({ ...d, [match.id]: { ...getMatchScoreDraft(match), score2: v } }))}
+                            keyboardType="numeric"
+                            style={styles.scoreInput}
+                          />
+                          <TextInput
+                            value={draft.currentChukker}
+                            onChangeText={(v) => setMatchScoreDrafts((d) => ({ ...d, [match.id]: { ...getMatchScoreDraft(match), currentChukker: v } }))}
+                            keyboardType="numeric"
+                            placeholder="Chukker"
+                            placeholderTextColor={colors.muted}
+                            style={styles.scoreInput}
+                          />
+                        </View>
+                        <View style={{ flexDirection: "row", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                          <Pressable style={styles.btnSecondary} onPress={() => { void saveMatchScore(match); }} disabled={matchScoreSavingId === match.id}>
+                            <Text style={styles.btnSecondaryText}>{matchScoreSavingId === match.id ? "Guardando..." : "Actualizar marcador"}</Text>
+                          </Pressable>
+                          <Pressable style={styles.btnSecondary} onPress={() => startEditMatch(match)}>
+                            <Text style={styles.btnSecondaryText}>Editar</Text>
+                          </Pressable>
+                          <Pressable style={styles.btnDanger} onPress={() => { void removeMatch(match); }}>
+                            <Text style={styles.btnDangerText}>Eliminar</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    );
+                  })}
+                  {matches.length === 0 ? <Text style={styles.emptyText}>Todavía no hay partidos cargados.</Text> : null}
+                </ScrollView>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* ── SPOTLIGHT EVENTS (generic carousel highlight, not a match) ── */}
+        {activeTab === "events" && (
+          <View style={styles.section}>
+            <View style={styles.twoCol}>
+              <View style={styles.panel}>
+                <Text style={styles.panelTitle}>{editingEventId ? "Editar evento" : "Crear evento"}</Text>
+                <Text style={styles.sectionLead}>Para cosas que no son un partido: entrevistas, previas, etc. Solo aparece en el carrusel del home mientras está en vivo; no figura en Torneos ni en la sección En vivo.</Text>
+                <View style={styles.formGrid}>
+                  <LabeledInput label="Título *" value={eventForm.title} onChangeText={(v) => setEventForm((f) => ({ ...f, title: v }))} placeholder="Ej: Entrevista con Adolfo Cambiaso" />
+                  <LabeledInput label="Descripción breve" value={eventForm.description} onChangeText={(v) => setEventForm((f) => ({ ...f, description: v }))} placeholder="Una frase corta" />
+                  <LabeledInput label="Fecha (YYYY-MM-DD) *" value={eventForm.scheduledDate} onChangeText={(v) => setEventForm((f) => ({ ...f, scheduledDate: v }))} placeholder="2026-09-12" />
+                  <LabeledInput label="Hora (HH:MM, hora Argentina) *" value={eventForm.scheduledTime} onChangeText={(v) => setEventForm((f) => ({ ...f, scheduledTime: v }))} placeholder="14:00" />
+                  <LabeledInput label="Duración (minutos, opcional)" value={eventForm.durationMinutes} onChangeText={(v) => setEventForm((f) => ({ ...f, durationMinutes: v }))} keyboardType="numeric" placeholder="30" />
+                  <LabeledInput label="Link de YouTube" value={eventForm.youtubeUrl} onChangeText={(v) => setEventForm((f) => ({ ...f, youtubeUrl: v }))} placeholder="https://www.youtube.com/live/..." autoCapitalize="none" />
+                </View>
+                <Text style={styles.helperText}>Sin duración, el evento queda "en vivo" hasta que lo edites o lo elimines.</Text>
+
+                <View style={styles.uploadBox}>
+                  {eventForm.backgroundImageUrl ? <Image source={resolveContentImageSource(eventForm.backgroundImageUrl)} style={styles.contentPreview} resizeMode="cover" /> : null}
+                  <Ionicons name="image-outline" size={22} color={colors.primaryDark} />
+                  <Text style={styles.uploadLabel}>Imagen de fondo del slide (opcional).</Text>
+                  <Pressable style={styles.btnPrimary} onPress={() => (document as any).getElementById("admin-event-bg-input")?.click()}>
+                    <Text style={styles.btnPrimaryText}>{eventImageUploading ? "Subiendo..." : "Elegir archivo"}</Text>
+                  </Pressable>
+                  <input type="file" accept="image/*" style={{ display: "none" }} id="admin-event-bg-input" onChange={async (e: any) => {
+                    const file = e.target.files?.[0]; if (!file) return;
+                    setEventImageUploading(true);
+                    try { const u = await uploadAdminSpotlightEventImage(file); setEventForm((f) => ({ ...f, backgroundImageUrl: u.url })); }
+                    finally { setEventImageUploading(false); }
+                  }} />
+                </View>
+
+                <View style={styles.actionRow}>
+                  <Pressable style={styles.btnPrimary} onPress={() => { void saveEvent(); }} disabled={eventSaving}>
+                    <Ionicons name="save-outline" size={16} color="#fff" />
+                    <Text style={styles.btnPrimaryText}>{eventSaving ? "Guardando..." : editingEventId ? "Guardar cambios" : "Guardar evento"}</Text>
+                  </Pressable>
+                  {editingEventId ? (
+                    <Pressable style={styles.btnSecondary} onPress={cancelEditEvent}>
+                      <Text style={styles.btnSecondaryText}>Cancelar edición</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+
+              <View style={styles.panel}>
+                <Text style={styles.panelTitle}>Eventos cargados ({spotlightEvents.length})</Text>
+                <ScrollView style={{ maxHeight: 700 }}>
+                  {spotlightEvents.map((event) => (
+                    <View key={event.id} style={styles.tournamentRow}>
+                      <Text style={styles.tournamentName}>{event.title}</Text>
+                      {event.description ? <Text style={styles.tournamentMeta}>{event.description}</Text> : null}
+                      <Text style={styles.tournamentMeta}>{new Date(event.scheduledAt).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour12: false })}{event.endsAt ? ` → ${new Date(event.endsAt).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour12: false })}` : ""}</Text>
+                      <View style={{ flexDirection: "row", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                        <Pressable style={styles.btnSecondary} onPress={() => startEditEvent(event)}>
+                          <Text style={styles.btnSecondaryText}>Editar</Text>
+                        </Pressable>
+                        <Pressable style={styles.btnDanger} onPress={() => { void removeEvent(event); }}>
+                          <Text style={styles.btnDangerText}>Eliminar</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ))}
+                  {spotlightEvents.length === 0 ? <Text style={styles.emptyText}>Todavía no hay eventos cargados.</Text> : null}
+                </ScrollView>
+              </View>
+            </View>
+          </View>
+        )}
+
       </ScrollView>
     </Screen>
   );
@@ -1253,5 +1943,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   // Tournaments
   tournamentRow: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 10, backgroundColor: colors.background, marginBottom: 8, gap: 2 },
   tournamentName: { color: colors.text, fontSize: 14, fontWeight: "900" },
-  tournamentMeta: { color: colors.muted, fontSize: 12 }
+  tournamentMeta: { color: colors.muted, fontSize: 12 },
+
+  // Matches
+  scoreInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, width: 64, color: colors.text, backgroundColor: colors.surface }
 });

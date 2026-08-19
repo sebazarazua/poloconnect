@@ -1,14 +1,17 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { randomBytes } from "crypto";
 import { RequestUser } from "../common/decorators/current-user.decorator";
+import { MediaService } from "../common/media/media.service";
+import { computeEffectiveMatchStatus, isWithinLiveWindow } from "../common/utils/match-status.util";
 import { PrismaService } from "../database/prisma.service";
 import { AdminContentQueryDto, UpsertAdminContentDto } from "./dto/admin-content.dto";
 import { AdminCommunityBanDto, AdminCommunityMembershipDto } from "./dto/admin-community.dto";
-import { UpsertMatchDto, UpsertMatchStatDto, UpsertTournamentDto } from "./dto/admin-sports.dto";
+import { CreateTeamDto, UpdateMatchDto, UpsertMatchDto, UpsertMatchStatDto, UpsertTournamentDto, UpsertSpotlightEventDto, UpdateSpotlightEventDto, UpsertLineupDto } from "./dto/admin-sports.dto";
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly media: MediaService) {}
 
   private polohubCache: {
     expiresAt: number;
@@ -58,6 +61,11 @@ export class AdminService {
   }
 
   async createContent(user: RequestUser, dto: UpsertAdminContentDto) {
+    const imageUrl = await this.media.ensureStoredMediaUrl("content", dto.imageUrl, {
+      allowAsset: true,
+      allowGoogleImport: true
+    });
+
     const item = await this.prisma.appContentItem.create({
       data: {
         type: dto.type,
@@ -66,8 +74,8 @@ export class AdminService {
         title: dto.title,
         subtitle: dto.subtitle,
         body: dto.body,
-        imageUrl: dto.imageUrl,
-        storageKey: dto.storageKey,
+        imageUrl,
+        storageKey: dto.storageKey ?? this.media.extractStorageKeyFromUrl(imageUrl),
         targetUrl: dto.targetUrl,
         priority: dto.priority ?? 0,
         sortOrder: dto.sortOrder ?? 0,
@@ -85,6 +93,11 @@ export class AdminService {
 
   async updateContent(user: RequestUser, id: string, dto: UpsertAdminContentDto) {
     await this.ensureContent(id);
+    const imageUrl = await this.media.ensureStoredMediaUrl("content", dto.imageUrl, {
+      allowAsset: true,
+      allowGoogleImport: true
+    });
+
     const item = await this.prisma.appContentItem.update({
       where: { id },
       data: {
@@ -94,8 +107,8 @@ export class AdminService {
         title: dto.title,
         subtitle: dto.subtitle,
         body: dto.body,
-        imageUrl: dto.imageUrl,
-        storageKey: dto.storageKey,
+        imageUrl,
+        storageKey: dto.storageKey ?? this.media.extractStorageKeyFromUrl(imageUrl),
         targetUrl: dto.targetUrl,
         priority: dto.priority ?? 0,
         sortOrder: dto.sortOrder ?? 0,
@@ -237,17 +250,21 @@ export class AdminService {
   }
 
   async listMatches() {
-    return this.prisma.match.findMany({
+    const matches = await this.prisma.match.findMany({
       where: { deletedAt: null },
       include: {
-        team1: { select: { id: true, name: true } },
-        team2: { select: { id: true, name: true } },
+        team1: { select: { id: true, name: true, logoUrl: true } },
+        team2: { select: { id: true, name: true, logoUrl: true } },
         tournament: { select: { id: true, name: true } },
         stats: true
       },
       orderBy: { scheduledAt: "desc" },
       take: 200
     });
+
+    // The raw DB status is only ever "upcoming" (or legacy data); show the
+    // admin the same computed upcoming/live/finished value the app displays.
+    return matches.map((match) => ({ ...match, status: computeEffectiveMatchStatus(match) }));
   }
 
   async createMatch(user: RequestUser, dto: UpsertMatchDto) {
@@ -259,18 +276,94 @@ export class AdminService {
         team1Id: dto.team1Id,
         team2Id: dto.team2Id,
         scheduledAt: new Date(dto.scheduledAt),
-        status: dto.status,
+        endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
+        // Status is never admin-selected: it starts as "upcoming" and the effective
+        // upcoming/live/finished state is derived from scheduledAt/endsAt on every read.
+        status: "upcoming",
         score1: dto.score1 ?? 0,
         score2: dto.score2 ?? 0,
         totalChukkers: dto.totalChukkers ?? 6,
         currentChukker: dto.currentChukker,
         competitionName: dto.competitionName,
-        youtubeUrl: dto.youtubeUrl
+        youtubeUrl: dto.youtubeUrl,
+        backgroundImageUrl: dto.backgroundImageUrl
       }
     });
 
     await this.audit(user, "admin.match.create", "Match", match.id);
     return match;
+  }
+
+  async updateMatch(user: RequestUser, matchId: string, dto: UpdateMatchDto) {
+    await this.ensureMatch(matchId);
+
+    const match = await this.prisma.match.update({
+      where: { id: matchId },
+      data: {
+        tournamentId: dto.tournamentId,
+        clubId: dto.clubId,
+        team1Id: dto.team1Id,
+        team2Id: dto.team2Id,
+        scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : undefined,
+        endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
+        competitionName: dto.competitionName,
+        youtubeUrl: dto.youtubeUrl,
+        backgroundImageUrl: dto.backgroundImageUrl,
+        version: { increment: 1 }
+      }
+    });
+
+    await this.audit(user, "admin.match.update", "Match", matchId);
+    return match;
+  }
+
+  async deleteMatch(user: RequestUser, matchId: string) {
+    await this.ensureMatch(matchId);
+    await this.prisma.match.update({ where: { id: matchId }, data: { deletedAt: new Date() } });
+    await this.audit(user, "admin.match.delete", "Match", matchId);
+    return { ok: true };
+  }
+
+  async listTeams() {
+    return this.prisma.team.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" }, take: 500 });
+  }
+
+  async createTeam(user: RequestUser, dto: CreateTeamDto) {
+    const team = await this.prisma.team.create({
+      data: {
+        name: dto.name,
+        slug: await this.generateUniqueTeamSlug(dto.name),
+        logoUrl: dto.logoUrl
+      }
+    });
+
+    await this.audit(user, "admin.team.create", "Team", team.id);
+    return team;
+  }
+
+  async deleteTeam(user: RequestUser, teamId: string) {
+    await this.prisma.team.update({ where: { id: teamId }, data: { deletedAt: new Date() } });
+    await this.audit(user, "admin.team.delete", "Team", teamId);
+    return { ok: true };
+  }
+
+  // Admins never type a slug; it's derived from the team name plus a short
+  // random suffix so it stays unique without a round-trip to check availability.
+  private async generateUniqueTeamSlug(name: string) {
+    const base = name
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "") || "equipo";
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const candidate = attempt === 0 ? base : `${base}-${randomBytes(3).toString("hex")}`;
+      const existing = await this.prisma.team.findUnique({ where: { slug: candidate } });
+      if (!existing) return candidate;
+    }
+
+    return `${base}-${randomBytes(4).toString("hex")}`;
   }
 
   async upsertMatchStat(user: RequestUser, matchId: string, dto: UpsertMatchStatDto) {
@@ -294,6 +387,92 @@ export class AdminService {
 
     await this.audit(user, "admin.match.stat.upsert", "Match", matchId, { statKey: dto.statKey });
     return stat;
+  }
+
+  async setMatchLineup(user: RequestUser, matchId: string, dto: UpsertLineupDto) {
+    const match = await this.ensureMatch(matchId);
+
+    await this.prisma.matchLineup.deleteMany({ where: { matchId } });
+
+    for (const [teamId, players] of [[match.team1Id, dto.team1 ?? []], [match.team2Id, dto.team2 ?? []]] as const) {
+      for (let index = 0; index < players.length; index += 1) {
+        const name = players[index].name?.trim();
+        if (!name) continue;
+
+        const player =
+          (await this.prisma.player.findFirst({ where: { displayName: name, deletedAt: null } })) ??
+          (await this.prisma.player.create({ data: { displayName: name, handicap: players[index].handicap } }));
+
+        if (players[index].handicap !== undefined && Number(player.handicap) !== players[index].handicap) {
+          await this.prisma.player.update({ where: { id: player.id }, data: { handicap: players[index].handicap } });
+        }
+
+        await this.prisma.matchLineup.create({
+          data: { matchId, teamId, playerId: player.id, position: index + 1, shirtNumber: index + 1 }
+        });
+      }
+    }
+
+    await this.prisma.match.update({
+      where: { id: matchId },
+      data: { refereeMain: dto.refereeMain, refereeAssistant: dto.refereeAssistant }
+    });
+
+    await this.audit(user, "admin.match.lineup.upsert", "Match", matchId);
+    return { ok: true };
+  }
+
+  async listSpotlightEvents() {
+    return this.prisma.spotlightEvent.findMany({ where: { deletedAt: null }, orderBy: { scheduledAt: "desc" }, take: 200 });
+  }
+
+  async getLiveSpotlightEvents() {
+    const events = await this.prisma.spotlightEvent.findMany({
+      where: { deletedAt: null, scheduledAt: { lte: new Date() } },
+      orderBy: { scheduledAt: "desc" },
+      take: 50
+    });
+    return events.filter((event) => isWithinLiveWindow(event.scheduledAt, event.endsAt));
+  }
+
+  async createSpotlightEvent(user: RequestUser, dto: UpsertSpotlightEventDto) {
+    const event = await this.prisma.spotlightEvent.create({
+      data: {
+        title: dto.title,
+        description: dto.description,
+        scheduledAt: new Date(dto.scheduledAt),
+        endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
+        youtubeUrl: dto.youtubeUrl,
+        backgroundImageUrl: dto.backgroundImageUrl,
+        createdBy: user.id
+      }
+    });
+
+    await this.audit(user, "admin.spotlightEvent.create", "SpotlightEvent", event.id);
+    return event;
+  }
+
+  async updateSpotlightEvent(user: RequestUser, id: string, dto: UpdateSpotlightEventDto) {
+    const event = await this.prisma.spotlightEvent.update({
+      where: { id },
+      data: {
+        title: dto.title,
+        description: dto.description,
+        scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : undefined,
+        endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
+        youtubeUrl: dto.youtubeUrl,
+        backgroundImageUrl: dto.backgroundImageUrl
+      }
+    });
+
+    await this.audit(user, "admin.spotlightEvent.update", "SpotlightEvent", id);
+    return event;
+  }
+
+  async deleteSpotlightEvent(user: RequestUser, id: string) {
+    await this.prisma.spotlightEvent.update({ where: { id }, data: { deletedAt: new Date() } });
+    await this.audit(user, "admin.spotlightEvent.delete", "SpotlightEvent", id);
+    return { ok: true };
   }
 
   async getPublicSection(section: string, slot?: string) {

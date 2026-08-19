@@ -2,7 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Linking,
   PanResponder,
   Pressable,
   ScrollView,
@@ -150,12 +149,11 @@ export default function BroadcastScreen() {
     return grouped;
   }, [broadcasts]);
 
-  const handleWatchPress = async (youtubeUrl: string) => {
-    try {
-      await Linking.openURL(youtubeUrl);
-    } catch (error) {
-      console.error("Error opening URL:", error);
-    }
+  const handleWatchPress = (youtubeUrl: string, title?: string) => {
+    router.push({
+      pathname: "/watch-live",
+      params: { url: youtubeUrl, title: title ?? "" }
+    });
   };
 
   const getTimeSegmentLabel = (segment: TimeSegment): string => {
@@ -218,7 +216,7 @@ export default function BroadcastScreen() {
               styles.watchButton,
               pressed && styles.watchButtonPressed
             ]}
-            onPress={() => handleWatchPress(broadcast.youtubeUrl)}
+            onPress={() => handleWatchPress(broadcast.youtubeUrl, `${broadcast.team1} vs ${broadcast.team2}`)}
           >
             <Ionicons name="play-circle" size={18} color="#ffffff" />
             <Text style={styles.watchButtonText}>{t("broadcast.watchYoutube")}</Text>

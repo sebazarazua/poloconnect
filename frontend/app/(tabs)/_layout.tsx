@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { Platform } from "react-native";
+import { Platform, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppDrawerProvider } from "@/components/AppDrawer";
 import { useTheme } from "@/constants/theme";
@@ -30,11 +30,22 @@ export default function TabLayout() {
           headerShown: false,
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.muted,
-          tabBarLabelStyle: {
-            fontSize: 11,
-            fontWeight: "600",
-            marginTop: 2
-          },
+          // Custom label: forces a single line and shrinks to fit so long/translated
+          // words never wrap and get clipped by the fixed tab bar height (e.g. Samsung
+          // devices with larger default system font size).
+          tabBarLabel: ({ children, color }) => (
+            <Text
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+              allowFontScaling={false}
+              maxFontSizeMultiplier={1}
+              style={{ fontSize: 11, fontWeight: "600", marginTop: 2, color, textAlign: "center" }}
+            >
+              {children}
+            </Text>
+          ),
           tabBarStyle: {
             height: tabBarHeight,
             paddingTop: 8,

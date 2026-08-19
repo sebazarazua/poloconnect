@@ -6,6 +6,7 @@ import { JwtModule } from "@nestjs/jwt";
 import { AuthModule } from "./auth/auth.module";
 import { BrandsModule } from "./brands/brands.module";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
+import { MediaModule } from "./common/media/media.module";
 import { RolesGuard } from "./common/guards/roles.guard";
 import { CommunityModule } from "./community/community.module";
 import { DatabaseModule } from "./database/database.module";
@@ -23,6 +24,7 @@ import { UsersModule } from "./users/users.module";
     ConfigModule.forRoot({ isGlobal: true }),
     JwtModule.register({ global: true }),
     DatabaseModule,
+    MediaModule,
     AuthModule,
     AdminModule,
     UsersModule,

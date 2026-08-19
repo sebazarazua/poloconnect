@@ -30,15 +30,23 @@ function getBackendOrigin() {
 function normalizeContentImageUrl(imageUrl: string) {
   const backendOrigin = getBackendOrigin();
 
+  const normalizePath = (path: string) => {
+    if (path.startsWith("/api/")) return path;
+    if (path.startsWith("/media/")) return `/api/v1${path}`;
+    return path;
+  };
+
   if (imageUrl.startsWith("/")) {
-    return backendOrigin ? `${backendOrigin}${imageUrl}` : imageUrl;
+    const normalizedPath = normalizePath(imageUrl);
+    return backendOrigin ? `${backendOrigin}${normalizedPath}` : normalizedPath;
   }
 
   try {
     const parsed = new URL(imageUrl);
 
     if ((parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") && backendOrigin) {
-      return `${backendOrigin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+      const normalizedPath = normalizePath(parsed.pathname);
+      return `${backendOrigin}${normalizedPath}${parsed.search}${parsed.hash}`;
     }
 
     return imageUrl;

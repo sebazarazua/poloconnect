@@ -5,6 +5,7 @@ import {
   Linking,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  PixelRatio,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -40,7 +41,10 @@ export function AdCarousel({ images, targetUrls = [], height = 100 }: AdCarousel
   const carouselRef = useRef<ScrollView>(null);
   const [activeItem, setActiveItem] = useState(0);
   const { width } = useWindowDimensions();
-  const bannerWidth = Math.max(width - 40, 280);
+  // PixelRatio rounding (not plain dp rounding) guarantees a whole number of
+  // physical pixels per slide, which avoids a 1px seam/bleed between adjacent
+  // carousel items on Android caused by Yoga rounding each item independently.
+  const bannerWidth = PixelRatio.roundToNearestPixel(Math.max(width - 40, 280));
   const bannerHeight = getResponsiveHeight(height, bannerWidth);
 
   useEffect(() => {
@@ -86,9 +90,11 @@ export function AdCarousel({ images, targetUrls = [], height = 100 }: AdCarousel
         ref={carouselRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        pagingEnabled
         snapToInterval={bannerWidth}
+        snapToAlignment="start"
         decelerationRate="fast"
+        disableIntervalMomentum
+        overScrollMode="never"
         onTouchStart={() => setDrawerGestureBlocked(true)}
         onTouchEnd={() => setDrawerGestureBlocked(false)}
         onTouchCancel={() => setDrawerGestureBlocked(false)}
@@ -96,6 +102,7 @@ export function AdCarousel({ images, targetUrls = [], height = 100 }: AdCarousel
         onScrollEndDrag={() => setDrawerGestureBlocked(false)}
         onMomentumScrollBegin={() => setDrawerGestureBlocked(true)}
         onMomentumScrollEnd={handleMomentumEnd}
+        style={{ width: bannerWidth, overflow: "hidden" }}
         contentContainerStyle={styles.track}
       >
         {images.map((image, index) => (
@@ -135,7 +142,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   },
   image: {
     width: "100%",
-    height: "100%"
+    height: "100%",
+    // Android only clips an Image reliably when it carries the same radius as
+    // its parent; relying on the parent's overflow:hidden alone can leave a
+    // hairline of the previous slide bleeding through the rounded edge.
+    borderRadius: 14
   },
   dots: {
     flexDirection: "row",

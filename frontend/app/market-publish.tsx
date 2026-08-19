@@ -40,7 +40,6 @@ export default function MarketPublishScreen() {
   const { products, addProduct, updateProduct, deleteProduct } = useMarket();
   const existingProduct = useMemo(() => products.find((product) => product.id === id), [id, products]);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
-  const [manualImageUrl, setManualImageUrl] = useState("");
   const [name, setName] = useState("");
   const [selectedState, setSelectedState] = useState<ProductStatus>("Nuevo");
   const [selectedCategory, setSelectedCategory] = useState<PublishCategory>("equipamiento");
@@ -60,7 +59,6 @@ export default function MarketPublishScreen() {
 
     const nextImages = (existingProduct.images ?? []).filter((entry) => Boolean(entry?.trim()));
     setImageUrls(nextImages.length > 0 ? nextImages : (existingProduct.image ? [existingProduct.image] : []));
-    setManualImageUrl("");
     setName(existingProduct.name);
     setSelectedState(existingProduct.status);
     setSelectedCategory(existingProduct.category);
@@ -69,18 +67,6 @@ export default function MarketPublishScreen() {
     setCustomContactPhone(existingProduct.contactPhone ?? "");
     setUseAccountPhone(!existingProduct.contactPhone);
   }, [existingProduct]);
-
-  const addImageUrl = (url: string) => {
-    const normalized = url.trim();
-    if (!normalized) return;
-
-    setImageUrls((current) => {
-      if (current.includes(normalized)) {
-        return current;
-      }
-      return [...current, normalized];
-    });
-  };
 
   const appendImageUrls = (urls: string[]) => {
     setImageUrls((current) => {
@@ -254,29 +240,7 @@ export default function MarketPublishScreen() {
               ))}
             </ScrollView>
           ) : null}
-          <TextInput
-            style={styles.input}
-            placeholder={t("marketPublish.imageUrl")}
-            placeholderTextColor={colors.muted}
-            value={manualImageUrl}
-            onChangeText={setManualImageUrl}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="done"
-            onSubmitEditing={() => {
-              addImageUrl(manualImageUrl);
-              setManualImageUrl("");
-            }}
-          />
-          <Pressable
-            style={styles.descriptionDoneButton}
-            onPress={() => {
-              addImageUrl(manualImageUrl);
-              setManualImageUrl("");
-            }}
-          >
-            <Text style={styles.descriptionDoneText}>Agregar URL como foto</Text>
-          </Pressable>
+          <Text style={styles.helperText}>Solo se aceptan fotos subidas desde tu dispositivo (se guardan en S3).</Text>
           <Text style={styles.helperText}>El orden queda según selección: la foto 1 será la portada.</Text>
         </View>
 

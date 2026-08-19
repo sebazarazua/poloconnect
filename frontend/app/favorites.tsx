@@ -5,6 +5,7 @@ import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useMarket } from "@/contexts/MarketContext";
+import { resolveUploadedUrl } from "@/services/api/users";
 
 export default function FavoritesScreen() {
   const colors = useThemeColors();
@@ -29,7 +30,7 @@ export default function FavoritesScreen() {
               onPress={() => router.push({ pathname: "/product-detail", params: { id: product.id } })}
               accessibilityLabel={t("favorites.openProductA11y", { name: product.name })}
             >
-              <Image source={{ uri: product.image }} style={styles.image} />
+              <Image source={{ uri: resolveUploadedUrl(product.image) ?? product.image }} style={styles.image} />
 
               <View style={styles.info}>
                 <Text style={styles.name}>{product.name.replace("\n", " ")}</Text>

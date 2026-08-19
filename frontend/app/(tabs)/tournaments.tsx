@@ -19,7 +19,10 @@ export default function TournamentsScreen() {
   const styles = createStyles(colors);
   const router = useRouter();
   const { locale, t } = useLocale();
-  const [calendarDate, setCalendarDate] = useState({ month: 5, year: 2026 });
+  const [calendarDate, setCalendarDate] = useState(() => {
+    const now = new Date();
+    return { month: now.getMonth(), year: now.getFullYear() };
+  });
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
 

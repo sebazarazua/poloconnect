@@ -17,3 +17,14 @@ export class AdminPublicController {
     return this.admin.getPublicSection(section, slot);
   }
 }
+
+@Public()
+@Controller("spotlight-events")
+export class SpotlightEventsPublicController {
+  constructor(private readonly admin: AdminService) {}
+
+  @Get("live")
+  live() {
+    return this.admin.getLiveSpotlightEvents();
+  }
+}

@@ -7,6 +7,7 @@ import {
   Linking,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  PixelRatio,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,12 +20,13 @@ import { AdCarousel } from "@/components/AdCarousel";
 import { Screen } from "@/components/Screen";
 import { useAppDrawer } from "@/components/AppDrawer";
 import { AppColors, useThemeColors } from "@/constants/theme";
-import { getTeamLogoSource } from "@/constants/teamLogos";
+import { resolveTeamLogoSource } from "@/constants/teamLogos";
 import { formatHomeEyebrow } from "@/constants/i18n";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHomeContent } from "@/services/api/content";
 import { listMatches } from "@/services/api/matches";
+import { getLiveSpotlightEvents, type SpotlightEvent } from "@/services/api/spotlight-events";
 import { resolveContentImageSource } from "@/services/content-images";
 import { parseContentTarget } from "@/services/content-targets";
 import { Match } from "@/services/matches";
@@ -73,7 +75,10 @@ export default function HomeScreen() {
   const heroCarouselRef = useRef<ScrollView>(null);
   const [activeHero, setActiveHero] = useState(0);
   const { width } = useWindowDimensions();
-  const bannerWidth = Math.max(width - screenHorizontalPadding, 280);
+  // PixelRatio rounding (not plain dp rounding) guarantees a whole number of
+  // physical pixels per slide, which avoids a 1px seam/bleed between adjacent
+  // carousel items on Android caused by Yoga rounding each item independently.
+  const bannerWidth = PixelRatio.roundToNearestPixel(Math.max(width - screenHorizontalPadding, 280));
   const primaryBannerHeight = getResponsiveBannerHeight(homePrimaryBannerBaseHeight, bannerWidth);
   const welcomeName = user?.firstName?.trim() || "Adrian";
   const [homeContent, setHomeContent] = useState<{ heroAds: HomeAdItem[]; compactAds: HomeAdItem[]; news: Array<{ title: string; subtitle?: string; body?: string; imageUrl: string; targetUrl?: string }> }>({
@@ -82,6 +87,7 @@ export default function HomeScreen() {
     news: []
   });
   const [liveMatches, setLiveMatches] = useState<Match[]>([]);
+  const [liveSpotlightEvents, setLiveSpotlightEvents] = useState<SpotlightEvent[]>([]);
 
   const openTargetUrl = async (targetUrl?: string) => {
     const target = parseContentTarget(targetUrl);
@@ -101,6 +107,14 @@ export default function HomeScreen() {
     router.push({
       pathname: "/match-detail",
       params: { id }
+    });
+  };
+
+  const openSpotlightEvent = (youtubeUrl?: string | null, title?: string) => {
+    if (!youtubeUrl) return;
+    router.push({
+      pathname: "/watch-live",
+      params: { url: youtubeUrl, title: title ?? "" }
     });
   };
 
@@ -133,6 +147,10 @@ export default function HomeScreen() {
         setLiveMatches(sorted);
       })
       .catch(() => setLiveMatches([]));
+
+    void getLiveSpotlightEvents()
+      .then(setLiveSpotlightEvents)
+      .catch(() => setLiveSpotlightEvents([]));
   }, [t]);
 
   const ads = homeContent.heroAds.length > 0 ? homeContent.heroAds.map((ad) => resolveContentImageSource(ad.imageUrl)) : fallbackAds;
@@ -153,10 +171,21 @@ export default function HomeScreen() {
         id: string;
         team1: string;
         team2: string;
+        team1LogoUrl?: string;
+        team2LogoUrl?: string;
         score1: number;
         score2: number;
         competition: string;
         chukker?: string;
+        backgroundImageUrl?: string;
+      }
+    | {
+        type: "event";
+        id: string;
+        title: string;
+        description?: string;
+        youtubeUrl?: string;
+        backgroundImageUrl?: string;
       }
     | {
         type: "news";
@@ -193,16 +222,28 @@ export default function HomeScreen() {
     id: match.externalCode || match.id,
     team1: match.team1,
     team2: match.team2,
+    team1LogoUrl: match.team1LogoUrl,
+    team2LogoUrl: match.team2LogoUrl,
     score1: match.score1,
     score2: match.score2,
     competition: match.competition,
-    chukker: match.chukker
+    chukker: match.chukker,
+    backgroundImageUrl: match.backgroundImageUrl
   }));
 
-  const heroItems: HeroItem[] = [...liveMatchItems, ...remoteNewsItems];
+  const liveEventItems: HeroItem[] = liveSpotlightEvents.map((event) => ({
+    type: "event",
+    id: event.id,
+    title: event.title,
+    description: event.description ?? undefined,
+    youtubeUrl: event.youtubeUrl ?? undefined,
+    backgroundImageUrl: event.backgroundImageUrl ?? undefined
+  }));
+
+  const heroItems: HeroItem[] = [...liveMatchItems, ...liveEventItems, ...remoteNewsItems];
 
   const activeHeroItem = heroItems[activeHero];
-  const activeHeroDuration = activeHeroItem?.type === "match" ? matchSlideDurationMs : newsSlideDurationMs;
+  const activeHeroDuration = activeHeroItem?.type === "match" || activeHeroItem?.type === "event" ? matchSlideDurationMs : newsSlideDurationMs;
 
   const handleQuickAccessPress = (key: string) => {
     if (key === "calendar") {
@@ -267,7 +308,7 @@ export default function HomeScreen() {
 
   return (
     <Screen
-      eyebrow={formatHomeEyebrow(locale, new Date(2026, 5, 1))}
+      eyebrow={formatHomeEyebrow(locale, new Date())}
       title={t("home.welcome", { name: welcomeName })}
     >
       {/* ── Hero carousel: live match + news ── */}
@@ -275,9 +316,11 @@ export default function HomeScreen() {
         ref={heroCarouselRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        pagingEnabled
         snapToInterval={bannerWidth}
+        snapToAlignment="start"
         decelerationRate="fast"
+        disableIntervalMomentum
+        overScrollMode="never"
         onTouchStart={() => setDrawerGestureBlocked(true)}
         onTouchEnd={() => setDrawerGestureBlocked(false)}
         onTouchCancel={() => setDrawerGestureBlocked(false)}
@@ -286,7 +329,7 @@ export default function HomeScreen() {
         onMomentumScrollEnd={handleHeroMomentumEnd}
         onMomentumScrollBegin={() => setDrawerGestureBlocked(true)}
         contentContainerStyle={styles.heroTrack}
-        style={{ width: bannerWidth }}
+        style={{ width: bannerWidth, overflow: "hidden" }}
       >
         {heroItems.map((item, index) =>
           item.type === "match" ? (
@@ -296,7 +339,7 @@ export default function HomeScreen() {
               onPress={() => openFeaturedMatch(item.id)}
             >
               <ImageBackground
-                source={featuredMatchBackground}
+                source={item.backgroundImageUrl ? resolveContentImageSource(item.backgroundImageUrl) : featuredMatchBackground}
                 style={styles.matchHeroFill}
                 imageStyle={styles.matchHeroImage}
                 resizeMode="cover"
@@ -319,7 +362,7 @@ export default function HomeScreen() {
                     <View style={styles.teamBlock}>
                       <View style={styles.teamLogo}>
                         <Image
-                          source={getTeamLogoSource(item.team1, 92)}
+                          source={resolveTeamLogoSource(item.team1, item.team1LogoUrl, 92)}
                           style={styles.teamLogoImg}
                           resizeMode="cover"
                         />
@@ -334,7 +377,7 @@ export default function HomeScreen() {
                     <View style={styles.teamBlock}>
                       <View style={styles.teamLogo}>
                         <Image
-                          source={getTeamLogoSource(item.team2, 92)}
+                          source={resolveTeamLogoSource(item.team2, item.team2LogoUrl, 92)}
                           style={styles.teamLogoImg}
                           resizeMode="cover"
                         />
@@ -346,6 +389,45 @@ export default function HomeScreen() {
                   </View>
                 </View>
               </View>
+              </ImageBackground>
+            </Pressable>
+          ) : item.type === "event" ? (
+            <Pressable
+              key={index}
+              style={[styles.matchHero, { width: bannerWidth }]}
+              onPress={() => openSpotlightEvent(item.youtubeUrl, item.title)}
+            >
+              <ImageBackground
+                source={item.backgroundImageUrl ? resolveContentImageSource(item.backgroundImageUrl) : featuredMatchBackground}
+                style={styles.matchHeroFill}
+                imageStyle={styles.matchHeroImage}
+                resizeMode="cover"
+              >
+                <View style={styles.matchOverlay}>
+                  <View>
+                    <View style={styles.liveBadge}>
+                      <View style={styles.liveBadgeDot} />
+                      <Text style={styles.liveBadgeText}>{t("home.live")}</Text>
+                    </View>
+                    <Text style={styles.matchTournament} numberOfLines={2}>
+                      {item.title.toUpperCase()}
+                    </Text>
+                    {item.description ? (
+                      <Text style={styles.matchChukker} numberOfLines={2}>
+                        {item.description}
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  {item.youtubeUrl ? (
+                    <View style={styles.matchBottom}>
+                      <View style={styles.readMoreButton}>
+                        <Text style={styles.readMoreText}>{t("home.watchLive")}</Text>
+                        <Ionicons name="play" size={13} color="#ffffff" />
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
               </ImageBackground>
             </Pressable>
           ) : (
@@ -446,9 +528,11 @@ export default function HomeScreen() {
         ref={carouselRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        pagingEnabled
         snapToInterval={bannerWidth}
+        snapToAlignment="start"
         decelerationRate="fast"
+        disableIntervalMomentum
+        overScrollMode="never"
         onTouchStart={() => setDrawerGestureBlocked(true)}
         onTouchEnd={() => setDrawerGestureBlocked(false)}
         onTouchCancel={() => setDrawerGestureBlocked(false)}
@@ -456,6 +540,7 @@ export default function HomeScreen() {
         onScrollEndDrag={() => setDrawerGestureBlocked(false)}
         onMomentumScrollBegin={() => setDrawerGestureBlocked(true)}
         onMomentumScrollEnd={handleAdMomentumEnd}
+        style={{ width: bannerWidth, overflow: "hidden" }}
         contentContainerStyle={styles.adsTrack}
       >
         {ads.map((ad, index) => (
@@ -500,7 +585,18 @@ export default function HomeScreen() {
                   color={colors.background !== "#ffffff" ? "#0a3d7a" : "#E8C97A"}
                 />
               </View>
-              <Text style={styles.quickText}>{label}</Text>
+              <Text
+                style={styles.quickText}
+                numberOfLines={2}
+                ellipsizeMode="tail"
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+                allowFontScaling={false}
+                maxFontSizeMultiplier={1}
+                textBreakStrategy="simple"
+              >
+                {label}
+              </Text>
             </View>
             <View style={styles.quickGoldDot} />
           </Pressable>
@@ -620,7 +716,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   },
   adImage: {
     width: "100%",
-    height: "100%"
+    height: "100%",
+    // Android only clips an Image reliably when it carries the same radius as
+    // its parent; relying on the parent's overflow:hidden alone can leave a
+    // hairline of the previous slide bleeding through the rounded edge.
+    borderRadius: 18
   },
   dots: {
     flexDirection: "row",
@@ -750,7 +850,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   newsBackgroundImage: {
     ...StyleSheet.absoluteFillObject,
     width: "100%",
-    height: "100%"
+    height: "100%",
+    // Android only clips an Image reliably when it carries the same radius as
+    // its parent; relying on the parent's overflow:hidden alone can leave a
+    // hairline of the previous slide bleeding through the rounded edge.
+    borderRadius: 18
   },
   newsDarkLayer: {
     ...StyleSheet.absoluteFillObject,

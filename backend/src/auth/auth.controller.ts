@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post, Put, Req, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { Throttle } from "@nestjs/throttler";
 import { Public } from "../common/decorators/public.decorator";
 import { CurrentUser, RequestUser } from "../common/decorators/current-user.decorator";
 import { parseCookieHeader } from "../common/utils/cookies";
@@ -37,6 +38,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   @Post("register")
   register(@Body() dto: RegisterDto, @Req() req: any) {
     return this.auth.register(dto, req).then((tokens) => {
@@ -46,6 +48,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   @Post("login")
   login(@Body() dto: LoginDto, @Req() req: any) {
     return this.auth.login(dto, req).then((tokens) => {
@@ -55,6 +58,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 20 } })
   @Post("login/google")
   loginWithGoogle(@Body() dto: GoogleLoginDto, @Req() req: any) {
     return this.auth.loginWithGoogle(dto, req).then((tokens) => {
@@ -64,6 +68,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 20 } })
   @Post("login/apple")
   loginWithApple(@Body() dto: AppleLoginDto, @Req() req: any) {
     return this.auth.loginWithApple(dto, req).then((tokens) => {
@@ -73,12 +78,14 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 15 * 60_000, limit: 5 } })
   @Post("password-reset/request")
   requestPasswordReset(@Body() dto: PasswordResetRequestDto) {
     return this.auth.requestPasswordReset(dto);
   }
 
   @Public()
+  @Throttle({ default: { ttl: 15 * 60_000, limit: 10 } })
   @Post("password-reset/confirm")
   confirmPasswordReset(@Body() dto: PasswordResetConfirmDto, @Req() req: any) {
     return this.auth.confirmPasswordReset(dto, req).then((tokens) => {
@@ -88,6 +95,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @Post("refresh")
   refresh(@Body() dto: RefreshDto, @Req() req: any) {
     const cookies = parseCookieHeader(req.headers?.cookie);

@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import * as argon2 from "argon2";
+import { assertDemoSeedAllowed } from "./seed-guard";
 
 const prisma = new PrismaClient();
 
@@ -8,6 +9,8 @@ function slug(value: string) {
 }
 
 async function main() {
+  assertDemoSeedAllowed("prisma/seed.ts");
+
   const roles = await Promise.all([
     prisma.role.upsert({ where: { code: "player" }, update: {}, create: { code: "player", name: "Player" } }),
     prisma.role.upsert({ where: { code: "seller" }, update: {}, create: { code: "seller", name: "Seller" } }),

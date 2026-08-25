@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { Throttle } from "@nestjs/throttler";
 import { memoryStorage } from "multer";
 import { CurrentUser, RequestUser } from "../common/decorators/current-user.decorator";
 import { Roles } from "../common/decorators/roles.decorator";
@@ -46,6 +47,7 @@ export class AdminController {
   }
 
   @UseGuards(CsrfGuard)
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @Post("content/upload")
   @UseInterceptors(
     FileInterceptor("file", {
@@ -148,6 +150,7 @@ export class AdminController {
   }
 
   @UseGuards(CsrfGuard)
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @Post("sports/matches/upload")
   @UseInterceptors(
     FileInterceptor("file", {
@@ -177,6 +180,7 @@ export class AdminController {
   }
 
   @UseGuards(CsrfGuard)
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @Post("sports/teams/upload")
   @UseInterceptors(
     FileInterceptor("file", {
@@ -213,6 +217,7 @@ export class AdminController {
   }
 
   @UseGuards(CsrfGuard)
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @Post("sports/events/upload")
   @UseInterceptors(
     FileInterceptor("file", {
@@ -246,6 +251,7 @@ export class AdminController {
   }
 
   @UseGuards(CsrfGuard)
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @Post("brands/upload")
   @UseInterceptors(
     FileInterceptor("file", {

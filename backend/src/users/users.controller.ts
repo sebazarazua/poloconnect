@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Patch, Post, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { Throttle } from "@nestjs/throttler";
 import { memoryStorage } from "multer";
 import { CurrentUser, RequestUser } from "../common/decorators/current-user.decorator";
 import { CsrfGuard } from "../common/guards/csrf.guard";
@@ -67,6 +68,7 @@ export class UsersController {
   }
 
   @UseGuards(CsrfGuard)
+  @Throttle({ default: { ttl: 60_000, limit: 20 } })
   @Post("me/avatar")
   @UseInterceptors(
     FileInterceptor("file", {

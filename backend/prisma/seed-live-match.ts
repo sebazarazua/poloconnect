@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { assertDemoSeedAllowed } from "./seed-guard";
 
 const prisma = new PrismaClient();
 
@@ -12,6 +13,8 @@ function slug(value: string) {
 }
 
 async function main() {
+  assertDemoSeedAllowed("prisma/seed-live-match.ts");
+
   const clubs = await Promise.all(
     [
       "Tortugas Club",

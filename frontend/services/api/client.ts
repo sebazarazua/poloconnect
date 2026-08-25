@@ -82,6 +82,10 @@ export function getApiUrl() {
   return apiUrl;
 }
 
+export function getAccessToken() {
+  return accessToken;
+}
+
 async function refreshAccessToken() {
   if (!refreshToken) {
     throw new Error("No hay sesión activa.");

@@ -1,8 +1,11 @@
 import { PrismaClient } from "@prisma/client";
+import { assertDemoSeedAllowed } from "./seed-guard";
 
 const prisma = new PrismaClient();
 
 async function main() {
+  assertDemoSeedAllowed("prisma/seed-horse-auctions.ts");
+
   const auctionEvents = [
     {
       slug: "la-dolfina-breeders-select-sale-2026",

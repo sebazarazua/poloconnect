@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { assertDemoSeedAllowed } from "./seed-guard";
 
 const prisma = new PrismaClient();
 
@@ -95,6 +96,8 @@ const showcaseBrands = [
 ] as const;
 
 async function main() {
+  assertDemoSeedAllowed("prisma/seed-brands-showcase.ts");
+
   for (let brandIndex = 0; brandIndex < showcaseBrands.length; brandIndex += 1) {
     const brandData = showcaseBrands[brandIndex];
     const brandSlug = slug(brandData.name);

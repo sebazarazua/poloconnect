@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { Throttle } from "@nestjs/throttler";
 import { memoryStorage } from "multer";
 import { CurrentUser, RequestUser } from "../common/decorators/current-user.decorator";
 import { Roles } from "../common/decorators/roles.decorator";
@@ -57,6 +58,7 @@ export class AdminHorseAuctionsController {
   }
 
   @Post("upload/event")
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @UseInterceptors(
     FileInterceptor("file", {
       storage: memoryStorage(),
@@ -69,6 +71,7 @@ export class AdminHorseAuctionsController {
   }
 
   @Post("upload/horse")
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @UseInterceptors(
     FileInterceptor("file", {
       storage: memoryStorage(),

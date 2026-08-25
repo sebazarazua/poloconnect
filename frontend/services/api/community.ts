@@ -1,4 +1,4 @@
-import { apiRequest } from "@/services/api/client";
+import { apiRequest, getAccessToken } from "@/services/api/client";
 import { getApiUrl } from "@/services/api/client";
 import { io, Socket } from "socket.io-client";
 import type { ChatItem } from "@/contexts/CommunityContext";
@@ -42,6 +42,7 @@ function getWsBaseUrl() {
 function getCommunitySocket() {
   if (!communitySocket) {
     communitySocket = io(`${getWsBaseUrl()}/ws`, {
+      auth: { token: getAccessToken() },
       transports: ["websocket"],
       reconnection: true,
       reconnectionAttempts: Infinity,

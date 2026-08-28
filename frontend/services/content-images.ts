@@ -1,5 +1,5 @@
 import type { ImageSourcePropType } from "react-native";
-import { getApiUrl } from "@/services/api/client";
+import { resolveApiMediaUrl } from "@/services/api/client";
 
 const assetImageMap: Record<string, ImageSourcePropType> = {
   "asset:app/logo": require("@/assets/logo.png"),
@@ -17,42 +17,8 @@ const assetImageMap: Record<string, ImageSourcePropType> = {
   "asset:live/slide-3": require("@/assets/ads/live/slide-3.png")
 };
 
-function getBackendOrigin() {
-  const apiUrl = getApiUrl();
-
-  try {
-    return new URL(apiUrl).origin;
-  } catch {
-    return "";
-  }
-}
-
 function normalizeContentImageUrl(imageUrl: string) {
-  const backendOrigin = getBackendOrigin();
-
-  const normalizePath = (path: string) => {
-    if (path.startsWith("/api/")) return path;
-    if (path.startsWith("/media/")) return `/api/v1${path}`;
-    return path;
-  };
-
-  if (imageUrl.startsWith("/")) {
-    const normalizedPath = normalizePath(imageUrl);
-    return backendOrigin ? `${backendOrigin}${normalizedPath}` : normalizedPath;
-  }
-
-  try {
-    const parsed = new URL(imageUrl);
-
-    if ((parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") && backendOrigin) {
-      const normalizedPath = normalizePath(parsed.pathname);
-      return `${backendOrigin}${normalizedPath}${parsed.search}${parsed.hash}`;
-    }
-
-    return imageUrl;
-  } catch {
-    return backendOrigin ? `${backendOrigin}/${imageUrl.replace(/^\/+/, "")}` : imageUrl;
-  }
+  return resolveApiMediaUrl(imageUrl) ?? imageUrl;
 }
 
 export function resolveContentImageSource(imageUrl: string): ImageSourcePropType {

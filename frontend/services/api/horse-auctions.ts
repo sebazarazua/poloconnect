@@ -1,4 +1,4 @@
-import { apiRequest, getApiUrl } from "@/services/api/client";
+import { apiRequest, getApiOrigin as getConfiguredApiOrigin } from "@/services/api/client";
 
 export type UploadableImage = {
   uri: string;
@@ -9,8 +9,7 @@ export type UploadableImage = {
 type UploadImageInput = UploadableImage | File;
 
 function getApiOrigin() {
-  const apiUrl = getApiUrl();
-  return apiUrl.replace(/\/api\/.*$/, "");
+  return getConfiguredApiOrigin();
 }
 
 function extractUploadsPath(value: string) {

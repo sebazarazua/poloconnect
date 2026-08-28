@@ -1,4 +1,4 @@
-import { apiRequest, getApiUrl } from "@/services/api/client";
+import { apiRequest, resolveApiMediaUrl } from "@/services/api/client";
 import type { AuthUser } from "@/services/auth";
 
 export type UpdateProfilePayload = {
@@ -13,32 +13,7 @@ export type UploadableImage = {
 };
 
 export function resolveUploadedUrl(url?: string | null) {
-  if (!url) return undefined;
-
-  const apiUrl = getApiUrl();
-  const origin = apiUrl.replace(/\/api\/.*$/, "");
-  const normalizePath = (value: string) => {
-    if (value.startsWith("/api/")) return value;
-    if (value.startsWith("/media/")) return `/api/v1${value}`;
-    return value;
-  };
-
-  if (/^https?:\/\//i.test(url)) {
-    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(url)) {
-      try {
-        const parsed = new URL(url);
-        const normalizedPath = normalizePath(parsed.pathname);
-        return `${origin}${normalizedPath}${parsed.search}${parsed.hash}`;
-      } catch {
-        return url.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, origin);
-      }
-    }
-
-    return url;
-  }
-
-  const path = url.startsWith("/") ? url : `/${url}`;
-  return `${origin}${normalizePath(path)}`;
+  return resolveApiMediaUrl(url);
 }
 
 export async function updateMyProfile(payload: UpdateProfilePayload) {

@@ -1,4 +1,4 @@
-import { apiRequest, getApiUrl } from "@/services/api/client";
+import { apiRequest, resolveApiMediaUrl } from "@/services/api/client";
 import type { Product } from "@/services/market";
 
 type Page<T> = {
@@ -40,22 +40,7 @@ const contactPhoneMarkerRegex = /<!--pc:contactPhone=([^>]*)-->/;
 
 function normalizeImageUrl(imageUrl?: string) {
   if (!imageUrl) return "";
-
-  const apiBase = getApiUrl().replace(/\/api\/v1\/?$/, "");
-
-  if (/^https?:\/\//i.test(imageUrl)) {
-    // In Expo Go, localhost/127.0.0.1 points to the device itself, not the dev machine.
-    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(imageUrl)) {
-      const apiHost = apiBase.match(/^https?:\/\/([^/]+)/i)?.[1];
-      if (!apiHost) return imageUrl;
-      return imageUrl.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, `http://${apiHost}`);
-    }
-    return imageUrl;
-  }
-
-  if (!imageUrl.startsWith("/")) return imageUrl;
-
-  return `${apiBase}${imageUrl}`;
+  return resolveApiMediaUrl(imageUrl) ?? "";
 }
 
 function normalizeProduct(product: Product): Product {

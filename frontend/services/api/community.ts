@@ -1,5 +1,4 @@
-import { apiRequest, getAccessToken } from "@/services/api/client";
-import { getApiUrl } from "@/services/api/client";
+import { apiRequest, getAccessToken, getSocketUrl } from "@/services/api/client";
 import { io, Socket } from "socket.io-client";
 import type { ChatItem } from "@/contexts/CommunityContext";
 
@@ -35,13 +34,9 @@ type Page<T> = {
 
 let communitySocket: Socket | null = null;
 
-function getWsBaseUrl() {
-  return getApiUrl().replace(/\/api\/v1\/?$/, "");
-}
-
 function getCommunitySocket() {
   if (!communitySocket) {
-    communitySocket = io(`${getWsBaseUrl()}/ws`, {
+    communitySocket = io(getSocketUrl(), {
       auth: { token: getAccessToken() },
       transports: ["websocket"],
       reconnection: true,

@@ -22,6 +22,8 @@ const envApiUrl = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "");
 const defaultApiUrl = getDefaultApiUrl().replace(/\/$/, "");
 // Always prefer explicit env URL to avoid tunnel host-derived API URLs on mobile.
 const apiUrl = envApiUrl ?? defaultApiUrl;
+const apiOrigin = apiUrl.replace(/\/api(?:\/.*)?$/, "");
+const apiPathPrefix = apiUrl.slice(apiOrigin.length).replace(/\/$/, "") || "/api/v1";
 
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
@@ -80,6 +82,41 @@ export function clearAuthTokens() {
 
 export function getApiUrl() {
   return apiUrl;
+}
+
+export function getApiOrigin() {
+  return apiOrigin;
+}
+
+export function getSocketUrl() {
+  return `${apiOrigin}/ws`;
+}
+
+export function resolveApiMediaUrl(url?: string | null) {
+  if (!url) return undefined;
+
+  const normalizePath = (value: string) => {
+    if (value.startsWith("/api/")) return value;
+    if (value.startsWith("/media/")) return `${apiPathPrefix}${value}`;
+    return value;
+  };
+
+  if (/^https?:\/\//i.test(url)) {
+    if (/^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|192\.168\.\d+\.\d+)(:\d+)?/i.test(url)) {
+      try {
+        const parsed = new URL(url);
+        const normalizedPath = normalizePath(parsed.pathname);
+        return `${apiOrigin}${normalizedPath}${parsed.search}${parsed.hash}`;
+      } catch {
+        return url.replace(/^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|192\.168\.\d+\.\d+)(:\d+)?/i, apiOrigin);
+      }
+    }
+
+    return url;
+  }
+
+  const path = url.startsWith("/") ? url : `/${url}`;
+  return `${apiOrigin}${normalizePath(path)}`;
 }
 
 export function getAccessToken() {

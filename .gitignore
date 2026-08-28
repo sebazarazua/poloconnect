@@ -20,6 +20,7 @@ backend/node_modules/
 backend/dist/
 backend/.env
 backend/uploads/
+frontend/dist/
 frontend/.env
 frontend/.env.*
 !frontend/.env.example

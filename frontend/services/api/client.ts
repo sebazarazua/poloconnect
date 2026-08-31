@@ -74,6 +74,11 @@ export async function setAuthTokens(tokens: ApiTokens) {
 
   const persistedAccessToken = await getAuthStorageItem("pc_access_token");
   console.info(`access token persisted: ${Boolean(persistedAccessToken)}`);
+
+  if (!persistedAccessToken) {
+    await clearAuthTokens();
+    throw new Error("No se pudo guardar el access token.");
+  }
 }
 
 export async function clearAuthTokens() {
@@ -144,7 +149,7 @@ async function refreshAccessToken() {
   });
 
   if (!response.ok) {
-    clearAuthTokens();
+    await clearAuthTokens();
     throw new Error("La sesión expiró. Iniciá sesión nuevamente.");
   }
 

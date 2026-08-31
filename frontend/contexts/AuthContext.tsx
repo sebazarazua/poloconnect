@@ -10,9 +10,10 @@ import {
   type SignInPayload,
   type SignUpPayload
 } from "@/services/auth";
-import { logout as logoutApi } from "@/services/api/auth";
-import { clearAuthTokens, hydrateAuthTokens } from "@/services/api/client";
+import { getCurrentUser, logout as logoutApi } from "@/services/api/auth";
+import { clearAuthTokens, getAccessToken, hydrateAuthTokens } from "@/services/api/client";
 import { getAuthStorageItem, setAuthStorageItem } from "@/services/auth-storage";
+import { Platform } from "react-native";
 
 const AUTH_USER_STORAGE_KEY = "pc_auth_user";
 
@@ -41,7 +42,7 @@ type AuthContextValue = {
   signInWithGoogle: (payload: GoogleSignInPayload) => Promise<void>;
   signInWithApple: (payload: AppleSignInPayload) => Promise<void>;
   signUp: (payload: SignUpPayload) => Promise<void>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
   updateUser: (nextUser: AuthUser) => void;
 };
 
@@ -49,16 +50,62 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [hasSessionToken, setHasSessionToken] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isAuthenticated = user !== null && hasSessionToken;
+
+  const persistSignedInUser = async (nextUser: AuthUser) => {
+    if (!getAccessToken()) {
+      await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
+      setUser(null);
+      setHasSessionToken(false);
+      throw new Error("El login no dejó una sesión con access token.");
+    }
+
+    setUser(nextUser);
+    setHasSessionToken(true);
+    await writeStoredUser(nextUser);
+  };
 
   useEffect(() => {
     let cancelled = false;
 
-    void Promise.all([hydrateAuthTokens(), readStoredUser()])
-      .then(([, storedUser]) => {
+    void (async () => {
+      await hydrateAuthTokens();
+
+      const storedUser = await readStoredUser();
+      const hasToken = Boolean(getAccessToken());
+      const isProductionWeb = Platform.OS === "web" && !(typeof __DEV__ !== "undefined" && __DEV__);
+      const isDemoUser = storedUser?.id.startsWith("demo-seed-") ?? false;
+
+      if (isProductionWeb && isDemoUser) {
+        await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
+        return null;
+      }
+
+      if (storedUser && !hasToken) {
+        await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
+        return null;
+      }
+
+      if (!storedUser && hasToken) {
+        try {
+          const currentUser = await getCurrentUser();
+          await writeStoredUser(currentUser);
+          return currentUser;
+        } catch {
+          await clearAuthTokens();
+          return null;
+        }
+      }
+
+      return storedUser;
+    })()
+      .then((nextUser) => {
         if (cancelled) return;
-        setUser(storedUser);
+        setUser(nextUser);
+        setHasSessionToken(Boolean(nextUser && getAccessToken()));
       })
       .finally(() => {
         if (!cancelled) {
@@ -76,8 +123,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     try {
       const nextUser = await authenticateWithPassword(payload);
-      setUser(nextUser);
-      await writeStoredUser(nextUser);
+      await persistSignedInUser(nextUser);
     } finally {
       setIsSubmitting(false);
     }
@@ -88,8 +134,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     try {
       const nextUser = await authenticateWithGoogle(payload);
-      setUser(nextUser);
-      await writeStoredUser(nextUser);
+      await persistSignedInUser(nextUser);
     } finally {
       setIsSubmitting(false);
     }
@@ -100,8 +145,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     try {
       const nextUser = await authenticateWithApple(payload);
-      setUser(nextUser);
-      await writeStoredUser(nextUser);
+      await persistSignedInUser(nextUser);
     } finally {
       setIsSubmitting(false);
     }
@@ -112,20 +156,33 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     try {
       const nextUser = await registerWithPassword(payload);
-      setUser(nextUser);
-      await writeStoredUser(nextUser);
+      await persistSignedInUser(nextUser);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const signOut = () => {
-    void logoutApi().catch(() => clearAuthTokens());
-    setUser(null);
-    void writeStoredUser(null);
+  const signOut = async () => {
+    setIsSubmitting(true);
+
+    try {
+      await logoutApi();
+    } catch {
+      // Local session cleanup still runs if the server session is already gone.
+    } finally {
+      await clearAuthTokens();
+      await writeStoredUser(null);
+      setUser(null);
+      setHasSessionToken(false);
+      setIsSubmitting(false);
+    }
   };
 
   const updateUser = (nextUser: AuthUser) => {
+    if (!getAccessToken()) {
+      return;
+    }
+
     setUser(nextUser);
     void writeStoredUser(nextUser);
   };
@@ -137,7 +194,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   return (
     <AuthContext.Provider
       value={{
-        isAuthenticated: user !== null,
+        isAuthenticated,
         isSubmitting,
         user,
         signIn,

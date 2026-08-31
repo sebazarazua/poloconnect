@@ -17,12 +17,20 @@ type PasswordResetConfirmResponse =
       user: AuthUser;
     };
 
+async function persistAuthResponse(response: AuthResponse) {
+  if (!response.accessToken) {
+    throw new Error("El login no devolvió accessToken.");
+  }
+
+  await setAuthTokens(response);
+}
+
 export async function login(payload: SignInPayload) {
   const response = await apiRequest<AuthResponse>("/auth/login", {
     method: "POST",
     body: JSON.stringify(payload)
   });
-  setAuthTokens(response);
+  await persistAuthResponse(response);
   return response.user;
 }
 
@@ -31,7 +39,7 @@ export async function register(payload: SignUpPayload) {
     method: "POST",
     body: JSON.stringify(payload)
   });
-  setAuthTokens(response);
+  await persistAuthResponse(response);
   return response.user;
 }
 
@@ -43,7 +51,7 @@ export async function logout() {
   try {
     await apiRequest<{ ok: boolean }>("/auth/logout", { method: "POST" });
   } finally {
-    clearAuthTokens();
+    await clearAuthTokens();
   }
 }
 
@@ -61,7 +69,7 @@ export async function confirmPasswordReset(payload: { email: string; code: strin
   });
 
   if ("accessToken" in response) {
-    setAuthTokens(response);
+    await persistAuthResponse(response);
     return response.user;
   }
 
@@ -81,7 +89,7 @@ export async function loginWithGoogle(accessToken: string) {
     body: JSON.stringify({ accessToken })
   });
 
-  setAuthTokens(response);
+  await persistAuthResponse(response);
   return response.user;
 }
 
@@ -96,6 +104,6 @@ export async function loginWithApple(payload: {
     body: JSON.stringify(payload)
   });
 
-  setAuthTokens(response);
+  await persistAuthResponse(response);
   return response.user;
 }

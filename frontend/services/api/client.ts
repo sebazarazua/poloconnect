@@ -1,5 +1,6 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import { getAuthStorageItem, setAuthStorageItem } from "@/services/auth-storage";
 
 export type ApiTokens = {
   accessToken: string;
@@ -29,28 +30,8 @@ let accessToken: string | null = null;
 let refreshToken: string | null = null;
 let csrfToken: string | null = null;
 let refreshPromise: Promise<void> | null = null;
-
-function readSessionStorage(key: string) {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.sessionStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function writeSessionStorage(key: string, value: string | null) {
-  if (typeof window === "undefined") return;
-  try {
-    if (value) {
-      window.sessionStorage.setItem(key, value);
-    } else {
-      window.sessionStorage.removeItem(key);
-    }
-  } catch {
-    // Ignore storage errors.
-  }
-}
+let authTokensHydrated = false;
+let authTokensHydrationPromise: Promise<void> | null = null;
 
 function readCookie(name: string) {
   if (typeof document === "undefined") return null;
@@ -58,26 +39,49 @@ function readCookie(name: string) {
   return match ? decodeURIComponent(match.split("=").slice(1).join("=")) : null;
 }
 
-accessToken = readSessionStorage("pc_access_token");
-refreshToken = readSessionStorage("pc_refresh_token");
-csrfToken = readSessionStorage("pc_csrf_token") ?? readCookie("pc_csrf");
+export async function hydrateAuthTokens() {
+  if (authTokensHydrated) return;
 
-export function setAuthTokens(tokens: ApiTokens) {
+  authTokensHydrationPromise ??= Promise.all([
+    getAuthStorageItem("pc_access_token"),
+    getAuthStorageItem("pc_refresh_token"),
+    getAuthStorageItem("pc_csrf_token")
+  ])
+    .then(([storedAccessToken, storedRefreshToken, storedCsrfToken]) => {
+      accessToken = storedAccessToken;
+      refreshToken = storedRefreshToken;
+      csrfToken = storedCsrfToken ?? readCookie("pc_csrf");
+      authTokensHydrated = true;
+    })
+    .finally(() => {
+      authTokensHydrationPromise = null;
+    });
+
+  await authTokensHydrationPromise;
+}
+
+export async function setAuthTokens(tokens: ApiTokens) {
   accessToken = tokens.accessToken;
   refreshToken = tokens.refreshToken ?? refreshToken;
   csrfToken = tokens.csrfToken ?? csrfToken;
-  writeSessionStorage("pc_access_token", accessToken);
-  writeSessionStorage("pc_refresh_token", refreshToken);
-  writeSessionStorage("pc_csrf_token", csrfToken);
+  authTokensHydrated = true;
+  await Promise.all([
+    setAuthStorageItem("pc_access_token", accessToken),
+    setAuthStorageItem("pc_refresh_token", refreshToken),
+    setAuthStorageItem("pc_csrf_token", csrfToken)
+  ]);
 }
 
-export function clearAuthTokens() {
+export async function clearAuthTokens() {
   accessToken = null;
   refreshToken = null;
   csrfToken = null;
-  writeSessionStorage("pc_access_token", null);
-  writeSessionStorage("pc_refresh_token", null);
-  writeSessionStorage("pc_csrf_token", null);
+  authTokensHydrated = true;
+  await Promise.all([
+    setAuthStorageItem("pc_access_token", null),
+    setAuthStorageItem("pc_refresh_token", null),
+    setAuthStorageItem("pc_csrf_token", null)
+  ]);
 }
 
 export function getApiUrl() {
@@ -144,9 +148,11 @@ async function refreshAccessToken() {
   accessToken = data.accessToken;
   refreshToken = data.refreshToken ?? refreshToken;
   csrfToken = data.csrfToken ?? csrfToken;
-  writeSessionStorage("pc_access_token", accessToken);
-  writeSessionStorage("pc_refresh_token", refreshToken);
-  writeSessionStorage("pc_csrf_token", csrfToken);
+  await Promise.all([
+    setAuthStorageItem("pc_access_token", accessToken),
+    setAuthStorageItem("pc_refresh_token", refreshToken),
+    setAuthStorageItem("pc_csrf_token", csrfToken)
+  ]);
 }
 
 async function parseError(response: Response) {
@@ -163,6 +169,8 @@ async function parseError(response: Response) {
 }
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  await hydrateAuthTokens();
+
   const headers = new Headers(init.headers);
 
   if (!(init.body instanceof FormData) && !headers.has("Content-Type")) {

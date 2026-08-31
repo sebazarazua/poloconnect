@@ -17,30 +17,54 @@ type PasswordResetConfirmResponse =
       user: AuthUser;
     };
 
-async function persistAuthResponse(response: AuthResponse) {
-  if (!response.accessToken) {
+type RawAuthResponse = Partial<AuthResponse> & {
+  data?: Partial<AuthResponse>;
+  tokens?: Partial<ApiTokenFields>;
+};
+
+type ApiTokenFields = Pick<AuthResponse, "accessToken"> & Partial<Pick<AuthResponse, "refreshToken" | "csrfToken">>;
+
+function normalizeAuthResponse(response: RawAuthResponse): AuthResponse {
+  const accessToken = response.accessToken ?? response.tokens?.accessToken ?? response.data?.accessToken;
+  const refreshToken = response.refreshToken ?? response.tokens?.refreshToken ?? response.data?.refreshToken;
+  const csrfToken = response.csrfToken ?? response.tokens?.csrfToken ?? response.data?.csrfToken;
+  const user = response.user ?? response.data?.user;
+
+  console.info(`login response has accessToken: ${Boolean(accessToken)}`);
+  console.info(`login response has refreshToken: ${Boolean(refreshToken)}`);
+
+  if (!accessToken) {
+    console.info("setAuthTokens called: false");
     throw new Error("El login no devolvió accessToken.");
   }
 
-  await setAuthTokens(response);
+  if (!user) {
+    throw new Error("El login no devolvió usuario.");
+  }
+
+  return { accessToken, refreshToken, csrfToken, user };
+}
+
+async function persistAuthResponse(response: RawAuthResponse) {
+  const normalizedResponse = normalizeAuthResponse(response);
+  await setAuthTokens(normalizedResponse);
+  return normalizedResponse.user;
 }
 
 export async function login(payload: SignInPayload) {
-  const response = await apiRequest<AuthResponse>("/auth/login", {
+  const response = await apiRequest<RawAuthResponse>("/auth/login", {
     method: "POST",
     body: JSON.stringify(payload)
   });
-  await persistAuthResponse(response);
-  return response.user;
+  return persistAuthResponse(response);
 }
 
 export async function register(payload: SignUpPayload) {
-  const response = await apiRequest<AuthResponse>("/auth/register", {
+  const response = await apiRequest<RawAuthResponse>("/auth/register", {
     method: "POST",
     body: JSON.stringify(payload)
   });
-  await persistAuthResponse(response);
-  return response.user;
+  return persistAuthResponse(response);
 }
 
 export async function getCurrentUser() {
@@ -69,8 +93,7 @@ export async function confirmPasswordReset(payload: { email: string; code: strin
   });
 
   if ("accessToken" in response) {
-    await persistAuthResponse(response);
-    return response.user;
+    return persistAuthResponse(response);
   }
 
   return null;
@@ -84,13 +107,12 @@ export async function changeMyPassword(payload: { currentPassword: string; newPa
 }
 
 export async function loginWithGoogle(accessToken: string) {
-  const response = await apiRequest<AuthResponse>("/auth/login/google", {
+  const response = await apiRequest<RawAuthResponse>("/auth/login/google", {
     method: "POST",
     body: JSON.stringify({ accessToken })
   });
 
-  await persistAuthResponse(response);
-  return response.user;
+  return persistAuthResponse(response);
 }
 
 export async function loginWithApple(payload: {
@@ -99,11 +121,10 @@ export async function loginWithApple(payload: {
   firstName?: string;
   lastName?: string;
 }) {
-  const response = await apiRequest<AuthResponse>("/auth/login/apple", {
+  const response = await apiRequest<RawAuthResponse>("/auth/login/apple", {
     method: "POST",
     body: JSON.stringify(payload)
   });
 
-  await persistAuthResponse(response);
-  return response.user;
+  return persistAuthResponse(response);
 }

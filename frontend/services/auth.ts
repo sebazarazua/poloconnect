@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+
 export type AuthUser = {
   id: string;
   firstName: string;
@@ -87,6 +89,18 @@ function shouldUseDemoFallback(error: unknown) {
   );
 }
 
+function canUseDemoFallback() {
+  if (process.env.EXPO_PUBLIC_ENABLE_DEMO_AUTH_FALLBACK === "true") {
+    return true;
+  }
+
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "";
+  const isLocalApi = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i.test(apiUrl);
+  const isDev = typeof __DEV__ !== "undefined" && __DEV__;
+
+  return isDev && isLocalApi && Platform.OS !== "web";
+}
+
 export async function authenticateWithPassword({ identifier, password }: SignInPayload) {
   const { login } = await import("@/services/api/auth");
 
@@ -103,7 +117,7 @@ export async function authenticateWithPassword({ identifier, password }: SignInP
   } catch (error) {
     const fallbackUser = DEMO_SEED_USERS[normalizedKey];
 
-    if (fallbackUser && normalizedPassword === DEMO_SEED_PASSWORD && shouldUseDemoFallback(error)) {
+    if (fallbackUser && normalizedPassword === DEMO_SEED_PASSWORD && canUseDemoFallback() && shouldUseDemoFallback(error)) {
       return fallbackUser;
     }
 

@@ -61,6 +61,7 @@ export async function hydrateAuthTokens() {
 }
 
 export async function setAuthTokens(tokens: ApiTokens) {
+  console.info("setAuthTokens called: true");
   accessToken = tokens.accessToken;
   refreshToken = tokens.refreshToken ?? refreshToken;
   csrfToken = tokens.csrfToken ?? csrfToken;
@@ -70,6 +71,9 @@ export async function setAuthTokens(tokens: ApiTokens) {
     setAuthStorageItem("pc_refresh_token", refreshToken),
     setAuthStorageItem("pc_csrf_token", csrfToken)
   ]);
+
+  const persistedAccessToken = await getAuthStorageItem("pc_access_token");
+  console.info(`access token persisted: ${Boolean(persistedAccessToken)}`);
 }
 
 export async function clearAuthTokens() {

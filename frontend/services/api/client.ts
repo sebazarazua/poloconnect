@@ -21,8 +21,24 @@ function getDefaultApiUrl() {
 
 const envApiUrl = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "");
 const defaultApiUrl = getDefaultApiUrl().replace(/\/$/, "");
-// Always prefer explicit env URL to avoid tunnel host-derived API URLs on mobile.
-const apiUrl = envApiUrl ?? defaultApiUrl;
+const isDev = typeof __DEV__ !== "undefined" && __DEV__;
+
+function resolveApiUrl() {
+  if (envApiUrl) {
+    return envApiUrl;
+  }
+
+  if (isDev) {
+    return defaultApiUrl;
+  }
+
+  throw new Error(
+    "Missing EXPO_PUBLIC_API_URL for production build. Configure it in the EAS production environment before building."
+  );
+}
+
+// Always prefer explicit env URL. Only local development may fall back to the dev server host.
+const apiUrl = resolveApiUrl();
 const apiOrigin = apiUrl.replace(/\/api(?:\/.*)?$/, "");
 const apiPathPrefix = apiUrl.slice(apiOrigin.length).replace(/\/$/, "") || "/api/v1";
 

@@ -12,12 +12,18 @@ import {
   banCommunityMember,
   createAdminContent,
   deleteAdminContent,
+  patchAdminContent,
+  reorderAdminContent,
   type CommunityBan,
+  type AdminCommunityRoom,
   getAdminDashboard,
   listAdminContent,
   listCommunityBans,
   listCommunityMembers,
   listCommunityRooms,
+  createCommunityRoom,
+  updateCommunityRoom,
+  deleteCommunityRoom,
   removeCommunityMember,
   createAdminTournament,
   listAdminTournaments,
@@ -169,7 +175,7 @@ export default function AdminPanelScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, authReady } = useAuth();
   const { t } = useLocale();
 
   if (Platform.OS !== "web") {
@@ -194,14 +200,30 @@ export default function AdminPanelScreen() {
   const [selectedShopTargetId, setSelectedShopTargetId] = useState("");
   const [newSubtitle, setNewSubtitle] = useState("");
   const [newBody, setNewBody] = useState("");
+  const [newIsActive, setNewIsActive] = useState(true);
+  const [contentSaving, setContentSaving] = useState(false);
+  const [contentBusyId, setContentBusyId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
   // Community state
-  const [rooms, setRooms] = useState<Array<{ id: string; title: string; kind: string }>>([]);
+  const [rooms, setRooms] = useState<AdminCommunityRoom[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [members, setMembers] = useState<Array<{ userId: string; user: { id: string; firstName: string; lastName: string; username: string } }>>([]);
   const [roomBans, setRoomBans] = useState<CommunityBan[]>([]);
   const [communitySearch, setCommunitySearch] = useState("");
+  const emptyRoomForm = {
+    title: "",
+    description: "",
+    kind: "general",
+    icon: "chatbubbles-outline",
+    tone: "",
+    externalCode: "",
+    isRecommended: false,
+    isPublic: true
+  };
+  const [roomForm, setRoomForm] = useState(emptyRoomForm);
+  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [roomSaving, setRoomSaving] = useState(false);
 
   // Brands state
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -306,22 +328,6 @@ export default function AdminPanelScreen() {
   );
 
   const selectedContent = useMemo(() => contentItems.find((i) => i.id === selectedContentId) ?? null, [contentItems, selectedContentId]);
-
-  const activeContentTemplate = useMemo(() => {
-    if (selectedContent) {
-      return { section: selectedContent.section, slot: selectedContent.slot, type: selectedContent.type };
-    }
-
-    const preferredGroup = activeSectionFilter === "all"
-      ? contentSections[0]
-      : contentSections.find((group) => group.section === activeSectionFilter) ?? contentSections[0];
-
-    return {
-      section: preferredGroup.section,
-      slot: preferredGroup.slot,
-      type: inferType(preferredGroup.section, preferredGroup.slot)
-    };
-  }, [activeSectionFilter, selectedContent]);
 
   const groupedContent = useMemo(() => {
     return contentSections
@@ -439,13 +445,14 @@ export default function AdminPanelScreen() {
 
   useEffect(() => {
     if (!isAdmin) { return; }
-    void Promise.all([getAdminDashboard(), listAdminContent(), listCommunityRooms()]).then(([dash, items, nextRooms]) => {
-      setStats(dash.counters);
-      setContentItems(items);
-      setRooms(nextRooms);
-      setSelectedRoomId((c) => c ?? nextRooms[0]?.id ?? null);
-      setSelectedContentId((c) => c ?? items[0]?.id ?? null);
-    });
+    void getAdminDashboard().then((dash) => setStats(dash.counters)).catch(() => setStats({}));
+    void listAdminContent().then(setContentItems).catch(() => setContentItems([]));
+    void listCommunityRooms()
+      .then((nextRooms) => {
+        setRooms(nextRooms);
+        setSelectedRoomId((c) => c ?? nextRooms[0]?.id ?? null);
+      })
+      .catch(() => setRooms([]));
     void adminListBrands().then(setBrands).catch(() => {});
     void listAdminTournaments().then(setTournaments).catch(() => {});
     void listAdminTeams().then(setTeams).catch(() => {});
@@ -453,7 +460,7 @@ export default function AdminPanelScreen() {
     void listAdminSpotlightEvents().then(setSpotlightEvents).catch(() => {});
   }, [isAdmin, router]);
 
-  useEffect(() => { if (selectedRoomId) void refreshRoomModeration(selectedRoomId); }, [selectedRoomId]);
+  useEffect(() => { if (selectedRoomId) void refreshRoomModeration(selectedRoomId).catch(() => { setMembers([]); setRoomBans([]); }); }, [selectedRoomId]);
 
   useEffect(() => {
     if (!selectedContent) {
@@ -463,6 +470,7 @@ export default function AdminPanelScreen() {
       setNewImageUrl("");
       setNewTargetUrl("");
       setSelectedShopTargetId("");
+      setNewIsActive(true);
       return;
     }
 
@@ -479,7 +487,12 @@ export default function AdminPanelScreen() {
     setNewType(selectedContent.type);
     setNewSortOrder(String(selectedContent.sortOrder));
     setNewPriority(String(selectedContent.priority));
+    setNewIsActive(selectedContent.isActive);
   }, [selectedContent]);
+
+  if (!authReady) {
+    return null;
+  }
 
   if (!isAuthenticated) {
     return <Redirect href="/admin-login" />;
@@ -495,6 +508,22 @@ export default function AdminPanelScreen() {
     );
   }
 
+  const refreshContent = async () => {
+    const next = await listAdminContent();
+    setContentItems(next);
+    return next;
+  };
+
+  const startNewContent = (section: string, slot: string) => {
+    setSelectedContentId(null);
+    setNewSection(section);
+    setNewSlot(slot);
+    setNewType(inferType(section, slot));
+    setNewSortOrder("");
+    setNewPriority("0");
+    setNewIsActive(true);
+  };
+
   const saveContent = async () => {
     const externalTargetUrl = newTargetUrl.trim();
     const shopTargetId = selectedShopTargetId.trim();
@@ -504,24 +533,150 @@ export default function AdminPanelScreen() {
       return;
     }
 
+    if (!newImageUrl.trim()) {
+      Alert.alert("Error", "Subí una imagen antes de guardar.");
+      return;
+    }
+
     const payload = {
-      type: selectedContent?.type ?? activeContentTemplate.type,
-      section: selectedContent?.section ?? activeContentTemplate.section,
-      slot: selectedContent?.slot ?? activeContentTemplate.slot,
+      type: newType,
+      section: newSection,
+      slot: newSlot,
       title: newTitle.trim() || null,
       subtitle: newSubtitle.trim() || null,
       body: newBody.trim() || null,
       imageUrl: newImageUrl.trim(),
       targetUrl: shopTargetId ? buildShopTarget(shopTargetId) : externalTargetUrl || null,
-      priority: selectedContent?.priority ?? 0,
-      sortOrder: selectedContent?.sortOrder ?? (contentItems.filter((item) => item.section === activeContentTemplate.section && item.slot === activeContentTemplate.slot).length + 1),
-      isActive: true
+      priority: Number(newPriority) || 0,
+      sortOrder: newSortOrder.trim() ? Number(newSortOrder) : undefined,
+      isActive: newIsActive
     };
-    if (selectedContent) await updateAdminContent(selectedContent.id, payload);
-    else await createAdminContent(payload);
-    const next = await listAdminContent();
-    setContentItems(next);
-    if (!selectedContentId && next[0]) setSelectedContentId(next[0].id);
+
+    try {
+      setContentSaving(true);
+      const saved = selectedContent
+        ? await updateAdminContent(selectedContent.id, payload)
+        : await createAdminContent(payload);
+      await refreshContent();
+      setSelectedContentId(saved.id);
+      Alert.alert("Listo", selectedContent ? "Publicación actualizada." : "Publicación creada.");
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "No se pudo guardar la publicación.");
+    } finally {
+      setContentSaving(false);
+    }
+  };
+
+  const toggleContentActive = async (item: AdminContentItem) => {
+    try {
+      setContentBusyId(item.id);
+      await patchAdminContent(item.id, { isActive: !item.isActive });
+      await refreshContent();
+    } catch (err: any) {
+      Alert.alert("No se puede", err?.message ?? "No se pudo cambiar el estado.");
+    } finally {
+      setContentBusyId(null);
+    }
+  };
+
+  const removeContent = async (item: AdminContentItem) => {
+    try {
+      setContentBusyId(item.id);
+      await deleteAdminContent(item.id);
+      const next = await refreshContent();
+      if (selectedContentId === item.id) {
+        setSelectedContentId(next.find((entry) => entry.section === item.section && entry.slot === item.slot)?.id ?? null);
+      }
+    } catch (err: any) {
+      Alert.alert("No se puede", err?.message ?? "No se pudo eliminar la publicación.");
+    } finally {
+      setContentBusyId(null);
+    }
+  };
+
+  const moveContent = async (items: AdminContentItem[], index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= items.length) return;
+
+    const orderedIds = items.map((item) => item.id);
+    [orderedIds[index], orderedIds[target]] = [orderedIds[target], orderedIds[index]];
+
+    try {
+      setContentBusyId(items[index].id);
+      await reorderAdminContent(items[index].section, items[index].slot, orderedIds);
+      await refreshContent();
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "No se pudo reordenar el carrusel.");
+    } finally {
+      setContentBusyId(null);
+    }
+  };
+
+  const refreshRooms = async () => {
+    const next = await listCommunityRooms();
+    setRooms(next);
+    return next;
+  };
+
+  const startNewRoom = () => {
+    setEditingRoomId(null);
+    setRoomForm(emptyRoomForm);
+  };
+
+  const startEditRoom = (room: AdminCommunityRoom) => {
+    setEditingRoomId(room.id);
+    setRoomForm({
+      title: room.title,
+      description: room.description ?? "",
+      kind: room.kind ?? "general",
+      icon: room.icon ?? "chatbubbles-outline",
+      tone: room.tone ?? "",
+      externalCode: room.externalCode ?? "",
+      isRecommended: room.isRecommended,
+      isPublic: room.isPublic
+    });
+  };
+
+  const saveRoom = async () => {
+    if (!roomForm.title.trim()) {
+      Alert.alert("Error", "El título de la comunidad es obligatorio.");
+      return;
+    }
+
+    const payload = {
+      title: roomForm.title.trim(),
+      description: roomForm.description.trim() || undefined,
+      kind: roomForm.kind.trim() || undefined,
+      icon: roomForm.icon.trim() || undefined,
+      tone: roomForm.tone.trim() || undefined,
+      externalCode: roomForm.externalCode.trim() || undefined,
+      isRecommended: roomForm.isRecommended,
+      isPublic: roomForm.isPublic
+    };
+
+    try {
+      setRoomSaving(true);
+      const saved = editingRoomId ? await updateCommunityRoom(editingRoomId, payload) : await createCommunityRoom(payload);
+      await refreshRooms();
+      setSelectedRoomId(saved.id);
+      startNewRoom();
+      Alert.alert("Listo", editingRoomId ? "Comunidad actualizada." : "Comunidad creada.");
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "No se pudo guardar la comunidad.");
+    } finally {
+      setRoomSaving(false);
+    }
+  };
+
+  const removeRoom = async (room: AdminCommunityRoom) => {
+    try {
+      await deleteCommunityRoom(room.id);
+      const next = await refreshRooms();
+      if (selectedRoomId === room.id) setSelectedRoomId(next[0]?.id ?? null);
+      if (editingRoomId === room.id) startNewRoom();
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "No se pudo eliminar la comunidad.");
+    }
   };
 
   const saveTournament = async () => {
@@ -949,10 +1104,6 @@ export default function AdminPanelScreen() {
               <View style={styles.panel}>
                 <View style={styles.panelHeader}>
                   <Text style={styles.panelTitle}>Biblioteca de contenido</Text>
-                  <Pressable style={styles.btnPrimary} onPress={() => setSelectedContentId(null)}>
-                    <Ionicons name="add" size={16} color="#fff" />
-                    <Text style={styles.btnPrimaryText}>Nuevo</Text>
-                  </Pressable>
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
                   {(["all", "branding", "home", "community", "live"] as const).map((s) => (
@@ -961,20 +1112,53 @@ export default function AdminPanelScreen() {
                     </Pressable>
                   ))}
                 </ScrollView>
-                <ScrollView style={{ maxHeight: 480 }}>
+                <ScrollView style={{ maxHeight: 520 }}>
                   {groupedContent.map((group) => (
                     <View key={`${group.section}-${group.slot}`} style={{ marginBottom: 16 }}>
-                      <Text style={styles.groupLabel}>{t(group.titleKey)}</Text>
-                      <Text style={styles.groupMeta}>{group.items.length} elemento(s)</Text>
+                      <View style={styles.panelHeader}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.groupLabel}>{group.title}</Text>
+                          <Text style={styles.groupMeta}>
+                            {group.items.length} elemento(s) · {group.items.filter((item) => item.isActive).length} activo(s)
+                          </Text>
+                        </View>
+                        <Pressable style={styles.btnPrimary} onPress={() => startNewContent(group.section, group.slot)}>
+                          <Ionicons name="add" size={16} color="#fff" />
+                          <Text style={styles.btnPrimaryText}>Agregar</Text>
+                        </Pressable>
+                      </View>
+
                       {group.items.length === 0 ? (
-                        <Text style={styles.emptyText}>Sin ítems</Text>
-                      ) : group.items.map((item) => (
+                        <View style={styles.emptyStateBox}>
+                          <Ionicons name="images-outline" size={20} color={colors.muted} />
+                          <Text style={styles.emptyText}>Todavía no hay publicaciones en este espacio.</Text>
+                          <Pressable style={styles.btnPrimary} onPress={() => startNewContent(group.section, group.slot)}>
+                            <Text style={styles.btnPrimaryText}>Agregar la primera</Text>
+                          </Pressable>
+                        </View>
+                      ) : group.items.map((item, index) => (
                         <Pressable key={item.id} style={[styles.contentRow, selectedContentId === item.id && styles.contentRowActive]} onPress={() => setSelectedContentId(item.id)}>
                           <Image source={resolveContentImageSource(item.imageUrl)} style={styles.contentThumb} resizeMode="contain" />
                           <View style={{ flex: 1, gap: 2 }}>
-                            <Text style={styles.contentRowTitle} numberOfLines={1}>{group.title}</Text>
+                            <Text style={styles.contentRowTitle} numberOfLines={1}>{item.title || group.title}</Text>
                             <Text style={styles.contentRowMeta}>Posición #{item.sortOrder}</Text>
-                            <Text style={styles.contentRowPath} numberOfLines={1}>{item.imageUrl.split("/").pop() ?? item.imageUrl}</Text>
+                            <Text style={[styles.statusChip, item.isActive ? styles.statusActive : styles.statusMuted]}>
+                              {item.isActive ? "Publicada" : "Pausada"}
+                            </Text>
+                          </View>
+                          <View style={{ flexDirection: "row", gap: 4, alignItems: "center" }}>
+                            <Pressable disabled={index === 0 || contentBusyId === item.id} onPress={() => void moveContent(group.items, index, -1)}>
+                              <Ionicons name="arrow-up" size={18} color={index === 0 ? colors.border : colors.muted} />
+                            </Pressable>
+                            <Pressable disabled={index === group.items.length - 1 || contentBusyId === item.id} onPress={() => void moveContent(group.items, index, 1)}>
+                              <Ionicons name="arrow-down" size={18} color={index === group.items.length - 1 ? colors.border : colors.muted} />
+                            </Pressable>
+                            <Pressable disabled={contentBusyId === item.id} onPress={() => void toggleContentActive(item)}>
+                              <Ionicons name={item.isActive ? "pause-circle-outline" : "play-circle-outline"} size={20} color={colors.primary} />
+                            </Pressable>
+                            <Pressable disabled={contentBusyId === item.id} onPress={() => void removeContent(item)}>
+                              <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                            </Pressable>
                           </View>
                         </Pressable>
                       ))}
@@ -986,17 +1170,56 @@ export default function AdminPanelScreen() {
               {/* Right: form */}
               <View style={styles.panel}>
                 <View style={styles.panelHeader}>
-                  <Text style={styles.panelTitle}>{selectedContent ? "Editar ítem" : "Nuevo ítem"}</Text>
+                  <Text style={styles.panelTitle}>{selectedContent ? "Editar publicidad" : "Nueva publicidad"}</Text>
+                  {selectedContent ? (
+                    <Pressable style={styles.btnSecondary} onPress={() => startNewContent(newSection, newSlot)}>
+                      <Text style={styles.btnSecondaryText}>Nueva</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
+
+                <View style={styles.fullField}>
+                  <Text style={styles.fieldLabel}>Ubicación en la app</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shopSelectorRow}>
+                    {contentSections.map((group) => {
+                      const isSelected = newSection === group.section && newSlot === group.slot;
+                      return (
+                        <Pressable
+                          key={`${group.section}-${group.slot}`}
+                          style={[styles.shopChip, isSelected && styles.shopChipActive]}
+                          onPress={() => {
+                            setNewSection(group.section);
+                            setNewSlot(group.slot);
+                            setNewType(inferType(group.section, group.slot));
+                          }}
+                        >
+                          <Text style={[styles.shopChipText, isSelected && styles.shopChipTextActive]} numberOfLines={1}>{t(group.titleKey)}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                  <Text style={styles.helperText}>{newSection} / {newSlot}</Text>
+                </View>
+
                 <View style={styles.contentPreviewCard}>
-                  <Image source={resolveContentImageSource(newImageUrl || selectedContent?.imageUrl || "asset:home/hero-1")} style={styles.contentPreview} resizeMode="contain" />
+                  {newImageUrl ? (
+                    <Image source={resolveContentImageSource(newImageUrl)} style={styles.contentPreview} resizeMode="contain" />
+                  ) : (
+                    <View style={[styles.contentPreview, { alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceStrong }]}>
+                      <Ionicons name="image-outline" size={24} color={colors.muted} />
+                    </View>
+                  )}
                   <View style={{ flex: 1, gap: 4 }}>
-                    <Text style={styles.fieldLabel}>Destino</Text>
-                    <Text style={styles.helperText}>{selectedContent ? `${selectedContent.section} / ${selectedContent.slot}` : `${activeContentTemplate.section} / ${activeContentTemplate.slot}`}</Text>
-                    <Text style={styles.helperText}>La imagen se agrega en la sección que elegís a la izquierda.</Text>
+                    <Text style={styles.fieldLabel}>Estado</Text>
+                    <Pressable style={[styles.chip, newIsActive && styles.chipActive]} onPress={() => setNewIsActive((current) => !current)}>
+                      <Text style={[styles.chipText, newIsActive && styles.chipTextActive]}>{newIsActive ? "Publicada" : "Pausada"}</Text>
+                    </Pressable>
                   </View>
                 </View>
+
                 <View style={styles.formGrid}>
+                  <LabeledInput label="Título (opcional)" value={newTitle} onChangeText={setNewTitle} placeholder="Nombre interno o título visible" />
+                  <LabeledInput label="Posición (opcional)" value={newSortOrder} onChangeText={setNewSortOrder} placeholder="Se asigna sola si la dejás vacía" keyboardType="numeric" />
                   <LabeledInput
                     label="URL externa de destino"
                     value={newTargetUrl}
@@ -1046,21 +1269,17 @@ export default function AdminPanelScreen() {
                   <input type="file" accept="image/*" style={{ display: "none" }} id="admin-upload-input" onChange={async (e: any) => {
                     const file = e.target.files?.[0]; if (!file) return;
                     setUploading(true);
-                    try { const u = await uploadAdminContentImage(file); setNewImageUrl(u.url); Alert.alert("Subida", u.filename); }
-                    finally { setUploading(false); }
+                    try { const u = await uploadAdminContentImage(file); setNewImageUrl(u.url); }
+                    catch (error: any) { Alert.alert("Error", error?.message ?? "No se pudo subir la imagen."); }
+                    finally { setUploading(false); e.target.value = ""; }
                   }} />
                 </View>
                 <View style={styles.actionRow}>
-                  <Pressable style={styles.btnPrimary} onPress={async () => { await saveContent(); }}>
-                    <Text style={styles.btnPrimaryText}>{selectedContent ? "Guardar cambios" : "Crear ítem"}</Text>
+                  <Pressable style={styles.btnPrimary} disabled={contentSaving} onPress={() => void saveContent()}>
+                    <Text style={styles.btnPrimaryText}>{contentSaving ? "Guardando..." : selectedContent ? "Guardar cambios" : "Crear publicidad"}</Text>
                   </Pressable>
                   {selectedContent ? (
-                    <Pressable style={styles.btnDanger} onPress={async () => {
-                      await deleteAdminContent(selectedContent.id);
-                      const next = await listAdminContent();
-                      setContentItems(next);
-                      setSelectedContentId(next[0]?.id ?? null);
-                    }}>
+                    <Pressable style={styles.btnDanger} onPress={() => void removeContent(selectedContent)}>
                       <Text style={styles.btnDangerText}>Eliminar</Text>
                     </Pressable>
                   ) : null}
@@ -1073,62 +1292,150 @@ export default function AdminPanelScreen() {
         {/* ── COMMUNITY ── */}
         {activeTab === "community" && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Salas de comunidad</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.roomChipsRow}>
-              {rooms.map((room) => (
-                <Pressable key={room.id} style={[styles.roomChip, selectedRoomId === room.id && styles.roomChipActive]} onPress={() => setSelectedRoomId(room.id)}>
-                  <Text style={[styles.roomChipTitle, selectedRoomId === room.id && { color: "#fff" }]} numberOfLines={1}>{room.title}</Text>
-                  <View style={[styles.roomChipBadge, selectedRoomId === room.id && styles.roomChipBadgeActive]}>
-                    <Text style={[styles.roomChipKind, selectedRoomId === room.id && styles.roomChipKindActive]}>{room.kind}</Text>
+            <View style={styles.twoCol}>
+              <View style={styles.panel}>
+                <View style={styles.panelHeader}>
+                  <Text style={styles.panelTitle}>Comunidades ({rooms.length})</Text>
+                  <Pressable style={styles.btnPrimary} onPress={startNewRoom}>
+                    <Ionicons name="add" size={16} color="#fff" />
+                    <Text style={styles.btnPrimaryText}>Crear comunidad</Text>
+                  </Pressable>
+                </View>
+
+                {rooms.length === 0 ? (
+                  <View style={styles.emptyStateBox}>
+                    <Ionicons name="people-outline" size={22} color={colors.muted} />
+                    <Text style={styles.emptyText}>Todavía no hay comunidades cargadas.</Text>
+                    <Pressable style={styles.btnPrimary} onPress={startNewRoom}>
+                      <Text style={styles.btnPrimaryText}>Crear la primera</Text>
+                    </Pressable>
                   </View>
-                </Pressable>
-              ))}
-            </ScrollView>
-            <View style={styles.communitySearchPanel}>
-              <Text style={styles.fieldLabel}>Buscar usuario en la sala</Text>
-              <TextInput
-                style={styles.input}
-                value={communitySearch}
-                onChangeText={setCommunitySearch}
-                placeholder="Nombre, usuario o ID"
-                placeholderTextColor={colors.muted}
-                autoCapitalize="none"
-              />
-              <Text style={styles.helperText}>Mostrando {filteredModerationRows.length} de {moderationRows.length} usuarios.</Text>
-            </View>
-            <View style={{ gap: 10, marginTop: 8 }}>
-              {filteredModerationRows.map((entry) => (
-                <View key={entry.user.id} style={styles.memberCard}>
-                  <View style={styles.memberAvatar}>
-                    <Text style={styles.memberAvatarText}>{entry.user.firstName.charAt(0)}{entry.user.lastName.charAt(0)}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.memberName}>{entry.user.firstName} {entry.user.lastName}</Text>
-                    <Text style={styles.memberMeta}>@{entry.user.username}</Text>
-                    <View style={{ flexDirection: "row", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-                      <Text style={[styles.statusChip, entry.isBanned ? styles.statusBanned : styles.statusActive]}>{entry.isBanned ? "Baneado" : "Activo"}</Text>
-                      <Text style={[styles.statusChip, entry.isMember ? styles.statusActive : styles.statusMuted]}>{entry.isMember ? "En sala" : "Fuera"}</Text>
+                ) : rooms.map((room) => (
+                  <Pressable key={room.id} style={[styles.brandRow, selectedRoomId === room.id && styles.brandRowActive]} onPress={() => setSelectedRoomId(room.id)}>
+                    <View style={[styles.brandRowLogo, { alignItems: "center", justifyContent: "center", backgroundColor: room.tone || colors.surfaceStrong }]}>
+                      <Ionicons name="chatbubbles-outline" size={18} color={colors.primary} />
                     </View>
-                  </View>
-                  <View style={{ flexDirection: "row", gap: 8 }}>
-                    <Pressable style={[styles.actionBtn, entry.isBanned && styles.actionBtnDisabled]} disabled={entry.isBanned} onPress={async () => { if (!selectedRoomId) return; await banCommunityMember(selectedRoomId, entry.user.id, t("adminPanel.banReason")); await refreshRoomModeration(selectedRoomId); }}>
-                      <Text style={styles.actionBtnDanger}>Banear</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.brandRowName}>{room.title}</Text>
+                      <Text style={styles.brandRowMeta}>
+                        {room.kind} · {room._count?.memberships ?? 0} miembros · {room.isPublic ? "pública" : "privada"}{room.isRecommended ? " · recomendada" : ""}
+                      </Text>
+                    </View>
+                    <Pressable onPress={() => startEditRoom(room)}>
+                      <Ionicons name="create-outline" size={18} color={colors.primary} />
                     </Pressable>
-                    <Pressable style={[styles.actionBtn, !entry.isMember && styles.actionBtnDisabled]} disabled={!entry.isMember} onPress={async () => { if (!selectedRoomId) return; await removeCommunityMember(selectedRoomId, entry.user.id, t("adminPanel.removeReason")); await refreshRoomModeration(selectedRoomId); }}>
-                      <Text style={styles.actionBtnPrimary}>Remover</Text>
+                    <Pressable onPress={() => void removeRoom(room)}>
+                      <Ionicons name="trash-outline" size={18} color={colors.danger} />
                     </Pressable>
-                    <Pressable style={[styles.actionBtn, !entry.isBanned && styles.actionBtnDisabled]} disabled={!entry.isBanned} onPress={async () => { if (!selectedRoomId) return; await unbanCommunityMember(selectedRoomId, entry.user.id, t("adminPanel.unbanReason")); await refreshRoomModeration(selectedRoomId); }}>
-                      <Text style={styles.actionBtnPrimary}>Desbanear</Text>
-                    </Pressable>
-                  </View>
+                  </Pressable>
+                ))}
+              </View>
+
+              <View style={[styles.panel, { gap: 10 }]}>
+                <Text style={styles.panelTitle}>{editingRoomId ? "Editar comunidad" : "Nueva comunidad"}</Text>
+                <View style={styles.formGrid}>
+                  <LabeledInput label="Título" value={roomForm.title} onChangeText={(value) => setRoomForm((c) => ({ ...c, title: value }))} placeholder="Ej: Palermo Abierto" />
+                  <LabeledInput label="Código (opcional)" value={roomForm.externalCode} onChangeText={(value) => setRoomForm((c) => ({ ...c, externalCode: value }))} placeholder="Se genera solo desde el título" />
+                  <LabeledInput label="Tipo" value={roomForm.kind} onChangeText={(value) => setRoomForm((c) => ({ ...c, kind: value }))} placeholder="general, club, tournament, market" />
+                  <LabeledInput label="Icono" value={roomForm.icon} onChangeText={(value) => setRoomForm((c) => ({ ...c, icon: value }))} placeholder="trophy-outline" />
+                  <LabeledInput label="Tono / color" value={roomForm.tone} onChangeText={(value) => setRoomForm((c) => ({ ...c, tone: value }))} placeholder="#d8ecff" />
                 </View>
-              ))}
-              {filteredModerationRows.length === 0 ? (
-                <View style={styles.panel}>
-                  <Text style={styles.emptyText}>No hay usuarios que coincidan con la búsqueda.</Text>
+                <View style={styles.fullField}>
+                  <Text style={styles.fieldLabel}>Descripción</Text>
+                  <TextInput
+                    style={[styles.input, { minHeight: 70 }]}
+                    value={roomForm.description}
+                    onChangeText={(value) => setRoomForm((c) => ({ ...c, description: value }))}
+                    placeholder="De qué se habla en esta comunidad"
+                    placeholderTextColor={colors.muted}
+                    multiline
+                  />
                 </View>
-              ) : null}
+                <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                  <Pressable style={[styles.chip, roomForm.isPublic && styles.chipActive]} onPress={() => setRoomForm((c) => ({ ...c, isPublic: !c.isPublic }))}>
+                    <Text style={[styles.chipText, roomForm.isPublic && styles.chipTextActive]}>{roomForm.isPublic ? "Pública" : "Privada"}</Text>
+                  </Pressable>
+                  <Pressable style={[styles.chip, roomForm.isRecommended && styles.chipActive]} onPress={() => setRoomForm((c) => ({ ...c, isRecommended: !c.isRecommended }))}>
+                    <Text style={[styles.chipText, roomForm.isRecommended && styles.chipTextActive]}>{roomForm.isRecommended ? "Recomendada" : "No recomendada"}</Text>
+                  </Pressable>
+                </View>
+                <View style={styles.actionRow}>
+                  <Pressable style={styles.btnPrimary} disabled={roomSaving} onPress={() => void saveRoom()}>
+                    <Text style={styles.btnPrimaryText}>{roomSaving ? "Guardando..." : editingRoomId ? "Guardar cambios" : "Crear comunidad"}</Text>
+                  </Pressable>
+                  {editingRoomId ? (
+                    <Pressable style={styles.btnSecondary} onPress={startNewRoom}>
+                      <Text style={styles.btnSecondaryText}>Cancelar</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
             </View>
+
+            <Text style={styles.sectionTitle}>Moderación de miembros</Text>
+            {rooms.length === 0 ? (
+              <View style={styles.panel}>
+                <Text style={styles.emptyText}>Creá una comunidad para moderar sus miembros.</Text>
+              </View>
+            ) : (
+              <>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.roomChipsRow}>
+                  {rooms.map((room) => (
+                    <Pressable key={room.id} style={[styles.roomChip, selectedRoomId === room.id && styles.roomChipActive]} onPress={() => setSelectedRoomId(room.id)}>
+                      <Text style={[styles.roomChipTitle, selectedRoomId === room.id && { color: "#fff" }]} numberOfLines={1}>{room.title}</Text>
+                      <View style={[styles.roomChipBadge, selectedRoomId === room.id && styles.roomChipBadgeActive]}>
+                        <Text style={[styles.roomChipKind, selectedRoomId === room.id && styles.roomChipKindActive]}>{room.kind}</Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+                <View style={styles.communitySearchPanel}>
+                  <Text style={styles.fieldLabel}>Buscar usuario en la sala</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={communitySearch}
+                    onChangeText={setCommunitySearch}
+                    placeholder="Nombre, usuario o ID"
+                    placeholderTextColor={colors.muted}
+                    autoCapitalize="none"
+                  />
+                  <Text style={styles.helperText}>Mostrando {filteredModerationRows.length} de {moderationRows.length} usuarios.</Text>
+                </View>
+                <View style={{ gap: 10, marginTop: 8 }}>
+                  {filteredModerationRows.map((entry) => (
+                    <View key={entry.user.id} style={styles.memberCard}>
+                      <View style={styles.memberAvatar}>
+                        <Text style={styles.memberAvatarText}>{entry.user.firstName.charAt(0)}{entry.user.lastName.charAt(0)}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.memberName}>{entry.user.firstName} {entry.user.lastName}</Text>
+                        <Text style={styles.memberMeta}>@{entry.user.username}</Text>
+                        <View style={{ flexDirection: "row", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                          <Text style={[styles.statusChip, entry.isBanned ? styles.statusBanned : styles.statusActive]}>{entry.isBanned ? "Baneado" : "Activo"}</Text>
+                          <Text style={[styles.statusChip, entry.isMember ? styles.statusActive : styles.statusMuted]}>{entry.isMember ? "En sala" : "Fuera"}</Text>
+                        </View>
+                      </View>
+                      <View style={{ flexDirection: "row", gap: 8 }}>
+                        <Pressable style={[styles.actionBtn, entry.isBanned && styles.actionBtnDisabled]} disabled={entry.isBanned} onPress={async () => { if (!selectedRoomId) return; await banCommunityMember(selectedRoomId, entry.user.id, t("adminPanel.banReason")); await refreshRoomModeration(selectedRoomId); }}>
+                          <Text style={styles.actionBtnDanger}>Banear</Text>
+                        </Pressable>
+                        <Pressable style={[styles.actionBtn, !entry.isMember && styles.actionBtnDisabled]} disabled={!entry.isMember} onPress={async () => { if (!selectedRoomId) return; await removeCommunityMember(selectedRoomId, entry.user.id, t("adminPanel.removeReason")); await refreshRoomModeration(selectedRoomId); }}>
+                          <Text style={styles.actionBtnPrimary}>Remover</Text>
+                        </Pressable>
+                        <Pressable style={[styles.actionBtn, !entry.isBanned && styles.actionBtnDisabled]} disabled={!entry.isBanned} onPress={async () => { if (!selectedRoomId) return; await unbanCommunityMember(selectedRoomId, entry.user.id, t("adminPanel.unbanReason")); await refreshRoomModeration(selectedRoomId); }}>
+                          <Text style={styles.actionBtnPrimary}>Desbanear</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ))}
+                  {filteredModerationRows.length === 0 ? (
+                    <View style={styles.panel}>
+                      <Text style={styles.emptyText}>Esta comunidad todavía no tiene miembros.</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </>
+            )}
           </View>
         )}
 
@@ -1151,6 +1458,12 @@ export default function AdminPanelScreen() {
                     <Text style={styles.btnPrimaryText}>Nueva</Text>
                   </Pressable>
                 </View>
+                {brands.length === 0 ? (
+                  <View style={styles.emptyStateBox}>
+                    <Ionicons name="storefront-outline" size={22} color={colors.muted} />
+                    <Text style={styles.emptyText}>Todavía no hay marcas cargadas. Completá el formulario para crear la primera.</Text>
+                  </View>
+                ) : null}
                 {brands.map((brand) => (
                   <Pressable key={brand.id} style={[styles.brandRow, selectedBrandId === brand.id && styles.brandRowActive]} onPress={async () => {
                     setBrandForm({ name: brand.name, slug: brand.slug, description: brand.description ?? "", whatsapp: brand.whatsapp ?? "", phone: brand.phone ?? "", email: brand.email ?? "", website: brand.website ?? "", logoUrl: brand.logoUrl ?? "" });
@@ -1472,6 +1785,12 @@ export default function AdminPanelScreen() {
                 <Text style={styles.panelTitle}>Torneos cargados ({tournaments.length})</Text>
                 <Text style={styles.helperText}>Vista rápida de lo que ya está disponible en la app.</Text>
                 <ScrollView style={{ maxHeight: 560 }}>
+                  {tournaments.length === 0 ? (
+                    <View style={styles.emptyStateBox}>
+                      <Ionicons name="trophy-outline" size={22} color={colors.muted} />
+                      <Text style={styles.emptyText}>Todavía no hay torneos. Creá el primero desde el formulario.</Text>
+                    </View>
+                  ) : null}
                   {tournaments.map((tournament) => (
                     <View key={tournament.id} style={styles.tournamentRow}>
                       <Text style={styles.tournamentName}>{tournament.name}</Text>
@@ -1678,6 +1997,12 @@ export default function AdminPanelScreen() {
                 <Text style={styles.panelTitle}>Partidos cargados ({matches.length})</Text>
                 <Text style={styles.helperText}>Actualizá marcador y chukker mientras se juega. El estado se calcula solo.</Text>
                 <ScrollView style={{ maxHeight: 700 }}>
+                  {matches.length === 0 ? (
+                    <View style={styles.emptyStateBox}>
+                      <Ionicons name="football-outline" size={22} color={colors.muted} />
+                      <Text style={styles.emptyText}>Todavía no hay partidos programados.</Text>
+                    </View>
+                  ) : null}
                   {matches.map((match) => {
                     const draft = getMatchScoreDraft(match);
                     return (
@@ -1778,6 +2103,12 @@ export default function AdminPanelScreen() {
               <View style={styles.panel}>
                 <Text style={styles.panelTitle}>Eventos cargados ({spotlightEvents.length})</Text>
                 <ScrollView style={{ maxHeight: 700 }}>
+                  {spotlightEvents.length === 0 ? (
+                    <View style={styles.emptyStateBox}>
+                      <Ionicons name="sparkles-outline" size={22} color={colors.muted} />
+                      <Text style={styles.emptyText}>Todavía no hay eventos destacados.</Text>
+                    </View>
+                  ) : null}
                   {spotlightEvents.map((event) => (
                     <View key={event.id} style={styles.tournamentRow}>
                       <Text style={styles.tournamentName}>{event.title}</Text>
@@ -1864,6 +2195,17 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   groupLabel: { color: colors.text, fontSize: 14, fontWeight: "900" },
   groupMeta: { color: colors.primaryDark, fontSize: 11, fontWeight: "800", marginBottom: 4 },
   emptyText: { color: colors.muted, fontSize: 13, paddingVertical: 8 },
+  emptyStateBox: {
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 18,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.border,
+    backgroundColor: colors.surface
+  },
   contentRow: { flexDirection: "row", gap: 10, alignItems: "center", padding: 10, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, marginBottom: 6 },
   contentRowActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   contentThumb: { width: 52, height: 40, borderRadius: 8, backgroundColor: colors.surfaceStrong },

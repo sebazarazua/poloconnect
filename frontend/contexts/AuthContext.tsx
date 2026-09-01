@@ -13,9 +13,17 @@ import {
 import { getCurrentUser, logout as logoutApi } from "@/services/api/auth";
 import { clearAuthTokens, getAccessToken, hydrateAuthTokens } from "@/services/api/client";
 import { getAuthStorageItem, setAuthStorageItem } from "@/services/auth-storage";
-import { Platform } from "react-native";
+import { ActivityIndicator, Platform, View } from "react-native";
 
 const AUTH_USER_STORAGE_KEY = "pc_auth_user";
+
+function AuthHydrationSplash() {
+  return (
+    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#ffffff" }}>
+      <ActivityIndicator size="large" color="#1f3b73" />
+    </View>
+  );
+}
 
 async function readStoredUser() {
   try {
@@ -35,6 +43,7 @@ async function writeStoredUser(user: AuthUser | null) {
 }
 
 type AuthContextValue = {
+  authReady: boolean;
   isAuthenticated: boolean;
   isSubmitting: boolean;
   user: AuthUser | null;
@@ -187,13 +196,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
     void writeStoredUser(nextUser);
   };
 
+  // Nothing below the provider mounts until user + tokens are restored, so no
+  // screen can run a redirect against a half-hydrated session.
   if (!isReady) {
-    return null;
+    return <AuthHydrationSplash />;
   }
 
   return (
     <AuthContext.Provider
       value={{
+        authReady: isReady,
         isAuthenticated,
         isSubmitting,
         user,

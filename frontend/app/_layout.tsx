@@ -110,26 +110,41 @@ function PushTokenRegistrar() {
   return null;
 }
 
+const WEB_ADMIN_PATHS = ["/admin-login", "/admin-panel", "/horse-auctions-admin"];
+
 function RootNavigator({ allowWebDev }: { allowWebDev: boolean }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, authReady } = useAuth();
   const pathname = usePathname();
-  const initialRouteName = isAuthenticated ? "(tabs)" : "login";
 
-  const isWebAdminOnlyMode = Platform.OS === "web" && !allowWebDev;
-  const isAdminPath = pathname === "/admin-login" || pathname === "/admin-panel" || pathname === "/horse-auctions-admin";
+  if (!authReady) {
+    return null;
+  }
 
-  if (isWebAdminOnlyMode && !isAdminPath) {
-    return <Redirect href="/admin-login" />;
+  // Web production builds are the admin console only: they get their own stack so
+  // the app shell ("(tabs)") is never used as the anchor route and can't flash
+  // behind the admin screens.
+  if (Platform.OS === "web" && !allowWebDev) {
+    if (!WEB_ADMIN_PATHS.includes(pathname)) {
+      return <Redirect href="/admin-login" />;
+    }
+
+    return (
+      <Stack initialRouteName="admin-login" screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="admin-login" />
+        <Stack.Screen name="admin-panel" />
+        <Stack.Screen name="horse-auctions-admin" />
+      </Stack>
+    );
   }
 
   return (
-    <Stack initialRouteName={initialRouteName} screenOptions={{ headerShown: false }}>
+    <Stack initialRouteName={isAuthenticated ? "(tabs)" : "login"} screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={!isAuthenticated}>
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />
-        <Stack.Screen name="admin-login" />
       </Stack.Protected>
 
+      <Stack.Screen name="admin-login" />
       <Stack.Screen name="admin-panel" />
       <Stack.Screen name="horse-auctions-admin" />
 

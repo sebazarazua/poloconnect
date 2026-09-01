@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Throttle } from "@nestjs/throttler";
 import { memoryStorage } from "multer";
@@ -8,8 +8,8 @@ import { CsrfGuard } from "../common/guards/csrf.guard";
 import { BrandsService } from "../brands/brands.service";
 import { UpsertBrandDto, UpsertBrandProductDto } from "../brands/dto/brands.dto";
 import { AdminService } from "./admin.service";
-import { AdminContentQueryDto, UpsertAdminContentDto } from "./dto/admin-content.dto";
-import { AdminCommunityBanDto, AdminCommunityMembershipDto } from "./dto/admin-community.dto";
+import { AdminContentQueryDto, PatchAdminContentDto, ReorderAdminContentDto, UpsertAdminContentDto } from "./dto/admin-content.dto";
+import { AdminCommunityBanDto, AdminCommunityMembershipDto, CreateCommunityRoomDto, UpdateCommunityRoomDto } from "./dto/admin-community.dto";
 import { UpsertMatchDto, UpsertMatchStatDto, UpsertTournamentDto, CreateTeamDto, UpdateMatchDto, UpsertSpotlightEventDto, UpdateSpotlightEventDto, UpsertLineupDto } from "./dto/admin-sports.dto";
 import { MediaService } from "../common/media/media.service";
 
@@ -41,6 +41,18 @@ export class AdminController {
   }
 
   @UseGuards(CsrfGuard)
+  @Patch("content/items/:id")
+  patchContent(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: PatchAdminContentDto) {
+    return this.admin.patchContent(user, id, dto);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Post("content/reorder")
+  reorderContent(@CurrentUser() user: RequestUser, @Body() dto: ReorderAdminContentDto) {
+    return this.admin.reorderContent(user, dto);
+  }
+
+  @UseGuards(CsrfGuard)
   @Delete("content/items/:id")
   deleteContent(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.admin.deleteContent(user, id);
@@ -62,6 +74,24 @@ export class AdminController {
   @Get("community/rooms")
   listRooms() {
     return this.admin.listRooms();
+  }
+
+  @UseGuards(CsrfGuard)
+  @Post("community/rooms")
+  createRoom(@CurrentUser() user: RequestUser, @Body() dto: CreateCommunityRoomDto) {
+    return this.admin.createRoom(user, dto);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Put("community/rooms/:roomId")
+  updateRoom(@CurrentUser() user: RequestUser, @Param("roomId") roomId: string, @Body() dto: UpdateCommunityRoomDto) {
+    return this.admin.updateRoom(user, roomId, dto);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Delete("community/rooms/:roomId")
+  deleteRoom(@CurrentUser() user: RequestUser, @Param("roomId") roomId: string) {
+    return this.admin.deleteRoom(user, roomId);
   }
 
   @Get("community/rooms/:roomId/members")

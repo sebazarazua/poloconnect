@@ -46,17 +46,7 @@ function getResponsiveBannerHeight(baseHeight: number, currentWidth: number) {
   return Math.max(minHeight, Math.min(maxHeight, scaledHeight));
 }
 
-const fallbackAds = [
-  require("../../assets/ads/home/hero-1.png"),
-  require("../../assets/ads/home/hero-2.png"),
-  require("../../assets/ads/home/hero-3.png")
-];
-
-const fallbackCompactAds = [
-  require("../../assets/ads/home/compact-1.png"),
-  require("../../assets/ads/home/compact-2.png"),
-  require("../../assets/ads/home/compact-3.png")
-];
+const appLogo = require("../../assets/logo.png");
 
 type HomeAdItem = {
   imageUrl: string;
@@ -153,10 +143,10 @@ export default function HomeScreen() {
       .catch(() => setLiveSpotlightEvents([]));
   }, [t]);
 
-  const ads = homeContent.heroAds.length > 0 ? homeContent.heroAds.map((ad) => resolveContentImageSource(ad.imageUrl)) : fallbackAds;
-  const adTargetUrls = homeContent.heroAds.length > 0 ? homeContent.heroAds.map((ad) => ad.targetUrl) : [];
-  const compactAds = homeContent.compactAds.length > 0 ? homeContent.compactAds.map((ad) => resolveContentImageSource(ad.imageUrl)) : fallbackCompactAds;
-  const compactAdTargetUrls = homeContent.compactAds.length > 0 ? homeContent.compactAds.map((ad) => ad.targetUrl) : [];
+  const ads = homeContent.heroAds.map((ad) => resolveContentImageSource(ad.imageUrl));
+  const adTargetUrls = homeContent.heroAds.map((ad) => ad.targetUrl);
+  const compactAds = homeContent.compactAds.map((ad) => resolveContentImageSource(ad.imageUrl));
+  const compactAdTargetUrls = homeContent.compactAds.map((ad) => ad.targetUrl);
 
   const quickAccessItems = [
     { key: "calendar", label: t("home.calendar"), icon: "calendar-outline" },
@@ -278,6 +268,10 @@ export default function HomeScreen() {
   }, [activeHero, heroItems.length]);
 
   useEffect(() => {
+    if (ads.length < 2) {
+      return;
+    }
+
     const timer = setInterval(() => {
       setActiveAd((currentAd) => {
         const nextAd = (currentAd + 1) % ads.length;
@@ -292,7 +286,7 @@ export default function HomeScreen() {
     }, 3500);
 
     return () => clearInterval(timer);
-  }, [bannerWidth]);
+  }, [ads.length, bannerWidth]);
 
   const handleHeroMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = Math.round(event.nativeEvent.contentOffset.x / bannerWidth);
@@ -524,35 +518,41 @@ export default function HomeScreen() {
       </View>
 
 
-      <ScrollView
-        ref={carouselRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        snapToInterval={bannerWidth}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        disableIntervalMomentum
-        overScrollMode="never"
-        onTouchStart={() => setDrawerGestureBlocked(true)}
-        onTouchEnd={() => setDrawerGestureBlocked(false)}
-        onTouchCancel={() => setDrawerGestureBlocked(false)}
-        onScrollBeginDrag={() => setDrawerGestureBlocked(true)}
-        onScrollEndDrag={() => setDrawerGestureBlocked(false)}
-        onMomentumScrollBegin={() => setDrawerGestureBlocked(true)}
-        onMomentumScrollEnd={handleAdMomentumEnd}
-        style={{ width: bannerWidth, overflow: "hidden" }}
-        contentContainerStyle={styles.adsTrack}
-      >
-        {ads.map((ad, index) => (
-          <Pressable
-            key={`home-hero-${index}`}
-            onPress={() => void openTargetUrl(adTargetUrls[index])}
-            style={[styles.adBanner, { width: bannerWidth, height: primaryBannerHeight }]}
-          >
-            <Image source={ad} style={styles.adImage} resizeMode="cover" />
-          </Pressable>
-        ))}
-      </ScrollView>
+      {ads.length === 0 ? (
+        <View style={[styles.adBanner, styles.adPlaceholder, { width: bannerWidth, height: primaryBannerHeight }]}>
+          <Image source={appLogo} style={styles.adPlaceholderLogo} resizeMode="contain" />
+        </View>
+      ) : (
+        <ScrollView
+          ref={carouselRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={bannerWidth}
+          snapToAlignment="start"
+          decelerationRate="fast"
+          disableIntervalMomentum
+          overScrollMode="never"
+          onTouchStart={() => setDrawerGestureBlocked(true)}
+          onTouchEnd={() => setDrawerGestureBlocked(false)}
+          onTouchCancel={() => setDrawerGestureBlocked(false)}
+          onScrollBeginDrag={() => setDrawerGestureBlocked(true)}
+          onScrollEndDrag={() => setDrawerGestureBlocked(false)}
+          onMomentumScrollBegin={() => setDrawerGestureBlocked(true)}
+          onMomentumScrollEnd={handleAdMomentumEnd}
+          style={{ width: bannerWidth, overflow: "hidden" }}
+          contentContainerStyle={styles.adsTrack}
+        >
+          {ads.map((ad, index) => (
+            <Pressable
+              key={`home-hero-${index}`}
+              onPress={() => void openTargetUrl(adTargetUrls[index])}
+              style={[styles.adBanner, { width: bannerWidth, height: primaryBannerHeight }]}
+            >
+              <Image source={ad} style={styles.adImage} resizeMode="cover" />
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
       <View style={styles.dots}>
         {ads.map((_, index) => (
           <View
@@ -713,6 +713,17 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderRadius: 18,
     backgroundColor: colors.surfaceStrong,
     overflow: "hidden"
+  },
+  adPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border
+  },
+  adPlaceholderLogo: {
+    width: "38%",
+    height: "46%",
+    opacity: 0.35
   },
   adImage: {
     width: "100%",

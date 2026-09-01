@@ -15,6 +15,33 @@ export type AdminContentItem = {
   isActive: boolean;
 };
 
+export type UpsertAdminContentPayload = Omit<AdminContentItem, "id" | "sortOrder"> & { sortOrder?: number };
+
+export type AdminCommunityRoom = {
+  id: string;
+  title: string;
+  description?: string | null;
+  kind: string;
+  icon?: string | null;
+  tone?: string | null;
+  externalCode?: string | null;
+  isRecommended: boolean;
+  isPublic: boolean;
+  createdAt: string;
+  _count?: { memberships: number };
+};
+
+export type UpsertAdminCommunityRoomPayload = {
+  title: string;
+  description?: string;
+  kind?: string;
+  icon?: string;
+  tone?: string;
+  externalCode?: string;
+  isRecommended?: boolean;
+  isPublic?: boolean;
+};
+
 export type CommunityBan = {
   id: string;
   roomId: string;
@@ -74,17 +101,31 @@ export async function listAdminContent() {
   return apiRequest<AdminContentItem[]>("/admin/content/items");
 }
 
-export async function createAdminContent(payload: Omit<AdminContentItem, "id">) {
+export async function createAdminContent(payload: UpsertAdminContentPayload) {
   return apiRequest<AdminContentItem>("/admin/content/items", {
     method: "POST",
     body: JSON.stringify(payload)
   });
 }
 
-export async function updateAdminContent(id: string, payload: Omit<AdminContentItem, "id">) {
+export async function updateAdminContent(id: string, payload: UpsertAdminContentPayload) {
   return apiRequest<AdminContentItem>(`/admin/content/items/${encodeURIComponent(id)}`, {
     method: "PUT",
     body: JSON.stringify(payload)
+  });
+}
+
+export async function patchAdminContent(id: string, payload: Partial<UpsertAdminContentPayload>) {
+  return apiRequest<AdminContentItem>(`/admin/content/items/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function reorderAdminContent(section: string, slot: string, itemIds: string[]) {
+  return apiRequest<AdminContentItem[]>("/admin/content/reorder", {
+    method: "POST",
+    body: JSON.stringify({ section, slot, itemIds })
   });
 }
 
@@ -105,7 +146,27 @@ export async function deleteAdminContent(id: string) {
 }
 
 export async function listCommunityRooms() {
-  return apiRequest<Array<{ id: string; title: string; kind: string }>>("/admin/community/rooms");
+  return apiRequest<AdminCommunityRoom[]>("/admin/community/rooms");
+}
+
+export async function createCommunityRoom(payload: UpsertAdminCommunityRoomPayload) {
+  return apiRequest<AdminCommunityRoom>("/admin/community/rooms", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateCommunityRoom(roomId: string, payload: Partial<UpsertAdminCommunityRoomPayload>) {
+  return apiRequest<AdminCommunityRoom>(`/admin/community/rooms/${encodeURIComponent(roomId)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteCommunityRoom(roomId: string) {
+  return apiRequest<{ ok: boolean }>(`/admin/community/rooms/${encodeURIComponent(roomId)}`, {
+    method: "DELETE"
+  });
 }
 
 export async function listCommunityMembers(roomId: string) {

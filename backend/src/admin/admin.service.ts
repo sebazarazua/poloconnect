@@ -1,13 +1,24 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
 import { RequestUser } from "../common/decorators/current-user.decorator";
 import { MediaService } from "../common/media/media.service";
 import { computeEffectiveMatchStatus, isWithinLiveWindow } from "../common/utils/match-status.util";
 import { PrismaService } from "../database/prisma.service";
-import { AdminContentQueryDto, UpsertAdminContentDto } from "./dto/admin-content.dto";
-import { AdminCommunityBanDto, AdminCommunityMembershipDto } from "./dto/admin-community.dto";
+import { AdminContentQueryDto, PatchAdminContentDto, ReorderAdminContentDto, UpsertAdminContentDto } from "./dto/admin-content.dto";
+import { AdminCommunityBanDto, AdminCommunityMembershipDto, CreateCommunityRoomDto, UpdateCommunityRoomDto } from "./dto/admin-community.dto";
 import { CreateTeamDto, UpdateMatchDto, UpsertMatchDto, UpsertMatchStatDto, UpsertTournamentDto, UpsertSpotlightEventDto, UpdateSpotlightEventDto, UpsertLineupDto } from "./dto/admin-sports.dto";
+
+/**
+ * Minimum number of published (active) items a carousel slot must keep once it has content.
+ * An empty slot can always receive its first item; the rule only blocks emptying a live carousel.
+ */
+export const CAROUSEL_MIN_PUBLISHED: Record<string, number> = {
+  "home:hero_ads": 1,
+  "home:compact_ads": 1,
+  "community:ads": 1,
+  "live:ads": 1
+};
 
 @Injectable()
 export class AdminService {
@@ -66,72 +77,266 @@ export class AdminService {
       allowGoogleImport: true
     });
 
-    const item = await this.prisma.appContentItem.create({
-      data: {
-        type: dto.type,
-        section: dto.section,
-        slot: dto.slot,
-        title: dto.title,
-        subtitle: dto.subtitle,
-        body: dto.body,
-        imageUrl,
-        storageKey: dto.storageKey ?? this.media.extractStorageKeyFromUrl(imageUrl),
-        targetUrl: dto.targetUrl,
-        priority: dto.priority ?? 0,
-        sortOrder: dto.sortOrder ?? 0,
-        isActive: dto.isActive ?? true,
-        startsAt: dto.startsAt ? new Date(dto.startsAt) : null,
-        endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
-        createdBy: user.id,
-        updatedBy: user.id
-      }
-    });
+    const sortOrder = dto.sortOrder ?? (await this.nextSortOrder(dto.section, dto.slot, dto.type));
+
+    const item = await this.runContentWrite(() =>
+      this.prisma.appContentItem.create({
+        data: {
+          type: dto.type,
+          section: dto.section,
+          slot: dto.slot,
+          title: dto.title,
+          subtitle: dto.subtitle,
+          body: dto.body,
+          imageUrl,
+          storageKey: dto.storageKey ?? this.media.extractStorageKeyFromUrl(imageUrl),
+          targetUrl: dto.targetUrl,
+          priority: dto.priority ?? 0,
+          sortOrder,
+          isActive: dto.isActive ?? true,
+          startsAt: dto.startsAt ? new Date(dto.startsAt) : null,
+          endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
+          createdBy: user.id,
+          updatedBy: user.id
+        }
+      })
+    );
 
     await this.audit(user, "admin.content.create", "AppContentItem", item.id, { section: item.section, slot: item.slot });
     return item;
   }
 
   async updateContent(user: RequestUser, id: string, dto: UpsertAdminContentDto) {
-    await this.ensureContent(id);
+    const current = await this.ensureContent(id);
+    const nextIsActive = dto.isActive ?? true;
+
+    if (current.isActive && (!nextIsActive || current.section !== dto.section || current.slot !== dto.slot)) {
+      await this.ensureCarouselMinimum(current.section, current.slot, id);
+    }
+
     const imageUrl = await this.media.ensureStoredMediaUrl("content", dto.imageUrl, {
       allowAsset: true,
       allowGoogleImport: true
     });
 
-    const item = await this.prisma.appContentItem.update({
-      where: { id },
-      data: {
-        type: dto.type,
-        section: dto.section,
-        slot: dto.slot,
-        title: dto.title,
-        subtitle: dto.subtitle,
-        body: dto.body,
-        imageUrl,
-        storageKey: dto.storageKey ?? this.media.extractStorageKeyFromUrl(imageUrl),
-        targetUrl: dto.targetUrl,
-        priority: dto.priority ?? 0,
-        sortOrder: dto.sortOrder ?? 0,
-        isActive: dto.isActive ?? true,
-        startsAt: dto.startsAt ? new Date(dto.startsAt) : null,
-        endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
-        updatedBy: user.id
-      }
-    });
+    const item = await this.runContentWrite(() =>
+      this.prisma.appContentItem.update({
+        where: { id },
+        data: {
+          type: dto.type,
+          section: dto.section,
+          slot: dto.slot,
+          title: dto.title,
+          subtitle: dto.subtitle,
+          body: dto.body,
+          imageUrl,
+          storageKey: dto.storageKey ?? this.media.extractStorageKeyFromUrl(imageUrl),
+          targetUrl: dto.targetUrl,
+          priority: dto.priority ?? 0,
+          sortOrder: dto.sortOrder ?? current.sortOrder,
+          isActive: nextIsActive,
+          startsAt: dto.startsAt ? new Date(dto.startsAt) : null,
+          endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
+          updatedBy: user.id
+        }
+      })
+    );
 
     await this.audit(user, "admin.content.update", "AppContentItem", id, { section: item.section, slot: item.slot });
     return item;
   }
 
+  async patchContent(user: RequestUser, id: string, dto: PatchAdminContentDto) {
+    const current = await this.ensureContent(id);
+    const nextSection = dto.section ?? current.section;
+    const nextSlot = dto.slot ?? current.slot;
+    const nextIsActive = dto.isActive ?? current.isActive;
+
+    if (current.isActive && (!nextIsActive || current.section !== nextSection || current.slot !== nextSlot)) {
+      await this.ensureCarouselMinimum(current.section, current.slot, id);
+    }
+
+    const imageUrl = dto.imageUrl
+      ? await this.media.ensureStoredMediaUrl("content", dto.imageUrl, { allowAsset: true, allowGoogleImport: true })
+      : undefined;
+
+    const item = await this.runContentWrite(() =>
+      this.prisma.appContentItem.update({
+        where: { id },
+        data: {
+          type: dto.type,
+          section: dto.section,
+          slot: dto.slot,
+          title: dto.title,
+          subtitle: dto.subtitle,
+          body: dto.body,
+          imageUrl,
+          storageKey: imageUrl ? this.media.extractStorageKeyFromUrl(imageUrl) : undefined,
+          targetUrl: dto.targetUrl,
+          priority: dto.priority,
+          sortOrder: dto.sortOrder,
+          isActive: dto.isActive,
+          updatedBy: user.id
+        }
+      })
+    );
+
+    await this.audit(user, "admin.content.patch", "AppContentItem", id, { section: item.section, slot: item.slot, isActive: item.isActive });
+    return item;
+  }
+
+  async reorderContent(user: RequestUser, dto: ReorderAdminContentDto) {
+    const items = await this.prisma.appContentItem.findMany({
+      where: { section: dto.section, slot: dto.slot, deletedAt: null },
+      select: { id: true }
+    });
+    const known = new Set(items.map((item) => item.id));
+
+    if (dto.itemIds.length !== items.length || dto.itemIds.some((id) => !known.has(id))) {
+      throw new BadRequestException("El orden enviado no coincide con los elementos de este carrusel.");
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Two passes: park every row on a temporary negative position first so the
+      // (section, slot, type, sortOrder) unique index can't collide mid-update.
+      for (const [index, id] of dto.itemIds.entries()) {
+        await tx.appContentItem.update({ where: { id }, data: { sortOrder: -(index + 1) } });
+      }
+
+      for (const [index, id] of dto.itemIds.entries()) {
+        await tx.appContentItem.update({ where: { id }, data: { sortOrder: index + 1, updatedBy: user.id } });
+      }
+    });
+
+    await this.audit(user, "admin.content.reorder", "AppContentItem", undefined, { section: dto.section, slot: dto.slot });
+    return this.listContent({ section: dto.section, slot: dto.slot });
+  }
+
   async deleteContent(user: RequestUser, id: string) {
-    await this.ensureContent(id);
-    await this.prisma.appContentItem.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    const current = await this.ensureContent(id);
+
+    if (current.isActive) {
+      await this.ensureCarouselMinimum(current.section, current.slot, id);
+    }
+
+    await this.prisma.appContentItem.update({ where: { id }, data: { deletedAt: new Date(), isActive: false, updatedBy: user.id } });
     await this.audit(user, "admin.content.delete", "AppContentItem", id);
     return { ok: true };
   }
 
+  private async nextSortOrder(section: string, slot: string, type: string) {
+    const last = await this.prisma.appContentItem.findFirst({
+      where: { section, slot, type: type as never, deletedAt: null },
+      orderBy: { sortOrder: "desc" },
+      select: { sortOrder: true }
+    });
+
+    return (last?.sortOrder ?? 0) + 1;
+  }
+
+  private async ensureCarouselMinimum(section: string, slot: string, excludedItemId: string) {
+    const minimum = CAROUSEL_MIN_PUBLISHED[`${section}:${slot}`];
+    if (!minimum) return;
+
+    const remaining = await this.prisma.appContentItem.count({
+      where: { section, slot, isActive: true, deletedAt: null, id: { not: excludedItemId } }
+    });
+
+    if (remaining < minimum) {
+      throw new BadRequestException(
+        `El carrusel "${section}/${slot}" necesita al menos ${minimum} publicación activa. Agregá otra antes de desactivar o eliminar esta.`
+      );
+    }
+  }
+
+  private async runContentWrite<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException("Ya existe otra publicación con esa posición en el mismo slot. Elegí otra posición.");
+      }
+
+      throw error;
+    }
+  }
+
   async listRooms() {
-    return this.prisma.chatRoom.findMany({ where: { deletedAt: null }, orderBy: { title: "asc" } });
+    return this.prisma.chatRoom.findMany({
+      where: { deletedAt: null },
+      orderBy: { title: "asc" },
+      include: { _count: { select: { memberships: true } } }
+    });
+  }
+
+  async createRoom(user: RequestUser, dto: CreateCommunityRoomDto) {
+    const externalCode = await this.resolveRoomCode(dto.externalCode ?? dto.title);
+
+    const room = await this.prisma.chatRoom.create({
+      data: {
+        title: dto.title.trim(),
+        description: dto.description?.trim() || null,
+        kind: dto.kind?.trim() || "general",
+        icon: dto.icon?.trim() || "chatbubbles-outline",
+        tone: dto.tone?.trim() || null,
+        externalCode,
+        isRecommended: dto.isRecommended ?? false,
+        isPublic: dto.isPublic ?? true,
+        createdBy: user.id
+      }
+    });
+
+    await this.audit(user, "admin.community.room.create", "ChatRoom", room.id, { title: room.title });
+    return room;
+  }
+
+  async updateRoom(user: RequestUser, roomId: string, dto: UpdateCommunityRoomDto) {
+    const current = await this.ensureRoom(roomId);
+
+    let externalCode = current.externalCode;
+    if (dto.externalCode !== undefined && dto.externalCode.trim() !== current.externalCode) {
+      externalCode = await this.resolveRoomCode(dto.externalCode || current.title, roomId);
+    }
+
+    const room = await this.prisma.chatRoom.update({
+      where: { id: roomId },
+      data: {
+        title: dto.title?.trim(),
+        description: dto.description === undefined ? undefined : dto.description.trim() || null,
+        kind: dto.kind?.trim(),
+        icon: dto.icon === undefined ? undefined : dto.icon.trim() || null,
+        tone: dto.tone === undefined ? undefined : dto.tone.trim() || null,
+        externalCode,
+        isRecommended: dto.isRecommended,
+        isPublic: dto.isPublic
+      }
+    });
+
+    await this.audit(user, "admin.community.room.update", "ChatRoom", roomId, { title: room.title, isPublic: room.isPublic });
+    return room;
+  }
+
+  async deleteRoom(user: RequestUser, roomId: string) {
+    await this.ensureRoom(roomId);
+    await this.prisma.chatRoom.update({ where: { id: roomId }, data: { deletedAt: new Date(), isPublic: false, isRecommended: false } });
+    await this.audit(user, "admin.community.room.delete", "ChatRoom", roomId);
+    return { ok: true };
+  }
+
+  private async resolveRoomCode(source: string, excludedRoomId?: string) {
+    const base = this.slugify(source) || `sala-${randomBytes(3).toString("hex")}`;
+    let candidate = base;
+
+    for (let attempt = 1; attempt <= 25; attempt += 1) {
+      const existing = await this.prisma.chatRoom.findFirst({ where: { externalCode: candidate }, select: { id: true } });
+      if (!existing || existing.id === excludedRoomId) {
+        return candidate;
+      }
+
+      candidate = `${base}-${attempt + 1}`;
+    }
+
+    throw new ConflictException("No se pudo generar un código único para la comunidad.");
   }
 
   async listRoomMembers(roomId: string) {

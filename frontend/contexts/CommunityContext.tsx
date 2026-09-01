@@ -51,9 +51,14 @@ export function CommunityProvider({ children }: PropsWithChildren) {
       return;
     }
 
-    const rooms = await listChatRooms();
-    setJoinedChats(rooms.joined);
-    setRecommendedChats(rooms.recommended);
+    try {
+      const rooms = await listChatRooms();
+      setJoinedChats(rooms.joined);
+      setRecommendedChats(rooms.recommended);
+    } catch {
+      setJoinedChats([]);
+      setRecommendedChats([]);
+    }
   }, [isAuthenticated]);
 
   useEffect(() => {

@@ -12,12 +12,6 @@ import type { ChatItem } from "@/contexts/CommunityContext";
 import { type ContentItem, getSectionContent } from "@/services/api/content";
 import { resolveContentImageSource } from "@/services/content-images";
 
-const communityAds = [
-  require("../../assets/ads/community/slide-1.png"),
-  require("../../assets/ads/community/slide-2.png"),
-  require("../../assets/ads/community/slide-3.png")
-];
-
 export default function CommunityScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
@@ -33,12 +27,12 @@ export default function CommunityScreen() {
   }, []);
 
   const adImages = useMemo(
-    () => (remoteAds.length > 0 ? remoteAds.map((item) => resolveContentImageSource(item.imageUrl)) : communityAds),
+    () => remoteAds.map((item) => resolveContentImageSource(item.imageUrl)),
     [remoteAds]
   );
 
   const adTargetUrls = useMemo(
-    () => (remoteAds.length > 0 ? remoteAds.map((item) => item.targetUrl ?? undefined) : []),
+    () => remoteAds.map((item) => item.targetUrl ?? undefined),
     [remoteAds]
   );
 

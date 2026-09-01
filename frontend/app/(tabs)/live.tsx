@@ -46,11 +46,6 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-const liveAds = [
-  require("../../assets/ads/live/slide-1.png"),
-  require("../../assets/ads/live/slide-2.png"),
-  require("../../assets/ads/live/slide-3.png")
-];
 
 export default function LiveScreen() {
   const colors = useThemeColors();
@@ -82,12 +77,12 @@ export default function LiveScreen() {
   }, []);
 
   const adImages = useMemo(
-    () => (remoteAds.length > 0 ? remoteAds.map((item) => resolveContentImageSource(item.imageUrl)) : liveAds),
+    () => remoteAds.map((item) => resolveContentImageSource(item.imageUrl)),
     [remoteAds]
   );
 
   const adTargetUrls = useMemo(
-    () => (remoteAds.length > 0 ? remoteAds.map((item) => item.targetUrl ?? undefined) : []),
+    () => remoteAds.map((item) => item.targetUrl ?? undefined),
     [remoteAds]
   );
 

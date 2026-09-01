@@ -1,5 +1,5 @@
 import { Redirect, useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Screen } from "@/components/Screen";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,7 +7,7 @@ import { useLocale } from "@/contexts/LocaleContext";
 import { AppColors, useThemeColors } from "@/constants/theme";
 
 export default function AdminLoginScreen() {
-  const { signIn, isAuthenticated } = useAuth();
+  const { signIn, signOut, isAuthenticated, authReady, user, isSubmitting } = useAuth();
   const router = useRouter();
   const colors = useThemeColors();
   const styles = createStyles(colors);
@@ -16,8 +16,31 @@ export default function AdminLoginScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const isAdmin = useMemo(() => {
+    const roles = user?.roles ?? [];
+    return roles.includes("admin") || roles.includes("superadmin");
+  }, [user?.roles]);
+
   if (Platform.OS !== "web") {
     return <Redirect href={isAuthenticated ? "/(tabs)" : "/login"} />;
+  }
+
+  // Redirects only run once hydration finished, so login <-> panel can't ping-pong.
+  if (authReady && isAuthenticated && isAdmin) {
+    return <Redirect href="/admin-panel" />;
+  }
+
+  if (authReady && isAuthenticated && !isAdmin) {
+    return (
+      <Screen eyebrow="Admin" title={t("adminPanel.noAccessTitle")} subtitle={t("adminPanel.noAccessSubtitle")}>
+        <View style={styles.formCard}>
+          <Text style={styles.infoText}>{user?.email}</Text>
+          <Pressable style={styles.button} onPress={() => void signOut()}>
+            <Text style={styles.buttonText}>{t("drawer.signOut")}</Text>
+          </Pressable>
+        </View>
+      </Screen>
+    );
   }
 
   return (
@@ -30,17 +53,17 @@ export default function AdminLoginScreen() {
 
         <Pressable
           style={styles.button}
+          disabled={isSubmitting}
           onPress={async () => {
             setError(null);
             try {
               await signIn({ identifier, password });
-              router.replace("/admin-panel");
             } catch (e) {
               setError(e instanceof Error ? e.message : t("auth.login.error"));
             }
           }}
         >
-          <Text style={styles.buttonText}>{t("adminLogin.submit")}</Text>
+          <Text style={styles.buttonText}>{isSubmitting ? "..." : t("adminLogin.submit")}</Text>
         </Pressable>
       </View>
     </Screen>

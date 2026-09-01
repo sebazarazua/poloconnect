@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import * as argon2 from "argon2";
 

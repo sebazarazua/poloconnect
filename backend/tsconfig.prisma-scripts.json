@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "rootDir": ".",
+    "tsBuildInfoFile": "./dist/tsconfig.prisma-scripts.tsbuildinfo"
+  },
+  "include": ["prisma/bootstrap-production-admin.ts"],
+  "exclude": ["node_modules", "dist"]
+}

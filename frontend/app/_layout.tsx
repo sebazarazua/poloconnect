@@ -104,7 +104,14 @@ function PushTokenRegistrar() {
       return;
     }
 
-    void import("@/services/push-notifications").then((module) => module.registerDevicePushToken());
+    void import("@/services/push-notifications")
+      .then((module) => module.registerDevicePushToken())
+      .then((token) => {
+        console.info(`startup/push registration success: ${Boolean(token)}`);
+      })
+      .catch(() => {
+        console.info("startup/push registration failure");
+      });
   }, [isAuthenticated, user?.id]);
 
   return null;

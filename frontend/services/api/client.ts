@@ -32,15 +32,27 @@ function resolveApiUrl() {
     return defaultApiUrl;
   }
 
-  throw new Error(
-    "Missing EXPO_PUBLIC_API_URL for production build. Configure it in the EAS production environment before building."
-  );
+  return null;
 }
 
 // Always prefer explicit env URL. Only local development may fall back to the dev server host.
 const apiUrl = resolveApiUrl();
-const apiOrigin = apiUrl.replace(/\/api(?:\/.*)?$/, "");
-const apiPathPrefix = apiUrl.slice(apiOrigin.length).replace(/\/$/, "") || "/api/v1";
+const isApiUrlConfigured = Boolean(apiUrl);
+console.info(`startup/api url configured: ${isApiUrlConfigured}`);
+
+const missingApiUrlError =
+  "Missing EXPO_PUBLIC_API_URL for production build. Configure it in the EAS production environment before building.";
+
+function requireApiUrl() {
+  if (!apiUrl) {
+    throw new Error(missingApiUrlError);
+  }
+
+  return apiUrl;
+}
+
+const apiOrigin = apiUrl?.replace(/\/api(?:\/.*)?$/, "") ?? "";
+const apiPathPrefix = apiUrl ? apiUrl.slice(apiOrigin.length).replace(/\/$/, "") || "/api/v1" : "/api/v1";
 
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
@@ -110,14 +122,16 @@ export async function clearAuthTokens() {
 }
 
 export function getApiUrl() {
-  return apiUrl;
+  return requireApiUrl();
 }
 
 export function getApiOrigin() {
+  requireApiUrl();
   return apiOrigin;
 }
 
 export function getSocketUrl() {
+  requireApiUrl();
   return `${apiOrigin}/ws`;
 }
 
@@ -157,7 +171,7 @@ async function refreshAccessToken() {
     throw new Error("No hay sesión activa.");
   }
 
-  const response = await fetch(`${apiUrl}/auth/refresh`, {
+  const response = await fetch(`${requireApiUrl()}/auth/refresh`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -195,6 +209,7 @@ async function parseError(response: Response) {
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   await hydrateAuthTokens();
+  const requestApiUrl = requireApiUrl();
 
   const headers = new Headers(init.headers);
 
@@ -214,7 +229,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, retry 
     }
   }
 
-  const response = await fetch(`${apiUrl}${path}`, { ...init, headers, credentials: "include" });
+  const response = await fetch(`${requestApiUrl}${path}`, { ...init, headers, credentials: "include" });
 
   if (response.status === 401 && refreshToken && retry) {
     refreshPromise ??= refreshAccessToken().finally(() => {

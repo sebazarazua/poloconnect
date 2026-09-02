@@ -58,7 +58,7 @@ export function MarketProvider({ children }: PropsWithChildren) {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    void refreshMarket();
+    void refreshMarket().catch(() => undefined);
   }, [refreshMarket]);
 
   const addProduct = useCallback(async (product: ProductPayload) => {

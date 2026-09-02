@@ -80,36 +80,53 @@ export function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     let cancelled = false;
 
+    console.info("startup/auth hydration start");
+
     void (async () => {
-      await hydrateAuthTokens();
+      try {
+        await hydrateAuthTokens();
 
-      const storedUser = await readStoredUser();
-      const hasToken = Boolean(getAccessToken());
-      const isProductionWeb = Platform.OS === "web" && !(typeof __DEV__ !== "undefined" && __DEV__);
-      const isDemoUser = storedUser?.id.startsWith("demo-seed-") ?? false;
+        const storedUser = await readStoredUser();
+        const hasToken = Boolean(getAccessToken());
+        const isProductionWeb = Platform.OS === "web" && !(typeof __DEV__ !== "undefined" && __DEV__);
+        const isDemoUser = storedUser?.id.startsWith("demo-seed-") ?? false;
 
-      if (isProductionWeb && isDemoUser) {
-        await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
-        return null;
-      }
-
-      if (storedUser && !hasToken) {
-        await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
-        return null;
-      }
-
-      if (!storedUser && hasToken) {
-        try {
-          const currentUser = await getCurrentUser();
-          await writeStoredUser(currentUser);
-          return currentUser;
-        } catch {
-          await clearAuthTokens();
+        if (isProductionWeb && isDemoUser) {
+          await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
+          console.info("startup/auth hydration success");
           return null;
         }
-      }
 
-      return storedUser;
+        if (storedUser && !hasToken) {
+          await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
+          console.info("startup/auth hydration success");
+          return null;
+        }
+
+        if (!storedUser && hasToken) {
+          try {
+            const currentUser = await getCurrentUser();
+            await writeStoredUser(currentUser);
+            console.info("startup/auth hydration success");
+            return currentUser;
+          } catch {
+            await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
+            console.info("startup/auth hydration failure");
+            return null;
+          }
+        }
+
+        console.info("startup/auth hydration success");
+        return storedUser;
+      } catch {
+        console.info("startup/auth hydration failure");
+        try {
+          await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
+        } catch {
+          // Best effort cleanup; login must still be allowed to render.
+        }
+        return null;
+      }
     })()
       .then((nextUser) => {
         if (cancelled) return;

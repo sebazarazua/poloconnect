@@ -1,5 +1,6 @@
 import { Redirect, Stack, usePathname } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef } from "react";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
@@ -10,27 +11,34 @@ import { MarketProvider } from "@/contexts/MarketContext";
 import { CommunityProvider } from "@/contexts/CommunityContext";
 import { ThemeProvider, useTheme } from "@/constants/theme";
 import { getMySettings } from "@/services/api/settings";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+// Keep the native splash visible until auth hydration resolves, instead of letting
+// expo-router auto-hide it as soon as the root view mounts (which can reveal a blank frame).
+void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 export default function RootLayout() {
   const allowWebDev = process.env.EXPO_PUBLIC_ENABLE_WEB_DEV === "true";
 
   return (
-    <ThemeProvider>
-      <SafeAreaProvider>
-        <AuthProvider>
-          <LocaleProvider>
-            <MarketProvider>
-              <CommunityProvider>
-                <ThemedStatusBar />
-                <UserPreferencesHydrator />
-                <PushTokenRegistrar />
-                <RootNavigator allowWebDev={allowWebDev} />
-              </CommunityProvider>
-            </MarketProvider>
-          </LocaleProvider>
-        </AuthProvider>
-      </SafeAreaProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <AuthProvider>
+            <LocaleProvider>
+              <MarketProvider>
+                <CommunityProvider>
+                  <ThemedStatusBar />
+                  <UserPreferencesHydrator />
+                  <PushTokenRegistrar />
+                  <RootNavigator allowWebDev={allowWebDev} />
+                </CommunityProvider>
+              </MarketProvider>
+            </LocaleProvider>
+          </AuthProvider>
+        </SafeAreaProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -122,6 +130,12 @@ const WEB_ADMIN_PATHS = ["/admin-login", "/admin-panel", "/horse-auctions-admin"
 function RootNavigator({ allowWebDev }: { allowWebDev: boolean }) {
   const { isAuthenticated, authReady } = useAuth();
   const pathname = usePathname();
+
+  useEffect(() => {
+    if (authReady) {
+      void SplashScreen.hideAsync().catch(() => undefined);
+    }
+  }, [authReady]);
 
   if (!authReady) {
     return null;

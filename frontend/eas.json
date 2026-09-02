@@ -15,12 +15,24 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://poloconnect-production.up.railway.app/api/v1",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "394359246264-qsdibq97s91qf5rt6q5gn75dtoarct22.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "394359246264-i9af2smet2mrgko89087m4du5098aamn.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "394359246264-di5ov5m0scidob7doa9ikq15p6p8ei2t.apps.googleusercontent.com"
       }
     },
     "production": {
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://poloconnect-production.up.railway.app/api/v1",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "394359246264-qsdibq97s91qf5rt6q5gn75dtoarct22.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "394359246264-i9af2smet2mrgko89087m4du5098aamn.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "394359246264-di5ov5m0scidob7doa9ikq15p6p8ei2t.apps.googleusercontent.com"
       }
     }
   },

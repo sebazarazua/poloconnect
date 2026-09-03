@@ -22,6 +22,15 @@ import { useLocale } from "@/contexts/LocaleContext";
 
 WebBrowser.maybeCompleteAuthSession();
 
+// Google's "iOS"/"Android" OAuth client types only accept the reversed client-id
+// scheme as redirect URI (they don't expose a configurable "authorized redirect URIs" field).
+function getGoogleNativeRedirectUri(clientId?: string) {
+  if (!clientId) return undefined;
+  const suffix = ".apps.googleusercontent.com";
+  const prefix = clientId.endsWith(suffix) ? clientId.slice(0, -suffix.length) : clientId;
+  return `com.googleusercontent.apps.${prefix}:/oauthredirect`;
+}
+
 export default function LoginScreen() {
   const router = useRouter();
   const { signIn, signInWithApple, signInWithGoogle, isSubmitting } = useAuth();
@@ -48,14 +57,25 @@ export default function LoginScreen() {
   const googleEffectiveClientId = isExpoGo ? googleWebClientId : googleClientIdForPlatform;
   const hasGoogleConfig = Boolean(googleEffectiveClientId);
 
+  // Google's iOS/Android OAuth client types only accept Authorization Code + PKCE and
+  // redirect to the reversed client-id scheme; response_type=token is rejected with
+  // "Error 400: unsupported_response_type" on those client types (confirmed on TestFlight).
+  const isNativeStandalone = Platform.OS !== "web" && !isExpoGo;
+  const googleResponseType = isNativeStandalone ? ResponseType.Code : ResponseType.Token;
+  const googleNativeClientId = Platform.select({
+    ios: googleIosClientId,
+    android: googleAndroidClientId,
+    default: undefined
+  });
+  const googleNativeRedirectUri = isNativeStandalone ? getGoogleNativeRedirectUri(googleNativeClientId) : undefined;
+
   const [googleRequest, googleResponse, promptGoogle] = Google.useAuthRequest({
     clientId: googleEffectiveClientId ?? "missing-google-client-id",
     iosClientId: googleIosClientIdForAuth,
     androidClientId: googleAndroidClientIdForAuth,
     webClientId: googleWebClientId,
-    redirectUri: isExpoGo ? expoProxyRedirectUri : undefined,
-    responseType: ResponseType.Token,
-    shouldAutoExchangeCode: false,
+    redirectUri: isExpoGo ? expoProxyRedirectUri : googleNativeRedirectUri,
+    responseType: googleResponseType,
     scopes: ["openid", "profile", "email"],
     selectAccount: true
   });

@@ -5,7 +5,11 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "polo-connect",
+    "scheme": [
+      "polo-connect",
+      "com.googleusercontent.apps.394359246264-i9af2smet2mrgko89087m4du5098aamn",
+      "com.googleusercontent.apps.394359246264-di5ov5m0scidob7doa9ikq15p6p8ei2t"
+    ],
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [
       "**/*"

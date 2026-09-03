@@ -41,11 +41,13 @@ const localApiUrlPattern = /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d
 export const isApiUrlConfigured = Boolean(apiUrl) && (isDev || !localApiUrlPattern.test(apiUrl ?? ""));
 console.info(`startup/api-config: ${isApiUrlConfigured}`);
 
-const missingApiUrlError =
-  "Missing or invalid EXPO_PUBLIC_API_URL for production build. Configure it in the EAS production environment before building.";
+const missingApiUrlError = "No pudimos conectar con el servicio. Intentá nuevamente más tarde.";
 
 function requireApiUrl() {
   if (!apiUrl || !isApiUrlConfigured) {
+    console.error(
+      "Missing or invalid EXPO_PUBLIC_API_URL for production build. Configure it in the EAS production environment before building."
+    );
     throw new Error(missingApiUrlError);
   }
 

@@ -231,7 +231,7 @@ const helpContent: Record<Locale, HelpContent> = {
         steps: [
           "Entrá con una cuenta autorizada al panel admin.",
           "Gestioná contenido público, remates y publicaciones según permisos.",
-          "Las acciones sensibles usan sesión autenticada y protección CSRF en backend."
+          "Las acciones sensibles requieren sesión iniciada y están protegidas contra accesos no autorizados."
         ],
         icon: "shield-checkmark-outline",
         route: "/admin-panel",
@@ -241,13 +241,13 @@ const helpContent: Record<Locale, HelpContent> = {
     faqs: [
       {
         id: "no-products",
-        question: "¿Por qué no veo productos si no cargué seed?",
-        answer: "El mercado usa datos reales del backend. Si la base está vacía, no se muestran productos inventados. Ejecutá el seed o publicá productos desde la app."
+        question: "¿Por qué no veo productos en el mercado?",
+        answer: "El mercado muestra publicaciones reales de la comunidad. Si todavía no hay ninguna, animáte a publicar la primera desde la app."
       },
       {
-        id: "expo-images",
-        question: "¿Por qué una imagen local no carga en Expo Go?",
-        answer: "El celular no puede leer localhost de tu PC. La app normaliza las URLs de uploads contra el host real de la API para que funcionen en iOS y Android."
+        id: "upload-image-fails",
+        question: "¿Por qué no carga una foto que subí?",
+        answer: "Si tenés conexión inestable la imagen puede tardar en mostrarse. Volvé a intentar o elegí otra foto desde tu galería o cámara."
       },
       {
         id: "news-order",
@@ -389,15 +389,15 @@ const helpContent: Record<Locale, HelpContent> = {
         category: "admin",
         title: "Admin panel and content",
         summary: "Manage content, listings, auctions, and protected operations with admin role.",
-        steps: ["Sign in with an authorized admin account.", "Manage public content, auctions, and listings according to permissions.", "Sensitive operations use authenticated session and backend CSRF protection."],
+        steps: ["Sign in with an authorized admin account.", "Manage public content, auctions, and listings according to permissions.", "Sensitive operations require an active session and are protected against unauthorized access."],
         icon: "shield-checkmark-outline",
         route: "/admin-panel",
         badge: "Admin"
       }
     ],
     faqs: [
-      { id: "no-products", question: "Why do I see no products without seed data?", answer: "Market uses backend data. If the database is empty, the app does not invent products. Run the seed or publish from the app." },
-      { id: "expo-images", question: "Why does a local image fail in Expo Go?", answer: "A phone cannot read your computer localhost. The app normalizes upload URLs against the real API host for iOS and Android." },
+      { id: "no-products", question: "Why don't I see any products in the market?", answer: "The market shows real listings from the community. If there aren't any yet, be the first to publish one from the app." },
+      { id: "upload-image-fails", question: "Why doesn't a photo I uploaded load?", answer: "With an unstable connection the image can take a moment to appear. Try again or pick another photo from your gallery or camera." },
       { id: "news-order", question: "What appears first on Home?", answer: "Live matches first. If there are no live matches, real news with image and read link is prioritized." },
       { id: "publish-review", question: "Does my listing appear instantly?", answer: "It depends on role and publication rules. Some listings may stay under review before becoming active." }
     ]

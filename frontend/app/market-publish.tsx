@@ -240,7 +240,7 @@ export default function MarketPublishScreen() {
               ))}
             </ScrollView>
           ) : null}
-          <Text style={styles.helperText}>Solo se aceptan fotos subidas desde tu dispositivo (se guardan en S3).</Text>
+          <Text style={styles.helperText}>Solo se aceptan fotos subidas desde tu dispositivo.</Text>
           <Text style={styles.helperText}>El orden queda según selección: la foto 1 será la portada.</Text>
         </View>
 

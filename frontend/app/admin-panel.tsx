@@ -1258,11 +1258,11 @@ export default function AdminPanelScreen() {
                 </View>
                 <View style={styles.fullField}>
                   <Text style={styles.fieldLabel}>Imagen</Text>
-                  <Text style={styles.helperText}>Solo se aceptan archivos subidos (se guardan en S3).</Text>
+                  <Text style={styles.helperText}>Solo se aceptan archivos subidos.</Text>
                 </View>
                 <View style={styles.uploadBox}>
                   <Ionicons name="cloud-upload-outline" size={22} color={colors.primaryDark} />
-                  <Text style={styles.uploadLabel}>Subí una imagen desde la PC para guardarla en S3.</Text>
+                  <Text style={styles.uploadLabel}>Subí una imagen desde la PC.</Text>
                   <Pressable style={styles.btnPrimary} onPress={() => (document as any).getElementById("admin-upload-input")?.click()}>
                     <Text style={styles.btnPrimaryText}>{uploading ? "Subiendo..." : "Elegir archivo"}</Text>
                   </Pressable>
@@ -1501,7 +1501,7 @@ export default function AdminPanelScreen() {
                 <Text style={styles.panelTitle}>{selectedBrandId ? "Editar marca" : "Nueva marca"}</Text>
                 <View style={styles.brandLogoEditorCard}>
                   <Text style={styles.fieldLabel}>Logo de la marca</Text>
-                  <Text style={styles.helperText}>Podés subir una imagen local, ajustarla antes de guardar y queda persistida en el backend.</Text>
+                  <Text style={styles.helperText}>Podés subir una imagen local y ajustarla antes de guardar.</Text>
                   <View style={styles.brandLogoEditorRow}>
                     <View style={styles.brandLogoPreviewFrame}>
                       {brandLogoDraftUrl || brandForm.logoUrl ? (
@@ -1828,7 +1828,7 @@ export default function AdminPanelScreen() {
                 <View style={styles.uploadBox}>
                   {teamForm.logoUrl ? <Image source={resolveContentImageSource(teamForm.logoUrl)} style={styles.contentPreview} resizeMode="contain" /> : null}
                   <Ionicons name="cloud-upload-outline" size={22} color={colors.primaryDark} />
-                  <Text style={styles.uploadLabel}>Subí el logo del equipo (se guarda en S3).</Text>
+                  <Text style={styles.uploadLabel}>Subí el logo del equipo.</Text>
                   <Pressable style={styles.btnPrimary} onPress={() => (document as any).getElementById("admin-team-logo-input")?.click()}>
                     <Text style={styles.btnPrimaryText}>{teamLogoUploading ? "Subiendo..." : "Elegir archivo"}</Text>
                   </Pressable>

@@ -16,6 +16,10 @@ export type Tournament = {
   month: number;
   year: number;
   day: number;
+  startDate?: string;
+  endDate?: string;
+  startDateLocal?: string;
+  endDateLocal?: string;
   level?: string;
   club?: string;
   handicapRange?: string;
@@ -23,6 +27,7 @@ export type Tournament = {
   maxTeams?: number;
   contactName?: string;
   contactPhone?: string;
+  status?: string;
   registrations?: unknown[];
 };
 
@@ -51,6 +56,10 @@ function normalizeTournament(value: unknown): Tournament | null {
     month: asNumber(value.month),
     year: asNumber(value.year),
     day: asNumber(value.day),
+    startDate: asString(value.startDate) || undefined,
+    endDate: asString(value.endDate) || undefined,
+    startDateLocal: asString(value.startDateLocal) || undefined,
+    endDateLocal: asString(value.endDateLocal) || undefined,
     level: asString(value.level) || undefined,
     club: asString(value.club) || undefined,
     handicapRange: asString(value.handicapRange) || undefined,
@@ -58,6 +67,7 @@ function normalizeTournament(value: unknown): Tournament | null {
     maxTeams: typeof value.maxTeams === "number" && Number.isFinite(value.maxTeams) ? value.maxTeams : undefined,
     contactName: asString(value.contactName) || undefined,
     contactPhone: asString(value.contactPhone) || undefined,
+    status: asString(value.status) || undefined,
     registrations: Array.isArray(value.registrations) ? value.registrations : undefined
   };
 }

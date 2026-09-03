@@ -10,12 +10,15 @@ export class TournamentsService {
 
   async list(query: TournamentsQueryDto) {
     const limit = Number(query.limit ?? 50);
-    const where: any = { deletedAt: null };
+    const where: any = { deletedAt: null, status: { notIn: ["cancelled", "canceled"] } };
     if (query.registrationStatus) where.registrationStatus = query.registrationStatus;
     if (query.month && query.year) {
-      const start = new Date(Date.UTC(query.year, query.month - 1, 1));
-      const end = new Date(Date.UTC(query.year, query.month, 1));
-      where.startDate = { gte: start, lt: end };
+      const start = this.argentinaMonthStart(query.year, query.month);
+      const end = this.argentinaMonthStart(query.month === 12 ? query.year + 1 : query.year, query.month === 12 ? 1 : query.month + 1);
+      where.AND = [
+        { startDate: { lt: end } },
+        { OR: [{ endDate: null, startDate: { gte: start } }, { endDate: { gte: start } }] }
+      ];
     }
     const tournaments = await this.prisma.tournament.findMany({ where, include: { club: true, registrations: true }, orderBy: { startDate: "asc" }, take: limit + 1 });
     return page(tournaments.map((tournament) => this.toTournamentDto(tournament)), limit);
@@ -69,13 +72,21 @@ export class TournamentsService {
   }
 
   private toTournamentDto(tournament: any, detail = false) {
+    const startDateLocal = this.argentinaDateKey(tournament.startDate);
+    const endDateLocal = tournament.endDate ? this.argentinaDateKey(tournament.endDate) : startDateLocal;
+    const [year, month, day] = startDateLocal.split("-").map(Number);
+
     return {
       id: tournament.id,
       name: tournament.name,
-      date: tournament.startDate.toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" }),
-      month: tournament.startDate.getUTCMonth(),
-      year: tournament.startDate.getUTCFullYear(),
-      day: tournament.startDate.getUTCDate(),
+      date: tournament.startDate.toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric", timeZone: "America/Argentina/Buenos_Aires" }),
+      month: month - 1,
+      year,
+      day,
+      startDate: tournament.startDate.toISOString(),
+      endDate: tournament.endDate ? tournament.endDate.toISOString() : undefined,
+      startDateLocal,
+      endDateLocal,
       level: tournament.levelLabel,
       club: tournament.club?.name,
       handicapRange: tournament.minHandicap !== null && tournament.maxHandicap !== null ? `Desde ${tournament.minHandicap} a ${tournament.maxHandicap} goles` : undefined,
@@ -83,7 +94,16 @@ export class TournamentsService {
       maxTeams: tournament.maxTeams,
       contactName: tournament.contactName,
       contactPhone: tournament.contactPhone,
+      status: tournament.status,
       registrations: detail ? tournament.registrations : undefined
     };
+  }
+
+  private argentinaMonthStart(year: number, month: number) {
+    return new Date(`${year}-${String(month).padStart(2, "0")}-01T00:00:00.000-03:00`);
+  }
+
+  private argentinaDateKey(date: Date) {
+    return date.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
   }
 }

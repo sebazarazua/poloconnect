@@ -29,8 +29,44 @@ function parseDateOnly(value: string) {
   return new Date(`${String(value).slice(0, 10)}T00:00:00`);
 }
 
-function normalizeMatch(match: Match): Match {
-  return { ...match, date: parseDateOnly(match.date as any) };
+function asString(value: unknown, fallback = "") {
+  return typeof value === "string" ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizeStatus(value: unknown): Match["status"] {
+  return value === "live" || value === "finished" || value === "cancelled" || value === "upcoming"
+    ? value
+    : "upcoming";
+}
+
+function normalizeMatch(match: unknown): Match | null {
+  if (!isRecord(match)) return null;
+
+  return {
+    ...(match as Partial<Match>),
+    id: asString(match.id, `match-${Date.now()}`),
+    time: asString(match.time, "00:00"),
+    team1: asString(match.team1, "Equipo 1"),
+    team2: asString(match.team2, "Equipo 2"),
+    score1: asNumber(match.score1),
+    score2: asNumber(match.score2),
+    competition: asString(match.competition, "Partido"),
+    status: normalizeStatus(match.status),
+    club: asString(match.club),
+    date: parseDateOnly(match.date as any),
+    chukker: asString(match.chukker) || undefined,
+    team1LogoUrl: asString(match.team1LogoUrl) || undefined,
+    team2LogoUrl: asString(match.team2LogoUrl) || undefined,
+    backgroundImageUrl: asString(match.backgroundImageUrl) || undefined
+  };
 }
 
 export async function listMatches(date?: Date, status?: "live" | "upcoming" | "finished" | "cancelled") {
@@ -38,17 +74,29 @@ export async function listMatches(date?: Date, status?: "live" | "upcoming" | "f
   if (date) params.set("date", date.toISOString().slice(0, 10));
   if (status) params.set("status", status);
   const response = await apiRequest<Page<Match>>(`/matches?${params.toString()}`);
-  return response.data.map(normalizeMatch);
+  return (Array.isArray(response.data) ? response.data : [])
+    .map(normalizeMatch)
+    .filter((match): match is Match => Boolean(match));
 }
 
 export async function fetchMatch(id: string) {
   const detail = await apiRequest<MatchDetail>(`/matches/${encodeURIComponent(id)}`);
-  return { ...detail, date: parseDateOnly(detail.date as any) };
+  const normalizedMatch = normalizeMatch(detail);
+  if (!normalizedMatch) {
+    throw new Error("Partido invÃ¡lido.");
+  }
+
+  return { ...detail, ...normalizedMatch, date: parseDateOnly(detail.date as any) };
 }
 
 export async function listBroadcasts() {
   const response = await apiRequest<Page<MatchDetail>>("/broadcasts?limit=50");
-  return response.data.map((match) => ({ ...match, date: parseDateOnly(match.date as any) }));
+  return (Array.isArray(response.data) ? response.data : [])
+    .map((match) => {
+      const normalizedMatch = normalizeMatch(match);
+      return normalizedMatch ? { ...match, ...normalizedMatch, date: parseDateOnly(match.date as any) } : null;
+    })
+    .filter((match): match is MatchDetail => Boolean(match));
 }
 
 export async function updateMatchLiveState(

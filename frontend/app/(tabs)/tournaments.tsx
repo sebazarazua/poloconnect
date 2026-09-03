@@ -27,7 +27,9 @@ export default function TournamentsScreen() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
 
   useEffect(() => {
-    void listTournaments(calendarDate).then(setTournaments);
+    void listTournaments(calendarDate)
+      .then(setTournaments)
+      .catch(() => setTournaments([]));
   }, [calendarDate]);
 
   const monthTournaments = useMemo(

@@ -3,7 +3,7 @@ import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef } from "react";
 import Constants from "expo-constants";
-import { Platform } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { LocaleProvider, useLocale } from "@/contexts/LocaleContext";
@@ -11,7 +11,10 @@ import { MarketProvider } from "@/contexts/MarketContext";
 import { CommunityProvider } from "@/contexts/CommunityContext";
 import { ThemeProvider, useTheme } from "@/constants/theme";
 import { getMySettings } from "@/services/api/settings";
+import { isApiUrlConfigured } from "@/services/api/client";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+console.info("startup/app");
 
 // Keep the native splash visible until auth hydration resolves, instead of letting
 // expo-router auto-hide it as soon as the root view mounts (which can reveal a blank frame).
@@ -128,17 +131,22 @@ function PushTokenRegistrar() {
 const WEB_ADMIN_PATHS = ["/admin-login", "/admin-panel", "/horse-auctions-admin"];
 
 function RootNavigator({ allowWebDev }: { allowWebDev: boolean }) {
-  const { isAuthenticated, authReady } = useAuth();
+  const { isAuthenticated, authReady, signOut } = useAuth();
   const pathname = usePathname();
 
   useEffect(() => {
     if (authReady) {
+      console.info("startup/router-ready");
       void SplashScreen.hideAsync().catch(() => undefined);
     }
   }, [authReady]);
 
   if (!authReady) {
     return null;
+  }
+
+  if (!isApiUrlConfigured) {
+    return <StartupConfigurationError onSignOut={() => void signOut()} />;
   }
 
   // Web production builds are the admin console only: they get their own stack so
@@ -160,15 +168,6 @@ function RootNavigator({ allowWebDev }: { allowWebDev: boolean }) {
 
   return (
     <Stack initialRouteName={isAuthenticated ? "(tabs)" : "login"} screenOptions={{ headerShown: false }}>
-      <Stack.Protected guard={!isAuthenticated}>
-        <Stack.Screen name="login" />
-        <Stack.Screen name="register" />
-      </Stack.Protected>
-
-      <Stack.Screen name="admin-login" />
-      <Stack.Screen name="admin-panel" />
-      <Stack.Screen name="horse-auctions-admin" />
-
       <Stack.Protected guard={isAuthenticated}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="broadcast" />
@@ -185,9 +184,66 @@ function RootNavigator({ allowWebDev }: { allowWebDev: boolean }) {
         <Stack.Screen name="help-center" />
         <Stack.Screen name="team-register" />
         <Stack.Screen name="group-chat" />
+        <Stack.Screen name="watch-live" />
       </Stack.Protected>
 
-      <Stack.Screen name="forgot-password" />
+      <Stack.Protected guard={!isAuthenticated}>
+        <Stack.Screen name="login" />
+        <Stack.Screen name="register" />
+        <Stack.Screen name="forgot-password" />
+      </Stack.Protected>
+
+      <Stack.Screen name="admin-login" />
+      <Stack.Screen name="admin-panel" />
+      <Stack.Screen name="horse-auctions-admin" />
     </Stack>
   );
 }
+
+function StartupConfigurationError({ onSignOut }: { onSignOut: () => void }) {
+  return (
+    <View style={styles.startupErrorContainer}>
+      <Text style={styles.startupErrorTitle}>ConfiguraciÃ³n incompleta</Text>
+      <Text style={styles.startupErrorMessage}>
+        Falta configurar la URL de API para esta versiÃ³n de la app.
+      </Text>
+      <Pressable style={styles.startupErrorButton} onPress={onSignOut}>
+        <Text style={styles.startupErrorButtonText}>Cerrar sesiÃ³n local</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  startupErrorContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    padding: 24,
+    gap: 12
+  },
+  startupErrorTitle: {
+    color: "#1f3b73",
+    fontSize: 18,
+    fontWeight: "700",
+    textAlign: "center"
+  },
+  startupErrorMessage: {
+    color: "#4b5563",
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center"
+  },
+  startupErrorButton: {
+    borderRadius: 8,
+    backgroundColor: "#1f3b73",
+    paddingHorizontal: 16,
+    paddingVertical: 10
+  },
+  startupErrorButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "700"
+  }
+});

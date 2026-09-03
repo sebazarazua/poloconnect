@@ -67,7 +67,9 @@ export default function LiveScreen() {
   const [remoteAds, setRemoteAds] = useState<ContentItem[]>([]);
 
   useEffect(() => {
-    void listMatches(selectedDate).then(setMatches);
+    void listMatches(selectedDate)
+      .then(setMatches)
+      .catch(() => setMatches([]));
   }, [selectedDate]);
 
   useEffect(() => {

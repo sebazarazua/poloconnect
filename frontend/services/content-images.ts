@@ -21,20 +21,28 @@ function normalizeContentImageUrl(imageUrl: string) {
   return resolveApiMediaUrl(imageUrl) ?? imageUrl;
 }
 
-export function resolveContentImageSource(imageUrl: string): ImageSourcePropType {
-  if (imageUrl.startsWith("asset:")) {
-    return assetImageMap[imageUrl] ?? { uri: imageUrl };
+export function resolveContentImageSource(imageUrl?: string | null): ImageSourcePropType {
+  const normalizedImageUrl = typeof imageUrl === "string" ? imageUrl : "";
+
+  if (!normalizedImageUrl) {
+    return assetImageMap["asset:app/logo"];
   }
 
-  return { uri: normalizeContentImageUrl(imageUrl) };
+  if (normalizedImageUrl.startsWith("asset:")) {
+    return assetImageMap[normalizedImageUrl] ?? assetImageMap["asset:app/logo"];
+  }
+
+  return { uri: normalizeContentImageUrl(normalizedImageUrl) };
 }
 
-export function describeContentAsset(imageUrl: string) {
-  if (!imageUrl.startsWith("asset:")) {
+export function describeContentAsset(imageUrl?: string | null) {
+  const normalizedImageUrl = typeof imageUrl === "string" ? imageUrl : "";
+
+  if (!normalizedImageUrl || !normalizedImageUrl.startsWith("asset:")) {
     return "Imagen externa o subida desde panel";
   }
 
-  const key = imageUrl.replace(/^asset:/, "");
+  const key = normalizedImageUrl.replace(/^asset:/, "");
   const [section, name] = key.split("/");
 
   const labels: Record<string, string> = {

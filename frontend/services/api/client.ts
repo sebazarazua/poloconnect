@@ -37,14 +37,15 @@ function resolveApiUrl() {
 
 // Always prefer explicit env URL. Only local development may fall back to the dev server host.
 const apiUrl = resolveApiUrl();
-const isApiUrlConfigured = Boolean(apiUrl);
-console.info(`startup/api url configured: ${isApiUrlConfigured}`);
+const localApiUrlPattern = /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|192\.168\.\d+\.\d+)(:\d+)?/i;
+export const isApiUrlConfigured = Boolean(apiUrl) && (isDev || !localApiUrlPattern.test(apiUrl ?? ""));
+console.info(`startup/api-config: ${isApiUrlConfigured}`);
 
 const missingApiUrlError =
-  "Missing EXPO_PUBLIC_API_URL for production build. Configure it in the EAS production environment before building.";
+  "Missing or invalid EXPO_PUBLIC_API_URL for production build. Configure it in the EAS production environment before building.";
 
 function requireApiUrl() {
-  if (!apiUrl) {
+  if (!apiUrl || !isApiUrlConfigured) {
     throw new Error(missingApiUrlError);
   }
 
@@ -60,6 +61,16 @@ let csrfToken: string | null = null;
 let refreshPromise: Promise<void> | null = null;
 let authTokensHydrated = false;
 let authTokensHydrationPromise: Promise<void> | null = null;
+let sessionInvalidHandler: (() => void) | null = null;
+
+export function setSessionInvalidHandler(handler: (() => void) | null) {
+  sessionInvalidHandler = handler;
+}
+
+function notifySessionInvalid() {
+  console.info("startup/auth/session-invalid");
+  sessionInvalidHandler?.();
+}
 
 function readCookie(name: string) {
   if (typeof document === "undefined") return null;
@@ -104,12 +115,12 @@ export async function setAuthTokens(tokens: ApiTokens) {
   console.info(`access token persisted: ${Boolean(persistedAccessToken)}`);
 
   if (!persistedAccessToken) {
-    await clearAuthTokens();
+    await clearAuthTokens(true);
     throw new Error("No se pudo guardar el access token.");
   }
 }
 
-export async function clearAuthTokens() {
+export async function clearAuthTokens(notifySession = false) {
   accessToken = null;
   refreshToken = null;
   csrfToken = null;
@@ -119,6 +130,10 @@ export async function clearAuthTokens() {
     setAuthStorageItem("pc_refresh_token", null),
     setAuthStorageItem("pc_csrf_token", null)
   ]);
+
+  if (notifySession) {
+    notifySessionInvalid();
+  }
 }
 
 export function getApiUrl() {
@@ -179,7 +194,7 @@ async function refreshAccessToken() {
   });
 
   if (!response.ok) {
-    await clearAuthTokens();
+    await clearAuthTokens(true);
     throw new Error("La sesión expiró. Iniciá sesión nuevamente.");
   }
 
@@ -237,6 +252,10 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, retry 
     });
     await refreshPromise;
     return apiRequest<T>(path, init, false);
+  }
+
+  if (response.status === 401) {
+    await clearAuthTokens(true);
   }
 
   if (!response.ok) {

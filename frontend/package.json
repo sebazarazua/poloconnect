@@ -31,7 +31,6 @@
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.8",
     "expo-web-browser": "~15.0.11",
-    "polo-connect": "file:..",
     "prop-types": "^15.8.1",
     "qrcode": "^1.5.4",
     "react": "19.1.0",

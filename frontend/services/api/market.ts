@@ -38,31 +38,73 @@ const categoryFallbackImage: Record<string, string> = {
 const contactPhoneMarkerPrefix = "<!--pc:contactPhone=";
 const contactPhoneMarkerRegex = /<!--pc:contactPhone=([^>]*)-->/;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function asString(value: unknown, fallback = "") {
+  return typeof value === "string" ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function asProductArray(response: Page<Product>) {
+  return Array.isArray(response.data) ? response.data : [];
+}
+
 function normalizeImageUrl(imageUrl?: string) {
   if (!imageUrl) return "";
   return resolveApiMediaUrl(imageUrl) ?? "";
 }
 
-function normalizeProduct(product: Product): Product {
-  const rawDescription = product.description ?? "";
+function decodeContactPhone(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return "";
+  }
+}
+
+function normalizeProduct(product: unknown): Product | null {
+  if (!isRecord(product)) return null;
+
+  const rawDescription = asString(product.description);
   const markerMatch = rawDescription.match(contactPhoneMarkerRegex);
-  const contactPhone = markerMatch?.[1]?.trim() ? decodeURIComponent(markerMatch[1].trim()) : undefined;
+  const contactPhone = markerMatch?.[1]?.trim() ? decodeContactPhone(markerMatch[1].trim()) : undefined;
   const cleanDescription = rawDescription.replace(contactPhoneMarkerRegex, "").trim();
-  const image = normalizeImageUrl(product.image);
-  const images = (product.images ?? []).map((entry) => normalizeImageUrl(entry));
-  const fallback = categoryFallbackImage[product.category] ?? categoryFallbackImage.equipamiento;
+  const categoryValue = asString(product.category);
+  const category = categoryValue in categoryFallbackImage ? categoryValue as Product["category"] : "equipamiento";
+  const image = normalizeImageUrl(asString(product.image));
+  const images = (Array.isArray(product.images) ? product.images : []).map((entry) => normalizeImageUrl(entry));
+  const fallback = categoryFallbackImage[category] ?? categoryFallbackImage.equipamiento;
   const resolvedImage = image || images[0] || fallback;
+  const seller = isRecord(product.seller) ? product.seller : null;
 
   return {
-    ...product,
+    ...(product as Partial<Product>),
+    id: asString(product.id, `product-${Date.now()}`),
+    ownerId: asString(product.ownerId) || undefined,
+    name: asString(product.name, "Producto"),
+    price: asNumber(product.price),
+    category,
+    status: ["Nuevo", "Usado", "Reacondicionado"].includes(asString(product.status))
+      ? asString(product.status) as Product["status"]
+      : "Usado",
     description: cleanDescription,
     contactPhone,
-    seller: product.seller
+    seller: seller
       ? {
-          ...product.seller,
-          phone: contactPhone || product.seller.phone
+          id: asString(seller.id),
+          name: asString(seller.name, "Vendedor"),
+          location: asString(seller.location) || undefined,
+          rating: asNumber(seller.rating),
+          reviews: asNumber(seller.reviews),
+          phone: contactPhone || asString(seller.phone) || undefined,
+          email: asString(seller.email) || undefined
         }
-      : product.seller,
+      : undefined,
     image: resolvedImage,
     images: images.length > 0 ? images : [resolvedImage]
   };
@@ -106,22 +148,27 @@ function toBackendProduct(product: ProductPayload) {
 
 export async function listProducts() {
   const response = await apiRequest<Page<Product>>("/products?limit=100");
-  return response.data.map((product) => normalizeProduct(product));
+  return asProductArray(response).map(normalizeProduct).filter((product): product is Product => Boolean(product));
 }
 
 export async function listMyProducts() {
   const response = await apiRequest<Page<Product>>("/products/me?limit=100");
-  return response.data.map((product) => normalizeProduct(product));
+  return asProductArray(response).map(normalizeProduct).filter((product): product is Product => Boolean(product));
 }
 
 export async function listFavorites() {
   const response = await apiRequest<Page<Product>>("/favorites?limit=100");
-  return response.data.map((product) => normalizeProduct(product));
+  return asProductArray(response).map(normalizeProduct).filter((product): product is Product => Boolean(product));
 }
 
 export async function fetchProduct(id: string) {
   const product = await apiRequest<Product>(`/products/${encodeURIComponent(id)}`);
-  return normalizeProduct(product);
+  const normalizedProduct = normalizeProduct(product);
+  if (!normalizedProduct) {
+    throw new Error("Producto invÃ¡lido.");
+  }
+
+  return normalizedProduct;
 }
 
 export async function createProduct(product: ProductPayload) {
@@ -132,7 +179,7 @@ export async function createProduct(product: ProductPayload) {
 
   return {
     ...response,
-    product: normalizeProduct(response.product)
+    product: normalizeProduct(response.product) ?? response.product
   };
 }
 
@@ -142,7 +189,12 @@ export async function updateProduct(id: string, product: ProductPayload) {
     body: JSON.stringify(toBackendProduct(product))
   });
 
-  return normalizeProduct(response);
+  const normalizedProduct = normalizeProduct(response);
+  if (!normalizedProduct) {
+    throw new Error("Producto invÃ¡lido.");
+  }
+
+  return normalizedProduct;
 }
 
 export async function uploadProductImage(fileUri: string) {

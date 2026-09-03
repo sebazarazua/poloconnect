@@ -27,16 +27,81 @@ export type BrandProduct = {
   createdAt: string;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function asString(value: unknown, fallback = "") {
+  return typeof value === "string" ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function normalizeBrand(value: unknown): Brand | null {
+  if (!isRecord(value)) return null;
+  const id = asString(value.id);
+  const name = asString(value.name);
+  if (!id || !name) return null;
+
+  return {
+    id,
+    name,
+    slug: asString(value.slug, id),
+    logoUrl: asString(value.logoUrl) || null,
+    description: asString(value.description) || null,
+    whatsapp: asString(value.whatsapp) || null,
+    phone: asString(value.phone) || null,
+    email: asString(value.email) || null,
+    website: asString(value.website) || null,
+    sortOrder: asNumber(value.sortOrder),
+    productCount: typeof value.productCount === "number" && Number.isFinite(value.productCount) ? value.productCount : undefined
+  };
+}
+
+function normalizeBrandProduct(value: unknown): BrandProduct | null {
+  if (!isRecord(value)) return null;
+  const id = asString(value.id);
+  const name = asString(value.name);
+  if (!id || !name) return null;
+
+  return {
+    id,
+    brandId: asString(value.brandId),
+    name,
+    description: asString(value.description),
+    priceCents: typeof value.priceCents === "number" && Number.isFinite(value.priceCents) ? value.priceCents : null,
+    currency: asString(value.currency, "USD"),
+    imageUrl: asString(value.imageUrl) || null,
+    isActive: typeof value.isActive === "boolean" ? value.isActive : true,
+    sortOrder: asNumber(value.sortOrder),
+    createdAt: asString(value.createdAt)
+  };
+}
+
 export async function listBrands(): Promise<Brand[]> {
-  return apiRequest<Brand[]>("/brands");
+  const response = await apiRequest<unknown>("/brands");
+  return (Array.isArray(response) ? response : [])
+    .map(normalizeBrand)
+    .filter((brand): brand is Brand => Boolean(brand));
 }
 
 export async function getBrand(id: string): Promise<Brand> {
-  return apiRequest<Brand>(`/brands/${encodeURIComponent(id)}`);
+  const brand = await apiRequest<Brand>(`/brands/${encodeURIComponent(id)}`);
+  const normalizedBrand = normalizeBrand(brand);
+  if (!normalizedBrand) {
+    throw new Error("Marca invÃ¡lida.");
+  }
+
+  return normalizedBrand;
 }
 
 export async function listBrandProducts(brandId: string): Promise<BrandProduct[]> {
-  return apiRequest<BrandProduct[]>(`/brands/${encodeURIComponent(brandId)}/products`);
+  const response = await apiRequest<unknown>(`/brands/${encodeURIComponent(brandId)}/products`);
+  return (Array.isArray(response) ? response : [])
+    .map(normalizeBrandProduct)
+    .filter((product): product is BrandProduct => Boolean(product));
 }
 
 // Admin

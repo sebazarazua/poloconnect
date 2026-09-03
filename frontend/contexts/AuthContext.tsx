@@ -11,7 +11,7 @@ import {
   type SignUpPayload
 } from "@/services/auth";
 import { getCurrentUser, logout as logoutApi } from "@/services/api/auth";
-import { clearAuthTokens, getAccessToken, hydrateAuthTokens } from "@/services/api/client";
+import { clearAuthTokens, getAccessToken, hydrateAuthTokens, setSessionInvalidHandler } from "@/services/api/client";
 import { getAuthStorageItem, setAuthStorageItem } from "@/services/auth-storage";
 import { ActivityIndicator, Platform, View } from "react-native";
 
@@ -64,6 +64,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isAuthenticated = user !== null && hasSessionToken;
 
+  useEffect(() => {
+    setSessionInvalidHandler(() => {
+      setUser(null);
+      setHasSessionToken(false);
+      void writeStoredUser(null);
+    });
+
+    return () => {
+      setSessionInvalidHandler(null);
+    };
+  }, []);
+
   const persistSignedInUser = async (nextUser: AuthUser) => {
     if (!getAccessToken()) {
       await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
@@ -80,7 +92,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     let cancelled = false;
 
-    console.info("startup/auth hydration start");
+    console.info("startup/auth/hydration-start");
 
     void (async () => {
       try {
@@ -90,16 +102,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
         const hasToken = Boolean(getAccessToken());
         const isProductionWeb = Platform.OS === "web" && !(typeof __DEV__ !== "undefined" && __DEV__);
         const isDemoUser = storedUser?.id.startsWith("demo-seed-") ?? false;
+        console.info(`startup/auth/storage-loaded: user=${Boolean(storedUser)} token=${hasToken}`);
 
         if (isProductionWeb && isDemoUser) {
           await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
-          console.info("startup/auth hydration success");
+          console.info("startup/auth/session-invalid");
           return null;
         }
 
         if (storedUser && !hasToken) {
           await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
-          console.info("startup/auth hydration success");
+          console.info("startup/auth/session-invalid");
           return null;
         }
 
@@ -107,19 +120,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
           try {
             const currentUser = await getCurrentUser();
             await writeStoredUser(currentUser);
-            console.info("startup/auth hydration success");
+            console.info("startup/auth/session-valid");
             return currentUser;
           } catch {
             await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
-            console.info("startup/auth hydration failure");
+            console.info("startup/auth/session-invalid");
             return null;
           }
         }
 
-        console.info("startup/auth hydration success");
+        console.info(storedUser ? "startup/auth/session-valid" : "startup/auth/session-invalid");
         return storedUser;
       } catch {
-        console.info("startup/auth hydration failure");
+        console.info("startup/auth/session-invalid");
         try {
           await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
         } catch {

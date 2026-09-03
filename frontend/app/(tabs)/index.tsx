@@ -79,6 +79,10 @@ export default function HomeScreen() {
   const [liveMatches, setLiveMatches] = useState<Match[]>([]);
   const [liveSpotlightEvents, setLiveSpotlightEvents] = useState<SpotlightEvent[]>([]);
 
+  useEffect(() => {
+    console.info("startup/home-mounted");
+  }, []);
+
   const openTargetUrl = async (targetUrl?: string) => {
     const target = parseContentTarget(targetUrl);
 

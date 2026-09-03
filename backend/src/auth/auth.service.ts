@@ -299,12 +299,17 @@ export class AuthService {
     });
 
     if (existingIdentity?.user) {
-      if (normalizedEmail && existingIdentity.user.email !== normalizedEmail) {
+      if (normalizedEmail && existingIdentity.user.email !== normalizedEmail && profile.emailVerified) {
+        const conflictingUser = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
+        if (conflictingUser && conflictingUser.id !== existingIdentity.user.id) {
+          throw new UnauthorizedException("Social sign-in could not be completed.");
+        }
+
         await this.prisma.user.update({
           where: { id: existingIdentity.user.id },
           data: {
             email: normalizedEmail,
-            emailVerifiedAt: profile.emailVerified ? new Date() : existingIdentity.user.emailVerifiedAt
+            emailVerifiedAt: new Date()
           }
         });
         existingIdentity.user.email = normalizedEmail;
@@ -319,6 +324,10 @@ export class AuthService {
           include: { roles: { include: { role: true } }, credential: true }
         })
       : null;
+
+    if (user && !profile.emailVerified) {
+      throw new UnauthorizedException("Social sign-in could not be linked automatically.");
+    }
 
     if (!user) {
       const playerRole = await this.ensureRole("player", "Player");

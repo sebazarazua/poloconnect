@@ -1,12 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as AppleAuthentication from "expo-apple-authentication";
-import { getDefaultReturnUrl, ResponseType } from "expo-auth-session";
+import { exchangeCodeAsync, getDefaultReturnUrl, ResponseType } from "expo-auth-session";
 import * as Google from "expo-auth-session/providers/google";
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import { Link, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -39,6 +39,9 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [appleAvailable, setAppleAvailable] = useState(false);
+  const [isGoogleProcessing, setIsGoogleProcessing] = useState(false);
+  const handledGoogleResponseRef = useRef<string | null>(null);
+  const googleProcessingRef = useRef(false);
 
   const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
   const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
@@ -77,7 +80,8 @@ export default function LoginScreen() {
     redirectUri: isExpoGo ? expoProxyRedirectUri : googleNativeRedirectUri,
     responseType: googleResponseType,
     scopes: ["openid", "profile", "email"],
-    selectAccount: true
+    selectAccount: true,
+    shouldAutoExchangeCode: false
   });
 
   useEffect(() => {
@@ -85,23 +89,90 @@ export default function LoginScreen() {
   }, []);
 
   useEffect(() => {
-    if (googleResponse?.type !== "success") {
+    if (!googleResponse) {
       return;
     }
 
-    const accessToken =
-      googleResponse.authentication?.accessToken ??
-      ((googleResponse as { params?: Record<string, string> }).params?.access_token ?? null);
-    if (!accessToken) {
+    if (googleResponse.type === "cancel" || googleResponse.type === "dismiss") {
+      console.log("auth/google/cancelled");
+      return;
+    }
+
+    if (googleResponse.type === "error") {
+      console.log("auth/google/error");
       setError(t("auth.oauth.error"));
       return;
     }
 
-    setError("");
-    void signInWithGoogle({ accessToken }).catch((loginError) => {
-      setError(loginError instanceof Error ? loginError.message : t("auth.oauth.error"));
-    });
-  }, [googleResponse, signInWithGoogle, t]);
+    if (googleResponse.type !== "success") {
+      return;
+    }
+
+    const responseKey = googleResponse.url ?? `${googleResponse.type}:${googleResponse.params?.state ?? ""}`;
+    if (handledGoogleResponseRef.current === responseKey || googleProcessingRef.current) {
+      return;
+    }
+    handledGoogleResponseRef.current = responseKey;
+
+    const completeGoogleLogin = async () => {
+      googleProcessingRef.current = true;
+      setIsGoogleProcessing(true);
+
+      try {
+        let accessToken =
+          googleResponse.authentication?.accessToken ??
+          ((googleResponse as { params?: Record<string, string> }).params?.access_token ?? null);
+
+        if (googleResponseType === ResponseType.Code) {
+          const authorizationCode = googleResponse.params?.code;
+          if (!authorizationCode) {
+            console.log("auth/google/error");
+            throw new Error(t("auth.oauth.error"));
+          }
+
+          if (!googleRequest?.clientId || !googleRequest.redirectUri || !googleRequest.codeVerifier) {
+            console.log("auth/google/error");
+            throw new Error(t("auth.oauth.googleMissingConfig"));
+          }
+
+          console.log("auth/google/authorization-success");
+          console.log("auth/google/code-exchange-start");
+          const tokenResponse = await exchangeCodeAsync(
+            {
+              clientId: googleRequest.clientId,
+              code: authorizationCode,
+              redirectUri: googleRequest.redirectUri,
+              scopes: ["openid", "profile", "email"],
+              extraParams: {
+                code_verifier: googleRequest.codeVerifier
+              }
+            },
+            Google.discovery
+          );
+          console.log("auth/google/code-exchange-success");
+          accessToken = tokenResponse.accessToken;
+        }
+
+        if (!accessToken) {
+          console.log("auth/google/error");
+          throw new Error(t("auth.oauth.error"));
+        }
+
+        setError("");
+        await signInWithGoogle({ accessToken });
+        console.log("auth/google/backend-login-success");
+      } catch (loginError) {
+        console.log("auth/google/error");
+        setError(t("auth.oauth.error"));
+        handledGoogleResponseRef.current = null;
+      } finally {
+        googleProcessingRef.current = false;
+        setIsGoogleProcessing(false);
+      }
+    };
+
+    void completeGoogleLogin();
+  }, [googleRequest, googleResponse, googleResponseType, signInWithGoogle, t]);
 
   const handleLogin = async () => {
     if (!identifier.trim() || !password.trim()) {
@@ -121,12 +192,17 @@ export default function LoginScreen() {
   const handleGoogleLogin = async () => {
     setError("");
 
+    if (isGoogleProcessing || googleProcessingRef.current) {
+      return;
+    }
+
     if (!hasGoogleConfig || !googleRequest) {
       setError(t("auth.oauth.googleMissingConfig"));
       return;
     }
 
     try {
+      console.log("auth/google/start");
       if (isExpoGo && googleRequest.url) {
         const proxyStartUrl = `${expoProxyRedirectUri}/start?authUrl=${encodeURIComponent(googleRequest.url)}&returnUrl=${encodeURIComponent(expoProxyReturnUri)}`;
         await promptGoogle({ url: proxyStartUrl });
@@ -134,7 +210,7 @@ export default function LoginScreen() {
         await promptGoogle();
       }
     } catch (googleError) {
-      setError(googleError instanceof Error ? googleError.message : t("auth.oauth.error"));
+      setError(t("auth.oauth.error"));
     }
   };
 
@@ -230,7 +306,7 @@ export default function LoginScreen() {
             label={t("auth.login.google")}
             icon="logo-google"
             onPress={handleGoogleLogin}
-            disabled={isSubmitting || !hasGoogleConfig}
+            disabled={isSubmitting || isGoogleProcessing || !hasGoogleConfig}
           />
 
           {Platform.OS === "ios" ? (

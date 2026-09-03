@@ -32,6 +32,11 @@ export function resolveContentImageSource(imageUrl?: string | null): ImageSource
     return assetImageMap[normalizedImageUrl] ?? assetImageMap["asset:app/logo"];
   }
 
+  // Local previews (data:/blob: URIs from a file picker) must bypass the API media resolver.
+  if (normalizedImageUrl.startsWith("data:") || normalizedImageUrl.startsWith("blob:")) {
+    return { uri: normalizedImageUrl };
+  }
+
   return { uri: normalizeContentImageUrl(normalizedImageUrl) };
 }
 

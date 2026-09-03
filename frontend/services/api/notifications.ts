@@ -53,3 +53,10 @@ export async function savePushToken(payload: PushTokenPayload) {
     body: JSON.stringify(payload)
   });
 }
+
+export async function unregisterPushToken(token: string) {
+  return apiRequest<{ ok: boolean }>("/push-tokens/unregister", {
+    method: "POST",
+    body: JSON.stringify({ token })
+  });
+}

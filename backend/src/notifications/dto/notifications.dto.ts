@@ -9,3 +9,7 @@ export class PushTokenDto {
   @IsString() platform!: string;
   @IsString() token!: string;
 }
+
+export class PushTokenUnregisterDto {
+  @IsString() token!: string;
+}

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { CurrentUser, RequestUser } from "../common/decorators/current-user.decorator";
-import { NotificationsQueryDto, PushTokenDto } from "./dto/notifications.dto";
+import { NotificationsQueryDto, PushTokenDto, PushTokenUnregisterDto } from "./dto/notifications.dto";
 import { NotificationsService } from "./notifications.service";
 
 @Controller()
@@ -25,5 +25,10 @@ export class NotificationsController {
   @Post("push-tokens")
   pushToken(@CurrentUser() user: RequestUser, @Body() body: PushTokenDto) {
     return this.notifications.savePushToken(user.id, body);
+  }
+
+  @Post("push-tokens/unregister")
+  unregisterPushToken(@CurrentUser() user: RequestUser, @Body() body: PushTokenUnregisterDto) {
+    return this.notifications.unregisterPushToken(user.id, body);
   }
 }

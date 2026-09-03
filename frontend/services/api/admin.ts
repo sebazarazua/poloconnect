@@ -97,6 +97,12 @@ export async function getAdminDashboard() {
   return apiRequest<{ counters: Record<string, number>; recentActivity: Array<{ id: string; action: string; createdAt: string }> }>("/admin/dashboard");
 }
 
+export async function sendAdminTestPush() {
+  return apiRequest<{ ok: boolean; notificationId: string; tokensQueued: number }>("/admin/notifications/test-push", {
+    method: "POST"
+  });
+}
+
 export async function listAdminContent() {
   return apiRequest<AdminContentItem[]>("/admin/content/items");
 }

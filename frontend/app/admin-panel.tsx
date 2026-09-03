@@ -18,6 +18,7 @@ import {
   type AdminCommunityRoom,
   getAdminDashboard,
   listAdminContent,
+  sendAdminTestPush,
   listCommunityBans,
   listCommunityMembers,
   listCommunityRooms,
@@ -184,6 +185,7 @@ export default function AdminPanelScreen() {
 
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [stats, setStats] = useState<Record<string, number>>({});
+  const [pushTestSending, setPushTestSending] = useState(false);
 
   // Content state
   const [contentItems, setContentItems] = useState<AdminContentItem[]>([]);
@@ -461,6 +463,18 @@ export default function AdminPanelScreen() {
   }, [isAdmin, router]);
 
   useEffect(() => { if (selectedRoomId) void refreshRoomModeration(selectedRoomId).catch(() => { setMembers([]); setRoomBans([]); }); }, [selectedRoomId]);
+
+  const sendPushTest = async () => {
+    try {
+      setPushTestSending(true);
+      const result = await sendAdminTestPush();
+      Alert.alert("Listo", result.tokensQueued > 0 ? "Push de prueba enviado." : "Notificacion creada, pero no hay tokens push activos para tu usuario.");
+    } catch (error: any) {
+      Alert.alert("Error", error?.message ?? "No se pudo enviar el push de prueba.");
+    } finally {
+      setPushTestSending(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedContent) {
@@ -1092,6 +1106,18 @@ export default function AdminPanelScreen() {
                   <Text style={styles.statLabel}>{stat.label}</Text>
                 </View>
               ))}
+            </View>
+            <View style={styles.panel}>
+              <View style={styles.panelHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.panelTitle}>Push notifications</Text>
+                  <Text style={styles.helperText}>Envia una notificacion real al usuario admin autenticado en este dispositivo.</Text>
+                </View>
+                <Pressable style={styles.btnPrimary} onPress={() => { void sendPushTest(); }} disabled={pushTestSending}>
+                  <Ionicons name="notifications-outline" size={16} color="#fff" />
+                  <Text style={styles.btnPrimaryText}>{pushTestSending ? "Enviando..." : "Probar push"}</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
         )}

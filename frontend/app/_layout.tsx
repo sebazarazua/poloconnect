@@ -1,4 +1,4 @@
-import { Redirect, Stack, usePathname } from "expo-router";
+import { Redirect, Stack, usePathname, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef } from "react";
@@ -34,6 +34,7 @@ export default function RootLayout() {
                   <ThemedStatusBar />
                   <UserPreferencesHydrator />
                   <PushTokenRegistrar />
+                  <PushNotificationNavigator />
                   <RootNavigator allowWebDev={allowWebDev} />
                 </CommunityProvider>
               </MarketProvider>
@@ -124,6 +125,45 @@ function PushTokenRegistrar() {
         console.info("startup/push registration failure");
       });
   }, [isAuthenticated, user?.id]);
+
+  return null;
+}
+
+function PushNotificationNavigator() {
+  const { authReady, isAuthenticated } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated) {
+      return;
+    }
+
+    let cancelled = false;
+    let cleanup: (() => void) | undefined;
+
+    void import("@/services/push-notifications")
+      .then((module) => module.registerNotificationResponseHandler((target) => {
+        if (!cancelled) {
+          router.push(target);
+        }
+      }))
+      .then((dispose) => {
+        if (cancelled) {
+          dispose();
+          return;
+        }
+
+        cleanup = dispose;
+      })
+      .catch(() => {
+        console.info("startup/push response handler failure");
+      });
+
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
+  }, [authReady, isAuthenticated, router]);
 
   return null;
 }

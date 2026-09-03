@@ -6,6 +6,7 @@ import { MediaService } from "../common/media/media.service";
 import { computeEffectiveMatchStatus, isWithinLiveWindow } from "../common/utils/match-status.util";
 import { CommunityGateway } from "../community/community.gateway";
 import { PrismaService } from "../database/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { AdminContentQueryDto, PatchAdminContentDto, ReorderAdminContentDto, UpsertAdminContentDto } from "./dto/admin-content.dto";
 import { AdminCommunityBanDto, AdminCommunityMembershipDto, CreateCommunityRoomDto, UpdateCommunityRoomDto } from "./dto/admin-community.dto";
 import { CreateTeamDto, UpdateMatchDto, UpsertMatchDto, UpsertMatchStatDto, UpsertTournamentDto, UpsertSpotlightEventDto, UpdateSpotlightEventDto, UpsertLineupDto } from "./dto/admin-sports.dto";
@@ -15,7 +16,8 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
-    private readonly communityGateway: CommunityGateway
+    private readonly communityGateway: CommunityGateway,
+    private readonly notifications: NotificationsService
   ) {}
 
   private polohubCache: {
@@ -444,6 +446,10 @@ export class AdminService {
 
   async listTournaments() {
     return this.prisma.tournament.findMany({ where: { deletedAt: null }, orderBy: { startDate: "desc" }, take: 200 });
+  }
+
+  async sendTestPush(user: RequestUser) {
+    return this.notifications.sendTestPush(user.id);
   }
 
   async createTournament(user: RequestUser, dto: UpsertTournamentDto) {

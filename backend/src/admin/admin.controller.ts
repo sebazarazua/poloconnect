@@ -23,6 +23,12 @@ export class AdminController {
     return this.admin.dashboard();
   }
 
+  @UseGuards(CsrfGuard)
+  @Post("notifications/test-push")
+  testPush(@CurrentUser() user: RequestUser) {
+    return this.admin.sendTestPush(user);
+  }
+
   @Get("content/items")
   listContent(@Query() query: AdminContentQueryDto) {
     return this.admin.listContent(query);

@@ -205,6 +205,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setIsSubmitting(true);
 
     try {
+      await import("@/services/push-notifications")
+        .then((module) => module.unregisterCurrentDevicePushToken())
+        .catch(() => undefined);
+    } catch {
+      // Push token cleanup is best effort; logout must continue.
+    }
+
+    try {
       await logoutApi();
     } catch {
       // Local session cleanup still runs if the server session is already gone.

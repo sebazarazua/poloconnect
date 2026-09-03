@@ -1,8 +1,8 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { NotificationKind, Prisma } from "@prisma/client";
 import { page } from "../common/dto/pagination.dto";
 import { PrismaService } from "../database/prisma.service";
-import { NotificationsQueryDto, PushTokenDto } from "./dto/notifications.dto";
+import { NotificationsQueryDto, PushTokenDto, PushTokenUnregisterDto } from "./dto/notifications.dto";
 import { NotificationPreferences, SettingsService } from "../settings/settings.service";
 
 const PUSH_KIND_BY_NOTIFICATION: Partial<Record<NotificationKind, keyof NotificationPreferences["push"]>> = {
@@ -19,8 +19,35 @@ const APP_KIND_BY_NOTIFICATION: Partial<Record<NotificationKind, keyof Notificat
   system: "system"
 };
 
+const EXPO_PUSH_SEND_URL = "https://exp.host/--/api/v2/push/send";
+const EXPO_PUSH_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
+const EXPO_PUSH_BATCH_SIZE = 100;
+
+type ExpoPushTicket = {
+  status?: string;
+  id?: string;
+  message?: string;
+  details?: { error?: string };
+};
+
+type ExpoPushSendResponse = {
+  data?: ExpoPushTicket[];
+};
+
+type ExpoPushReceipt = {
+  status?: string;
+  message?: string;
+  details?: { error?: string };
+};
+
+type ExpoPushReceiptResponse = {
+  data?: Record<string, ExpoPushReceipt>;
+};
+
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(private readonly prisma: PrismaService, private readonly settings: SettingsService) {}
 
   async list(userId: string, query: NotificationsQueryDto) {
@@ -50,6 +77,14 @@ export class NotificationsService {
 
   async savePushToken(userId: string, body: PushTokenDto) {
     await this.prisma.pushToken.upsert({ where: { token: body.token }, update: { userId, platform: body.platform, enabled: true, lastSeenAt: new Date() }, create: { userId, platform: body.platform, token: body.token, lastSeenAt: new Date() } });
+    return { ok: true };
+  }
+
+  async unregisterPushToken(userId: string, body: PushTokenUnregisterDto) {
+    await this.prisma.pushToken.updateMany({
+      where: { userId, token: body.token },
+      data: { enabled: false, lastSeenAt: new Date() }
+    });
     return { ok: true };
   }
 
@@ -106,6 +141,21 @@ export class NotificationsService {
     return this.notifyUsers(memberships.map((membership) => membership.userId), payload);
   }
 
+  async sendTestPush(userId: string) {
+    const notification = await this.prisma.notification.create({
+      data: {
+        userId,
+        kind: "system",
+        title: "Polo Connect",
+        body: "Notificacion de prueba",
+        data: { kind: "system", route: "/notifications", test: true }
+      }
+    });
+
+    const tokensQueued = await this.sendPushToUserTokens(userId, notification.title, notification.body, notification.data);
+    return { ok: true, notificationId: notification.id, tokensQueued };
+  }
+
   private toNotificationDto(notification: {
     id: string;
     userId: string;
@@ -132,30 +182,135 @@ export class NotificationsService {
     const settings = await this.settings.getMe(userId);
     if (!settings.pushEnabled || !settings.notificationPreferences.push[pushPreferenceKey]) return;
 
-    const tokens = await this.prisma.pushToken.findMany({ where: { userId, enabled: true } });
-    if (tokens.length === 0) return;
+    await this.sendPushToUserTokens(userId, title, body, { ...(typeof data === "object" && data ? (data as Record<string, unknown>) : {}), kind });
+  }
 
-    const messages = tokens.map((token) => ({
-      to: token.token,
-      sound: "default",
-      title,
-      body,
-      data: { ...(typeof data === "object" && data ? (data as Record<string, unknown>) : {}), kind, userId }
+  private async sendPushToUserTokens(userId: string, title: string, body: string, data?: Prisma.InputJsonValue) {
+    const tokens = await this.prisma.pushToken.findMany({ where: { userId, enabled: true } });
+    if (tokens.length === 0) return 0;
+
+    const messages = tokens.map((pushToken) => ({
+      token: pushToken.token,
+      message: {
+        to: pushToken.token,
+        sound: "default",
+        title,
+        body,
+        data: typeof data === "object" && data ? (data as Record<string, unknown>) : {}
+      }
     }));
 
+    for (let index = 0; index < messages.length; index += EXPO_PUSH_BATCH_SIZE) {
+      const batch = messages.slice(index, index + EXPO_PUSH_BATCH_SIZE);
+
+      try {
+        const response = await fetch(EXPO_PUSH_SEND_URL, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Accept-Encoding": "gzip, deflate",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(batch.map((entry) => entry.message))
+        });
+
+        if (!response.ok) {
+          this.logger.warn(`Expo push send failed with status ${response.status}`);
+          continue;
+        }
+
+        const payload = (await response.json()) as ExpoPushSendResponse;
+        const receiptTokenPairs: Array<{ receiptId: string; token: string }> = [];
+        const tokensToDisable: string[] = [];
+
+        payload.data?.forEach((ticket, ticketIndex) => {
+          const token = batch[ticketIndex]?.token;
+          if (!token) return;
+
+          if (ticket.status === "ok" && ticket.id) {
+            receiptTokenPairs.push({ receiptId: ticket.id, token });
+            return;
+          }
+
+          if (ticket.details?.error === "DeviceNotRegistered") {
+            tokensToDisable.push(token);
+          }
+
+          if (ticket.status === "error") {
+            this.logger.warn(`Expo push ticket error: ${ticket.details?.error ?? ticket.message ?? "unknown"}`);
+          }
+        });
+
+        await this.disablePushTokens(tokensToDisable);
+        this.scheduleReceiptCheck(receiptTokenPairs);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`Expo push send exception: ${message}`);
+      }
+    }
+
+    return tokens.length;
+  }
+
+  private scheduleReceiptCheck(receiptTokenPairs: Array<{ receiptId: string; token: string }>) {
+    if (receiptTokenPairs.length === 0) return;
+
+    const timeout = setTimeout(() => {
+      void this.checkExpoReceipts(receiptTokenPairs);
+    }, 15_000);
+
+    timeout.unref?.();
+  }
+
+  private async checkExpoReceipts(receiptTokenPairs: Array<{ receiptId: string; token: string }>) {
+    const receiptIds = receiptTokenPairs.map((entry) => entry.receiptId);
+    const tokenByReceiptId = new Map(receiptTokenPairs.map((entry) => [entry.receiptId, entry.token]));
+
     try {
-      await fetch("https://exp.host/--/api/v2/push/send", {
+      const response = await fetch(EXPO_PUSH_RECEIPTS_URL, {
         method: "POST",
         headers: {
           Accept: "application/json",
           "Accept-Encoding": "gzip, deflate",
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(messages)
+        body: JSON.stringify({ ids: receiptIds })
       });
-    } catch {
-      // Push delivery should never block the main user flow.
+
+      if (!response.ok) {
+        this.logger.warn(`Expo push receipt check failed with status ${response.status}`);
+        return;
+      }
+
+      const payload = (await response.json()) as ExpoPushReceiptResponse;
+      const tokensToDisable: string[] = [];
+
+      for (const [receiptId, receipt] of Object.entries(payload.data ?? {})) {
+        if (receipt.details?.error === "DeviceNotRegistered") {
+          const token = tokenByReceiptId.get(receiptId);
+          if (token) tokensToDisable.push(token);
+        }
+
+        if (receipt.status === "error") {
+          this.logger.warn(`Expo push receipt error: ${receipt.details?.error ?? receipt.message ?? "unknown"}`);
+        }
+      }
+
+      await this.disablePushTokens(tokensToDisable);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Expo push receipt exception: ${message}`);
     }
+  }
+
+  private async disablePushTokens(tokens: string[]) {
+    const uniqueTokens = [...new Set(tokens.filter(Boolean))];
+    if (uniqueTokens.length === 0) return;
+
+    await this.prisma.pushToken.updateMany({
+      where: { token: { in: uniqueTokens } },
+      data: { enabled: false }
+    });
   }
 
   private formatRelativeTime(createdAt: Date) {

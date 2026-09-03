@@ -18,6 +18,28 @@ type IncomingSocketMessage = {
   message: ChatMessage;
 };
 
+const communityEventNames = [
+  "community_membership_removed",
+  "community_membership_banned",
+  "community_membership_unbanned",
+  "community_membership_joined",
+  "community_membership_left",
+  "community_room_deleted",
+  "community_room_updated",
+  "community_rooms_changed",
+  "community_access_invalidated"
+] as const;
+
+export type CommunityRealtimeEventName = (typeof communityEventNames)[number];
+
+export type CommunityRealtimeEvent = {
+  roomId: string;
+  userId?: string;
+  reason?: string;
+  isPermanent?: boolean;
+  expiresAt?: string | null;
+};
+
 type RoomsResponse = {
   joined: ChatItem[];
   recommended: ChatItem[];
@@ -33,6 +55,18 @@ type Page<T> = {
 };
 
 let communitySocket: Socket | null = null;
+
+export function refreshCommunitySocketAuth() {
+  if (communitySocket) {
+    communitySocket.auth = { token: getAccessToken() };
+  }
+}
+
+export function disconnectCommunitySocket() {
+  if (!communitySocket) return;
+  communitySocket.disconnect();
+  communitySocket = null;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -92,6 +126,8 @@ function getCommunitySocket() {
       reconnectionDelay: 400,
       reconnectionDelayMax: 4000
     });
+
+    communitySocket.io.on("reconnect_attempt", refreshCommunitySocketAuth);
   }
 
   return communitySocket;
@@ -129,6 +165,7 @@ export async function sendMessage(roomId: string, text: string) {
 
 export function subscribeToRoomMessages(roomId: string, onMessage: (message: ChatMessage) => void) {
   const socket = getCommunitySocket();
+  refreshCommunitySocketAuth();
 
   const handler = (payload: IncomingSocketMessage) => {
     if (payload?.roomId !== roomId || !payload?.message) {
@@ -144,5 +181,44 @@ export function subscribeToRoomMessages(roomId: string, onMessage: (message: Cha
   return () => {
     socket.off("message_received", handler);
     socket.emit("leave_room", { roomId });
+  };
+}
+
+export function subscribeToCommunityEvents(
+  onEvent: (eventName: CommunityRealtimeEventName, event: CommunityRealtimeEvent) => void,
+  onReconnect?: () => void
+) {
+  const socket = getCommunitySocket();
+  let hasConnected = socket.connected;
+  refreshCommunitySocketAuth();
+
+  const handlers = communityEventNames.map((eventName) => {
+    const handler = (event: CommunityRealtimeEvent) => {
+      if (event?.roomId) {
+        onEvent(eventName, event);
+      }
+    };
+
+    socket.on(eventName, handler);
+    return { eventName, handler };
+  });
+
+  const handleConnect = () => {
+    if (hasConnected) {
+      onReconnect?.();
+    }
+    hasConnected = true;
+  };
+
+  socket.on("connect", handleConnect);
+  if (!socket.connected) {
+    socket.connect();
+  }
+
+  return () => {
+    handlers.forEach(({ eventName, handler }) => {
+      socket.off(eventName, handler);
+    });
+    socket.off("connect", handleConnect);
   };
 }

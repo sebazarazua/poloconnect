@@ -8,7 +8,17 @@ import {
   useState
 } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { joinChatRoom, leaveChatRoom, listChatRooms } from "@/services/api/community";
+import { AppState } from "react-native";
+import {
+  disconnectCommunitySocket,
+  joinChatRoom,
+  leaveChatRoom,
+  listChatRooms,
+  refreshCommunitySocketAuth,
+  subscribeToCommunityEvents,
+  type CommunityRealtimeEvent,
+  type CommunityRealtimeEventName
+} from "@/services/api/community";
 
 export type ChatIconName =
   | "trophy-outline"
@@ -33,6 +43,7 @@ export interface ChatItem {
 interface CommunityContextValue {
   joinedChats: ChatItem[];
   recommendedChats: ChatItem[];
+  roomsLoaded: boolean;
   joinChat: (id: string) => void;
   leaveChat: (id: string) => void;
 }
@@ -40,14 +51,16 @@ interface CommunityContextValue {
 const CommunityContext = createContext<CommunityContextValue | null>(null);
 
 export function CommunityProvider({ children }: PropsWithChildren) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [joinedChats, setJoinedChats] = useState<ChatItem[]>([]);
   const [recommendedChats, setRecommendedChats] = useState<ChatItem[]>([]);
+  const [roomsLoaded, setRoomsLoaded] = useState(false);
 
   const refreshRooms = useCallback(async () => {
     if (!isAuthenticated) {
       setJoinedChats([]);
       setRecommendedChats([]);
+      setRoomsLoaded(true);
       return;
     }
 
@@ -58,15 +71,71 @@ export function CommunityProvider({ children }: PropsWithChildren) {
     } catch {
       setJoinedChats([]);
       setRecommendedChats([]);
+    } finally {
+      setRoomsLoaded(true);
     }
   }, [isAuthenticated]);
 
   useEffect(() => {
+    setRoomsLoaded(false);
     void refreshRooms();
   }, [refreshRooms]);
 
+  useEffect(() => {
+    if (!isAuthenticated) {
+      disconnectCommunitySocket();
+      return;
+    }
+
+    const removeRoom = (roomId: string) => {
+      setJoinedChats((current) => current.filter((chat) => chat.id !== roomId));
+      setRecommendedChats((current) => current.filter((chat) => chat.id !== roomId));
+    };
+
+    const handleEvent = (eventName: CommunityRealtimeEventName, event: CommunityRealtimeEvent) => {
+      const isForCurrentUser = Boolean(event.userId && user?.id === event.userId);
+
+      switch (eventName) {
+        case "community_access_invalidated":
+        case "community_room_deleted":
+          removeRoom(event.roomId);
+          void refreshRooms();
+          break;
+        case "community_membership_removed":
+        case "community_membership_banned":
+          if (isForCurrentUser) {
+            removeRoom(event.roomId);
+          }
+          void refreshRooms();
+          break;
+        case "community_membership_joined":
+        case "community_membership_left":
+        case "community_membership_unbanned":
+        case "community_room_updated":
+        case "community_rooms_changed":
+          void refreshRooms();
+          break;
+      }
+    };
+
+    const unsubscribe = subscribeToCommunityEvents(handleEvent, () => {
+      void refreshRooms();
+    });
+    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        refreshCommunitySocketAuth();
+        void refreshRooms();
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      appStateSubscription.remove();
+    };
+  }, [isAuthenticated, refreshRooms, user?.id]);
+
   const joinChat = useCallback((id: string) => {
-    void joinChatRoom(id).then(refreshRooms);
+    void joinChatRoom(id).then(refreshRooms).catch(refreshRooms);
     setRecommendedChats(prev => {
       const chat = prev.find(c => c.id === id);
       if (!chat) return prev;
@@ -76,7 +145,7 @@ export function CommunityProvider({ children }: PropsWithChildren) {
   }, [refreshRooms]);
 
   const leaveChat = useCallback((id: string) => {
-    void leaveChatRoom(id).then(refreshRooms);
+    void leaveChatRoom(id).then(refreshRooms).catch(refreshRooms);
     setJoinedChats(prev => {
       const chat = prev.find(c => c.id === id);
       if (!chat) return prev;
@@ -91,8 +160,8 @@ export function CommunityProvider({ children }: PropsWithChildren) {
   }, [refreshRooms]);
 
   const value = useMemo(
-    () => ({ joinedChats, recommendedChats, joinChat, leaveChat }),
-    [joinedChats, recommendedChats, joinChat, leaveChat]
+    () => ({ joinedChats, recommendedChats, roomsLoaded, joinChat, leaveChat }),
+    [joinedChats, recommendedChats, roomsLoaded, joinChat, leaveChat]
   );
 
   return (

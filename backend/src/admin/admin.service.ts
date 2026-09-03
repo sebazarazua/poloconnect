@@ -4,6 +4,7 @@ import { randomBytes } from "crypto";
 import { RequestUser } from "../common/decorators/current-user.decorator";
 import { MediaService } from "../common/media/media.service";
 import { computeEffectiveMatchStatus, isWithinLiveWindow } from "../common/utils/match-status.util";
+import { CommunityGateway } from "../community/community.gateway";
 import { PrismaService } from "../database/prisma.service";
 import { AdminContentQueryDto, PatchAdminContentDto, ReorderAdminContentDto, UpsertAdminContentDto } from "./dto/admin-content.dto";
 import { AdminCommunityBanDto, AdminCommunityMembershipDto, CreateCommunityRoomDto, UpdateCommunityRoomDto } from "./dto/admin-community.dto";
@@ -11,7 +12,11 @@ import { CreateTeamDto, UpdateMatchDto, UpsertMatchDto, UpsertMatchStatDto, Upse
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService, private readonly media: MediaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly media: MediaService,
+    private readonly communityGateway: CommunityGateway
+  ) {}
 
   private polohubCache: {
     expiresAt: number;
@@ -283,6 +288,7 @@ export class AdminService {
     });
 
     await this.audit(user, "admin.community.room.create", "ChatRoom", room.id, { title: room.title });
+    this.communityGateway.emitRoomUpdated(room.id);
     return room;
   }
 
@@ -309,13 +315,19 @@ export class AdminService {
     });
 
     await this.audit(user, "admin.community.room.update", "ChatRoom", roomId, { title: room.title, isPublic: room.isPublic });
+    this.communityGateway.emitRoomUpdated(roomId);
     return room;
   }
 
   async deleteRoom(user: RequestUser, roomId: string) {
     await this.ensureRoom(roomId);
+    const members = await this.prisma.chatMembership.findMany({
+      where: { roomId, leftAt: null },
+      select: { userId: true }
+    });
     await this.prisma.chatRoom.update({ where: { id: roomId }, data: { deletedAt: new Date(), isPublic: false, isRecommended: false } });
     await this.audit(user, "admin.community.room.delete", "ChatRoom", roomId);
+    this.communityGateway.emitRoomDeleted(roomId, members.map((member) => member.userId));
     return { ok: true };
   }
 
@@ -364,6 +376,7 @@ export class AdminService {
     await this.ensureRoom(roomId);
     await this.prisma.chatMembership.updateMany({ where: { roomId, userId: targetUserId, leftAt: null }, data: { leftAt: new Date() } });
     await this.logModeration(user, roomId, targetUserId, "removed", dto.reason);
+    this.communityGateway.emitMembershipRemoved(roomId, targetUserId);
     return { ok: true };
   }
 
@@ -375,6 +388,7 @@ export class AdminService {
       create: { roomId, userId: targetUserId }
     });
     await this.logModeration(user, roomId, targetUserId, "added", dto.reason);
+    this.communityGateway.emitMembershipJoined(roomId, targetUserId);
     return { ok: true };
   }
 
@@ -408,6 +422,11 @@ export class AdminService {
       expiresAt: ban.expiresAt
     });
 
+    this.communityGateway.emitMembershipBanned(roomId, targetUserId, {
+      isPermanent: ban.isPermanent,
+      expiresAt: ban.expiresAt?.toISOString() ?? null
+    });
+
     return { ok: true };
   }
 
@@ -419,6 +438,7 @@ export class AdminService {
     });
 
     await this.logModeration(user, roomId, targetUserId, "unbanned", dto.reason);
+    this.communityGateway.emitMembershipUnbanned(roomId, targetUserId);
     return { ok: true };
   }
 

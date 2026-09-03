@@ -147,9 +147,10 @@ export default function GroupChatScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useLocale();
   const { user } = useAuth();
-  const { joinedChats, leaveChat } = useCommunity();
+  const { joinedChats, leaveChat, roomsLoaded } = useCommunity();
   const scrollRef = useRef<ScrollView>(null);
   const keyboardTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const accessAlertShownRef = useRef(false);
   const [inputText, setInputText] = useState("");
   const [composerHeight, setComposerHeight] = useState(42);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -208,11 +209,17 @@ export default function GroupChatScreen() {
 
     let mounted = true;
 
-    void listMessages(chatId).then((initialMessages) => {
-      if (mounted) {
-        setMessages(dedupeById(initialMessages.map(normalizeMessage)));
-      }
-    });
+    void listMessages(chatId)
+      .then((initialMessages) => {
+        if (mounted) {
+          setMessages(dedupeById(initialMessages.map(normalizeMessage)));
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setMessages([]);
+        }
+      });
 
     const unsubscribe = subscribeToRoomMessages(chatId, (incomingMessage) => {
       setMessages((previousMessages) => {
@@ -231,6 +238,17 @@ export default function GroupChatScreen() {
       unsubscribe();
     };
   }, [chatId, t, user?.id]);
+
+  useEffect(() => {
+    if (!chatId || !roomsLoaded || chat || accessAlertShownRef.current) {
+      return;
+    }
+
+    accessAlertShownRef.current = true;
+    setInputText("");
+    Alert.alert(t("chat.accessLostTitle"), t("chat.accessLostText"));
+    router.replace("/(tabs)/community");
+  }, [chat, chatId, roomsLoaded, router, t]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -274,6 +292,10 @@ export default function GroupChatScreen() {
   function handleSend() {
     const text = inputText.trim();
     if (!text || !chatId) return;
+    if (!chat) {
+      Alert.alert(t("chat.accessLostTitle"), t("chat.accessLostText"));
+      return;
+    }
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
     const optimisticMessage = {
@@ -289,16 +311,21 @@ export default function GroupChatScreen() {
       optimisticMessage
     ]);
     setInputText("");
-    void sendMessage(chatId, text).then((createdMessage) => {
-      const normalizedCreated = normalizeMessage(createdMessage);
+    void sendMessage(chatId, text)
+      .then((createdMessage) => {
+        const normalizedCreated = normalizeMessage(createdMessage);
 
-      setMessages((previousMessages) => {
-        const withoutOptimistic = previousMessages.map((message) => message.id === optimisticMessage.id ? normalizedCreated : message);
-        const alreadyExists = withoutOptimistic.some((message) => message.id === normalizedCreated.id);
-        const merged = alreadyExists ? withoutOptimistic : [...withoutOptimistic, normalizedCreated];
-        return dedupeById(merged);
+        setMessages((previousMessages) => {
+          const withoutOptimistic = previousMessages.map((message) => message.id === optimisticMessage.id ? normalizedCreated : message);
+          const alreadyExists = withoutOptimistic.some((message) => message.id === normalizedCreated.id);
+          const merged = alreadyExists ? withoutOptimistic : [...withoutOptimistic, normalizedCreated];
+          return dedupeById(merged);
+        });
+      })
+      .catch((error) => {
+        setMessages((previousMessages) => previousMessages.filter((message) => message.id !== optimisticMessage.id));
+        Alert.alert(t("profile.errorTitle"), error instanceof Error ? error.message : t("chat.sendError"));
       });
-    });
     setTimeout(() => scrollToBottom(true), 60);
   }
 
@@ -411,12 +438,14 @@ export default function GroupChatScreen() {
             }}
             returnKeyType="send"
             onSubmitEditing={handleSend}
+            editable={Boolean(chat)}
           />
           <Pressable
             onPress={handleSend}
+            disabled={!chat}
             style={({ pressed }) => [
               styles.sendBtn,
-              { opacity: inputText.trim() ? (pressed ? 0.7 : 1) : 0.35 }
+              { opacity: chat && inputText.trim() ? (pressed ? 0.7 : 1) : 0.35 }
             ]}
           >
             <Ionicons name="send" size={20} color="#fff" />

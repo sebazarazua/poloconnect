@@ -25,7 +25,7 @@ export class CommunityService {
     });
     const bannedRoomIds = activeBans.map((ban) => ban.roomId);
 
-    const memberships = await this.prisma.chatMembership.findMany({ where: { userId, leftAt: null, roomId: { notIn: bannedRoomIds } }, include: { room: { include: { memberships: { where: { leftAt: null } }, messages: { orderBy: { messageNumber: "desc" }, take: 1 } } } } });
+    const memberships = await this.prisma.chatMembership.findMany({ where: { userId, leftAt: null, roomId: { notIn: bannedRoomIds }, room: { deletedAt: null } }, include: { room: { include: { memberships: { where: { leftAt: null } }, messages: { orderBy: { messageNumber: "desc" }, take: 1 } } } } });
     const joinedIds = memberships.map((entry) => entry.roomId);
     const recommended = await this.prisma.chatRoom.findMany({ where: { deletedAt: null, isPublic: true, id: { notIn: [...joinedIds, ...bannedRoomIds] } }, include: { memberships: { where: { leftAt: null } } }, take: 20 });
     return { joined: memberships.map((entry) => this.toRoomDto(entry.room, 0, false)), recommended: recommended.map((room) => this.toRoomDto(room, 0, true)) };
@@ -35,15 +35,18 @@ export class CommunityService {
     await this.ensureRoom(roomId);
     await this.ensureNoActiveBan(userId, roomId);
     await this.prisma.chatMembership.upsert({ where: { roomId_userId: { roomId, userId } }, update: { leftAt: null, joinedAt: new Date() }, create: { roomId, userId } });
+    this.gateway.emitMembershipJoined(roomId, userId);
     return { ok: true };
   }
 
   async leaveRoom(userId: string, roomId: string) {
     await this.prisma.chatMembership.updateMany({ where: { roomId, userId, leftAt: null }, data: { leftAt: new Date() } });
+    this.gateway.emitMembershipLeft(roomId, userId);
     return { ok: true };
   }
 
   async listMessages(userId: string, roomId: string, query: MessageQueryDto) {
+    await this.ensureRoom(roomId);
     await this.ensureNoActiveBan(userId, roomId);
     await this.ensureMembership(userId, roomId);
     const limit = Number(query.limit ?? 50);

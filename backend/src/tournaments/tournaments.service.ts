@@ -15,10 +15,7 @@ export class TournamentsService {
     if (query.month && query.year) {
       const start = this.argentinaMonthStart(query.year, query.month);
       const end = this.argentinaMonthStart(query.month === 12 ? query.year + 1 : query.year, query.month === 12 ? 1 : query.month + 1);
-      where.AND = [
-        { startDate: { lt: end } },
-        { OR: [{ endDate: null, startDate: { gte: start } }, { endDate: { gte: start } }] }
-      ];
+      where.startDate = { gte: start, lt: end };
     }
     const tournaments = await this.prisma.tournament.findMany({ where, include: { club: true, registrations: true }, orderBy: { startDate: "asc" }, take: limit + 1 });
     return page(tournaments.map((tournament) => this.toTournamentDto(tournament)), limit);

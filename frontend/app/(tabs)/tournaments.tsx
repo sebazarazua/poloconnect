@@ -22,23 +22,14 @@ function dateKeyFromParts(year: number, month: number, day: number) {
   return `${year}-${padDatePart(month + 1)}-${padDatePart(day)}`;
 }
 
-function addDaysToDateKey(dateKey: string, days: number) {
-  const [year, month, day] = dateKey.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day + days));
-  return `${date.getUTCFullYear()}-${padDatePart(date.getUTCMonth() + 1)}-${padDatePart(date.getUTCDate())}`;
-}
-
 function normalizeDateKey(value?: string) {
   const match = value?.match(/^\d{4}-\d{2}-\d{2}/);
   return match?.[0];
 }
 
-function getTournamentDateRange(tournament: Tournament) {
+function getTournamentStartDateKey(tournament: Tournament) {
   const fallbackStart = dateKeyFromParts(tournament.year, tournament.month, tournament.day);
-  const start = normalizeDateKey(tournament.startDateLocal) ?? fallbackStart;
-  const end = normalizeDateKey(tournament.endDateLocal) ?? normalizeDateKey(tournament.endDate) ?? start;
-
-  return end < start ? { start, end: start } : { start, end };
+  return normalizeDateKey(tournament.startDateLocal) ?? fallbackStart;
 }
 
 export default function TournamentsScreen() {
@@ -59,42 +50,18 @@ export default function TournamentsScreen() {
       .catch(() => setTournaments([]));
   }, [calendarDate]);
 
-  const monthBounds = useMemo(() => {
-    const start = dateKeyFromParts(calendarDate.year, calendarDate.month, 1);
-    const nextMonth = calendarDate.month === 11
-      ? dateKeyFromParts(calendarDate.year + 1, 0, 1)
-      : dateKeyFromParts(calendarDate.year, calendarDate.month + 1, 1);
-
-    return { start, end: addDaysToDateKey(nextMonth, -1) };
-  }, [calendarDate]);
-
   const monthTournaments = useMemo(
     () => tournaments.filter((tournament) => {
       if (tournament.status === "cancelled" || tournament.status === "canceled") return false;
-      const range = getTournamentDateRange(tournament);
-      return range.start <= monthBounds.end && range.end >= monthBounds.start;
+      const startDateKey = getTournamentStartDateKey(tournament);
+      return startDateKey.slice(0, 7) === `${calendarDate.year}-${padDatePart(calendarDate.month + 1)}`;
     }),
-    [monthBounds, tournaments]
+    [calendarDate, tournaments]
   );
 
   const markedDays = useMemo(
-    () => {
-      const days = new Set<number>();
-
-      for (const tournament of monthTournaments) {
-        const range = getTournamentDateRange(tournament);
-        let current = range.start < monthBounds.start ? monthBounds.start : range.start;
-        const end = range.end > monthBounds.end ? monthBounds.end : range.end;
-
-        while (current <= end) {
-          days.add(Number(current.slice(8, 10)));
-          current = addDaysToDateKey(current, 1);
-        }
-      }
-
-      return days;
-    },
-    [monthBounds, monthTournaments]
+    () => new Set(monthTournaments.map((tournament) => Number(getTournamentStartDateKey(tournament).slice(8, 10)))),
+    [monthTournaments]
   );
 
   const calendarDays = useMemo(() => {
@@ -128,8 +95,7 @@ export default function TournamentsScreen() {
   const tournamentOccursOnSelectedDay = (tournament: Tournament) => {
     if (selectedDay === null) return false;
     const selectedDateKey = dateKeyFromParts(calendarDate.year, calendarDate.month, selectedDay);
-    const range = getTournamentDateRange(tournament);
-    return selectedDateKey >= range.start && selectedDateKey <= range.end;
+    return selectedDateKey === getTournamentStartDateKey(tournament);
   };
 
   return (

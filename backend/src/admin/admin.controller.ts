@@ -7,6 +7,8 @@ import { Roles } from "../common/decorators/roles.decorator";
 import { CsrfGuard } from "../common/guards/csrf.guard";
 import { BrandsService } from "../brands/brands.service";
 import { UpsertBrandDto, UpsertBrandProductDto } from "../brands/dto/brands.dto";
+import { MarketplaceService } from "../marketplace/marketplace.service";
+import { RejectProductDto } from "../marketplace/dto/marketplace.dto";
 import { AdminService } from "./admin.service";
 import { AdminContentQueryDto, PatchAdminContentDto, ReorderAdminContentDto, UpsertAdminContentDto } from "./dto/admin-content.dto";
 import { AdminCommunityBanDto, AdminCommunityMembershipDto, CreateCommunityRoomDto, UpdateCommunityRoomDto } from "./dto/admin-community.dto";
@@ -16,11 +18,33 @@ import { MediaService } from "../common/media/media.service";
 @Roles("admin", "superadmin")
 @Controller("admin")
 export class AdminController {
-  constructor(private readonly admin: AdminService, private readonly brandsService: BrandsService, private readonly media: MediaService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly brandsService: BrandsService,
+    private readonly marketplace: MarketplaceService,
+    private readonly media: MediaService
+  ) {}
 
   @Get("dashboard")
   dashboard() {
     return this.admin.dashboard();
+  }
+
+  @Get("marketplace/products")
+  listMarketplaceProducts(@Query("status") status?: string) {
+    return this.marketplace.listProductsForAdmin(status);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Post("marketplace/products/:id/approve")
+  approveMarketplaceProduct(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.marketplace.approveProduct(user, id);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Post("marketplace/products/:id/reject")
+  rejectMarketplaceProduct(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: RejectProductDto) {
+    return this.marketplace.rejectProduct(user, id, dto);
   }
 
   @UseGuards(CsrfGuard)

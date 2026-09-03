@@ -25,3 +25,7 @@ export class ContactSellerDto {
   @IsOptional() @IsString() message?: string;
   @IsOptional() @IsString() contactType?: string;
 }
+
+export class RejectProductDto {
+  @IsOptional() @IsString() reason?: string;
+}

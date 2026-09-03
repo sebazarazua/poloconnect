@@ -397,3 +397,35 @@ export async function setAdminMatchLineup(matchId: string, payload: { team1: Lin
     body: JSON.stringify(payload)
   });
 }
+
+export type AdminMarketplaceProduct = {
+  id: string;
+  name: string;
+  price: number;
+  currency: string;
+  image: string;
+  publicationStatus: string;
+  description: string;
+  seller?: { id: string; name: string; phone?: string; email?: string };
+  createdAt?: string;
+  lastPayment: { status: "pending" | "approved" | "rejected" | "cancelled"; amountCents: number; currency: string } | null;
+};
+
+export async function listAdminMarketplaceProducts(status?: string) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return apiRequest<AdminMarketplaceProduct[]>(`/admin/marketplace/products${query}`);
+}
+
+export async function approveAdminMarketplaceProduct(id: string) {
+  return apiRequest<AdminMarketplaceProduct>(`/admin/marketplace/products/${encodeURIComponent(id)}/approve`, {
+    method: "POST"
+  });
+}
+
+export async function rejectAdminMarketplaceProduct(id: string, reason?: string) {
+  return apiRequest<AdminMarketplaceProduct>(`/admin/marketplace/products/${encodeURIComponent(id)}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason })
+  });
+}
+

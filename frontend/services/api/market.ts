@@ -18,6 +18,7 @@ export type ProductPublicationResult = {
     required: boolean;
     provider: "mercado_pago" | null;
     url: string | null;
+    status?: "pending" | "approved" | "rejected" | null;
   };
 };
 

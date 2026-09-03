@@ -28,11 +28,19 @@ enum ProductCategory {
 
 enum ProductPublicationStatus {
   draft
+  pending_payment
   pending_review
   active
   paused
   sold
   rejected
+}
+
+enum MarketplacePaymentStatus {
+  pending
+  approved
+  rejected
+  cancelled
 }
 
 enum MatchStatus {
@@ -481,11 +489,30 @@ model Product {
   images          ProductImage[]
   favorites       ProductFavorite[]
   contacts        SellerContact[]
+  payments        MarketplacePayment[]
 
   @@index([status, createdAt])
   @@index([sellerId, status])
   @@index([category])
   @@index([deletedAt])
+}
+
+model MarketplacePayment {
+  id                String                   @id @default(uuid()) @db.Uuid
+  productId         String                   @db.Uuid
+  sellerId          String                   @db.Uuid
+  amountCents       Int
+  currency          String
+  status            MarketplacePaymentStatus @default(pending)
+  mpPreferenceId    String?
+  mpPaymentId       String?                  @unique
+  rawWebhookPayload Json?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  product           Product                  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([status])
 }
 
 model ProductImage {

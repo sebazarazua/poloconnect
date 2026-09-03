@@ -1,17 +1,24 @@
-import { ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { RequestUser } from "../common/decorators/current-user.decorator";
 import { MediaService } from "../common/media/media.service";
 import { page, PaginationDto } from "../common/dto/pagination.dto";
 import { PrismaService } from "../database/prisma.service";
-import { ContactSellerDto, ProductQueryDto, ProductUpsertDto } from "./dto/marketplace.dto";
+import { ContactSellerDto, ProductQueryDto, ProductUpsertDto, RejectProductDto } from "./dto/marketplace.dto";
+import { MercadoPagoService } from "./mercadopago.service";
+
+const PUBLICATION_CURRENCY = "ARS";
+const MP_RETURN_DEEP_LINK = "polo-connect://market-publish-return";
 
 @Injectable()
 export class MarketplaceService {
+  private readonly logger = new Logger(MarketplaceService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
-    private readonly media: MediaService
+    private readonly media: MediaService,
+    private readonly mercadoPago: MercadoPagoService
   ) {}
 
   private async normalizeImageInputs(body: ProductUpsertDto) {
@@ -62,10 +69,9 @@ export class MarketplaceService {
 
   async createProduct(user: RequestUser, body: ProductUpsertDto) {
     const isAdmin = user.roles.includes("admin");
-    const paymentUrl = this.config.get<string>("MP_PUBLICATION_PAYMENT_URL", "").trim();
 
-    if (!isAdmin && !paymentUrl) {
-      throw new InternalServerErrorException("Marketplace payment link is not configured.");
+    if (!isAdmin && !this.mercadoPago.isConfigured()) {
+      throw new BadRequestException("No se pudo iniciar el pago de la publicación. Intentá nuevamente más tarde.");
     }
 
     const imageUrls = await this.normalizeImageInputs(body);
@@ -79,7 +85,7 @@ export class MarketplaceService {
         condition: body.status,
         priceCents: Math.round(body.price * 100),
         currency: body.currency ?? "USD",
-        status: isAdmin ? "active" : "pending_review",
+        status: isAdmin ? "active" : "pending_payment",
         location: body.location,
         images: imageUrls.length > 0
           ? {
@@ -94,14 +100,49 @@ export class MarketplaceService {
       include: { images: true, favorites: true, seller: true }
     });
 
-    return {
-      product: this.toProductDto(product, true),
-      payment: {
-        required: !isAdmin,
-        provider: !isAdmin ? "mercado_pago" : null,
-        url: !isAdmin ? paymentUrl : null
-      }
-    };
+    if (isAdmin) {
+      return {
+        product: this.toProductDto(product, true),
+        payment: { required: false, provider: null, url: null, status: null }
+      };
+    }
+
+    // The listing already exists at this point; if preference creation fails we soft-delete it
+    // instead of leaving an orphan "pending_payment" row the seller can never pay for or retry cleanly.
+    try {
+      const amountCents = this.mercadoPago.getPublicationPriceCents();
+      const paymentRecord = await this.prisma.marketplacePayment.create({
+        data: {
+          productId: product.id,
+          sellerId: user.id,
+          amountCents,
+          currency: PUBLICATION_CURRENCY,
+          status: "pending"
+        }
+      });
+
+      const preference = await this.mercadoPago.createPreference({
+        externalReference: paymentRecord.id,
+        title: `Publicación Polo Connect: ${product.title}`.slice(0, 250),
+        amountCents,
+        currency: PUBLICATION_CURRENCY,
+        returnUrl: MP_RETURN_DEEP_LINK
+      });
+
+      await this.prisma.marketplacePayment.update({
+        where: { id: paymentRecord.id },
+        data: { mpPreferenceId: preference.id }
+      });
+
+      return {
+        product: this.toProductDto(product, true),
+        payment: { required: true, provider: "mercado_pago" as const, url: preference.initPoint, status: "pending" as const }
+      };
+    } catch (error) {
+      this.logger.error(`Failed to create Mercado Pago preference for product ${product.id}: ${error instanceof Error ? error.message : error}`);
+      await this.prisma.product.update({ where: { id: product.id }, data: { deletedAt: new Date() } });
+      throw new BadRequestException("No se pudo iniciar el pago de la publicación. Intentá nuevamente más tarde.");
+    }
   }
 
   async updateProduct(user: RequestUser, id: string, body: ProductUpsertDto) {
@@ -182,6 +223,139 @@ export class MarketplaceService {
     const product = await this.prisma.product.findFirst({ where: { id: productId, deletedAt: null } });
     if (!product) throw new NotFoundException("Product not found.");
     return product;
+  }
+
+  /**
+   * Mercado Pago webhook receiver. Never trusts the body/query alone: it always looks the
+   * payment up server-to-server before touching any state, and is idempotent against retries.
+   */
+  async handleMercadoPagoWebhook(input: { query: Record<string, any>; body: any; headers: Record<string, any> }) {
+    const { query, body, headers } = input;
+    const type = String(query?.type ?? query?.topic ?? body?.type ?? body?.topic ?? "");
+    const dataId = String(query?.["data.id"] ?? body?.data?.id ?? body?.id ?? "").trim();
+
+    if (type !== "payment" || !dataId) {
+      // Other notification topics (merchant_order, etc.) or malformed pings: ack and ignore.
+      return { ok: true };
+    }
+
+    const xSignature = headers?.["x-signature"] as string | undefined;
+    const xRequestId = headers?.["x-request-id"] as string | undefined;
+    const signatureValid = this.mercadoPago.verifyWebhookSignature({ xSignature, xRequestId, dataId });
+
+    if (this.config.get<string>("MP_WEBHOOK_SECRET", "").trim() && !signatureValid) {
+      this.logger.warn(`Rejected Mercado Pago webhook with invalid signature for payment ${dataId}.`);
+      return { ok: false };
+    }
+
+    // Source of truth is always Mercado Pago's own API, never the webhook payload itself.
+    const payment = await this.mercadoPago.getPayment(dataId);
+
+    if (!payment.externalReference) {
+      this.logger.warn(`Mercado Pago payment ${payment.id} has no external_reference; ignoring.`);
+      return { ok: true };
+    }
+
+    const record = await this.prisma.marketplacePayment.findUnique({ where: { id: payment.externalReference } });
+    if (!record) {
+      this.logger.warn(`Mercado Pago payment ${payment.id} references unknown MarketplacePayment ${payment.externalReference}; ignoring.`);
+      return { ok: true };
+    }
+
+    // Idempotency: this exact payment id was already fully processed by a previous webhook call.
+    if (record.mpPaymentId === payment.id && record.status !== "pending") {
+      return { ok: true };
+    }
+
+    const amountMatches = payment.transactionAmount === null || Math.round(payment.transactionAmount * 100) === record.amountCents;
+    const currencyMatches = !payment.currencyId || payment.currencyId.toUpperCase() === record.currency.toUpperCase();
+
+    let nextStatus: "pending" | "approved" | "rejected" | "cancelled" = "pending";
+    if (payment.status === "approved") {
+      nextStatus = amountMatches && currencyMatches ? "approved" : "rejected";
+      if (nextStatus === "rejected") {
+        this.logger.error(`Mercado Pago payment ${payment.id} approved but amount/currency mismatch for ${record.id}; treating as rejected.`);
+      }
+    } else if (payment.status === "rejected" || payment.status === "cancelled") {
+      nextStatus = "rejected";
+    }
+
+    await this.prisma.marketplacePayment.update({
+      where: { id: record.id },
+      data: {
+        mpPaymentId: payment.id,
+        status: nextStatus,
+        rawWebhookPayload: body ?? undefined
+      }
+    });
+
+    if (nextStatus === "approved") {
+      // Only advance a listing that is still waiting on this exact payment; never clobber a
+      // listing an admin already approved/rejected, or one already moved by a duplicate webhook.
+      await this.prisma.product.updateMany({
+        where: { id: record.productId, status: "pending_payment" },
+        data: { status: "pending_review" }
+      });
+    }
+    // Rejected/cancelled payments intentionally leave the product in "pending_payment" so the
+    // seller can be offered a way to pay again, instead of mislabeling it as moderation-rejected.
+
+    return { ok: true };
+  }
+
+  async listProductsForAdmin(status?: string) {
+    const where: any = { deletedAt: null };
+    if (status) where.status = status;
+
+    const products = await this.prisma.product.findMany({
+      where,
+      include: {
+        images: { orderBy: { position: "asc" } },
+        seller: true,
+        payments: { orderBy: { createdAt: "desc" }, take: 1 }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100
+    });
+
+    return products.map((product) => ({
+      ...this.toProductDto(product, true),
+      lastPayment: product.payments[0]
+        ? { status: product.payments[0].status, amountCents: product.payments[0].amountCents, currency: product.payments[0].currency }
+        : null
+    }));
+  }
+
+  async approveProduct(admin: RequestUser, id: string) {
+    const product = await this.prisma.product.findFirst({ where: { id, deletedAt: null } });
+    if (!product) throw new NotFoundException("Product not found.");
+    if (product.status !== "pending_review") {
+      throw new BadRequestException("Solo se pueden aprobar publicaciones en revisión.");
+    }
+
+    const updated = await this.prisma.product.update({
+      where: { id },
+      data: { status: "active", moderationNotes: null, version: { increment: 1 } },
+      include: { images: true, favorites: true, seller: true }
+    });
+
+    return this.toProductDto(updated, true);
+  }
+
+  async rejectProduct(admin: RequestUser, id: string, dto: RejectProductDto) {
+    const product = await this.prisma.product.findFirst({ where: { id, deletedAt: null } });
+    if (!product) throw new NotFoundException("Product not found.");
+    if (product.status !== "pending_review" && product.status !== "pending_payment") {
+      throw new BadRequestException("Esta publicación no se puede rechazar en su estado actual.");
+    }
+
+    const updated = await this.prisma.product.update({
+      where: { id },
+      data: { status: "rejected", moderationNotes: dto.reason?.trim() || null, version: { increment: 1 } },
+      include: { images: true, favorites: true, seller: true }
+    });
+
+    return this.toProductDto(updated, true);
   }
 
   private toProductDto(product: any, includeSeller = false) {

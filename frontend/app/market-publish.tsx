@@ -1,12 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Image,
   Keyboard,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -37,7 +37,7 @@ export default function MarketPublishScreen() {
   const { t } = useLocale();
   const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { products, addProduct, updateProduct, deleteProduct } = useMarket();
+  const { products, addProduct, updateProduct, deleteProduct, refreshMarket } = useMarket();
   const existingProduct = useMemo(() => products.find((product) => product.id === id), [id, products]);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [name, setName] = useState("");
@@ -401,15 +401,15 @@ export default function MarketPublishScreen() {
               const result = await addProduct(payload);
 
               if (result.payment.required && result.payment.url) {
-                await Linking.openURL(result.payment.url);
-                Alert.alert(
-                  t("marketPublish.paymentRequiredTitle"),
-                  t("marketPublish.paymentRequiredText")
-                );
-              } else {
-                Alert.alert(t("marketPublish.publishedTitle"), t("marketPublish.publishedText"));
+                // Opens Mercado Pago in-app and resolves when it redirects back to our deep link.
+                // This is UX only: the real payment confirmation always comes from the backend webhook.
+                await WebBrowser.openAuthSessionAsync(result.payment.url, "polo-connect://market-publish-return");
+                void refreshMarket().catch(() => undefined);
+                router.replace("/market-publish-return");
+                return;
               }
 
+              Alert.alert(t("marketPublish.publishedTitle"), t("marketPublish.publishedText"));
               router.back();
             } catch (error) {
               Alert.alert(t("marketPublish.errorTitle"), error instanceof Error ? error.message : t("marketPublish.errorFallback"));

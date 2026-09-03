@@ -214,6 +214,7 @@ function RootNavigator({ allowWebDev }: { allowWebDev: boolean }) {
         <Stack.Screen name="favorites" />
         <Stack.Screen name="market-my-posts" />
         <Stack.Screen name="market-publish" />
+        <Stack.Screen name="market-publish-return" />
         <Stack.Screen name="match-detail" />
         <Stack.Screen name="horse-auctions" />
         <Stack.Screen name="horse-auction-detail" />

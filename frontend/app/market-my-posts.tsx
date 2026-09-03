@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
@@ -7,12 +8,27 @@ import { useLocale } from "@/contexts/LocaleContext";
 import { useMarket } from "@/contexts/MarketContext";
 import { resolveUploadedUrl } from "@/services/api/users";
 
+const publicationStatusKeys = {
+  pending_payment: "myPosts.status.pending_payment",
+  pending_review: "myPosts.status.pending_review",
+  active: "myPosts.status.active",
+  rejected: "myPosts.status.rejected",
+  paused: "myPosts.status.paused",
+  sold: "myPosts.status.sold"
+} as const;
+
 export default function MarketMyPostsScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const router = useRouter();
   const { t } = useLocale();
-  const { myProducts, deleteProduct } = useMarket();
+  const { myProducts, deleteProduct, refreshMarket } = useMarket();
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshMarket().catch(() => undefined);
+    }, [refreshMarket])
+  );
 
   return (
     <Screen
@@ -30,36 +46,47 @@ export default function MarketMyPostsScreen() {
         </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
-          {myProducts.map((product) => (
-            <View key={product.id} style={styles.card}>
-              <Image source={{ uri: resolveUploadedUrl(product.image) ?? product.image }} style={styles.image} />
+          {myProducts.map((product) => {
+            const statusKey = product.publicationStatus && product.publicationStatus in publicationStatusKeys
+              ? publicationStatusKeys[product.publicationStatus as keyof typeof publicationStatusKeys]
+              : null;
 
-              <View style={styles.body}>
-                <Text style={styles.name} numberOfLines={2}>
-                  {product.name.replace("\n", " ")}
-                </Text>
-                <Text style={styles.price}>USD {product.price.toLocaleString()}</Text>
+            return (
+              <View key={product.id} style={styles.card}>
+                <Image source={{ uri: resolveUploadedUrl(product.image) ?? product.image }} style={styles.image} />
 
-                <View style={styles.actions}>
-                  <Pressable
-                    style={[styles.actionButton, styles.editButton]}
-                    onPress={() => router.push(`/market-publish?id=${product.id}`)}
-                  >
-                    <Ionicons name="create-outline" size={16} color={colors.primaryDark} />
-                    <Text style={styles.actionText}>{t("common.edit")}</Text>
-                  </Pressable>
+                <View style={styles.body}>
+                  {statusKey ? (
+                    <View style={[styles.statusBadge, product.publicationStatus === "active" ? styles.statusBadgeActive : null]}>
+                      <Text style={[styles.statusBadgeText, product.publicationStatus === "active" ? styles.statusBadgeTextActive : null]}>{t(statusKey)}</Text>
+                    </View>
+                  ) : null}
+                  <Text style={styles.name} numberOfLines={2}>
+                    {product.name.replace("\n", " ")}
+                  </Text>
+                  <Text style={styles.price}>USD {product.price.toLocaleString()}</Text>
 
-                  <Pressable
-                    style={[styles.actionButton, styles.deleteButton]}
-                    onPress={() => deleteProduct(product.id)}
-                  >
-                    <Ionicons name="trash-outline" size={16} color={colors.danger} />
-                    <Text style={[styles.actionText, styles.deleteText]}>{t("common.delete")}</Text>
-                  </Pressable>
+                  <View style={styles.actions}>
+                    <Pressable
+                      style={[styles.actionButton, styles.editButton]}
+                      onPress={() => router.push(`/market-publish?id=${product.id}`)}
+                    >
+                      <Ionicons name="create-outline" size={16} color={colors.primaryDark} />
+                      <Text style={styles.actionText}>{t("common.edit")}</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={[styles.actionButton, styles.deleteButton]}
+                      onPress={() => deleteProduct(product.id)}
+                    >
+                      <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                      <Text style={[styles.actionText, styles.deleteText]}>{t("common.delete")}</Text>
+                    </Pressable>
+                  </View>
                 </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </ScrollView>
       )}
     </Screen>
@@ -89,6 +116,24 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   body: {
     flex: 1,
     gap: 8
+  },
+  statusBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3
+  },
+  statusBadgeActive: {
+    backgroundColor: colors.primary
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.muted
+  },
+  statusBadgeTextActive: {
+    color: "#ffffff"
   },
   name: {
     color: colors.text,

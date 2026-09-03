@@ -46,11 +46,15 @@ import {
   unbanCommunityMember,
   updateAdminContent,
   uploadAdminContentImage,
+  listAdminMarketplaceProducts,
+  approveAdminMarketplaceProduct,
+  rejectAdminMarketplaceProduct,
   type AdminContentItem,
   type AdminTournament,
   type AdminTeam,
   type AdminMatch,
-  type AdminSpotlightEvent
+  type AdminSpotlightEvent,
+  type AdminMarketplaceProduct
 } from "@/services/api/admin";
 import { fetchMatch, updateMatchLiveState } from "@/services/api/matches";
 import { fromArgentinaDateTimeInputs, toArgentinaDateTimeInputs } from "@/utils/argentinaTime";
@@ -68,7 +72,7 @@ import {
   uploadBrandImage
 } from "@/services/api/brands";
 
-type Tab = "dashboard" | "content" | "community" | "brands" | "auctions" | "tournaments" | "matches" | "events";
+type Tab = "dashboard" | "content" | "community" | "brands" | "marketplace" | "auctions" | "tournaments" | "matches" | "events";
 
 const contentSections = [
   { section: "branding", slot: "app_logo", titleKey: "adminPanel.section.logoTitle" as const, subtitleKey: "adminPanel.section.logoText" as const },
@@ -243,6 +247,16 @@ export default function AdminPanelScreen() {
   const [brandLogoUploading, setBrandLogoUploading] = useState(false);
   const brandLogoInputRef = useRef<any>(null);
   const bpImageInputRef = useRef<any>(null);
+
+  // Marketplace moderation state
+  const [marketplaceProducts, setMarketplaceProducts] = useState<AdminMarketplaceProduct[]>([]);
+  const [marketplaceStatusFilter, setMarketplaceStatusFilter] = useState<string>("pending_review");
+  const [marketplaceBusyId, setMarketplaceBusyId] = useState<string | null>(null);
+
+  const loadMarketplaceProducts = async (status: string) => {
+    const next = await listAdminMarketplaceProducts(status || undefined).catch(() => []);
+    setMarketplaceProducts(next);
+  };
 
   // Tournaments state
   const [tournaments, setTournaments] = useState<AdminTournament[]>([]);
@@ -461,6 +475,11 @@ export default function AdminPanelScreen() {
     void listAdminMatches().then(setMatches).catch(() => {});
     void listAdminSpotlightEvents().then(setSpotlightEvents).catch(() => {});
   }, [isAdmin, router]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void loadMarketplaceProducts(marketplaceStatusFilter);
+  }, [isAdmin, marketplaceStatusFilter]);
 
   useEffect(() => { if (selectedRoomId) void refreshRoomModeration(selectedRoomId).catch(() => { setMembers([]); setRoomBans([]); }); }, [selectedRoomId]);
 
@@ -1063,6 +1082,7 @@ export default function AdminPanelScreen() {
     { key: "content", label: "Contenido", icon: "images-outline", count: contentItems.length },
     { key: "community", label: "Comunidad", icon: "people-outline", count: rooms.length },
     { key: "brands", label: "Marcas", icon: "pricetags-outline", count: brands.length },
+    { key: "marketplace", label: "Mercado", icon: "cash-outline", count: marketplaceProducts.length },
     { key: "auctions", label: "Remates", icon: "ribbon-outline" },
     { key: "tournaments", label: "Torneos", icon: "trophy-outline", count: tournaments.length },
     { key: "matches", label: "Partidos", icon: "football-outline", count: matches.length },
@@ -1725,6 +1745,104 @@ export default function AdminPanelScreen() {
                   </View>
                 ) : null}
               </View>
+            </View>
+          </View>
+        )}
+
+        {/* ── MARKETPLACE MODERATION ── */}
+        {activeTab === "marketplace" && (
+          <View style={styles.section}>
+            <View style={styles.panel}>
+              <View style={styles.panelHeader}>
+                <Text style={styles.panelTitle}>Publicaciones ({marketplaceProducts.length})</Text>
+              </View>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 12 }}>
+                {[
+                  { key: "pending_review", label: "En revisión" },
+                  { key: "pending_payment", label: "Pago pendiente" },
+                  { key: "active", label: "Activas" },
+                  { key: "rejected", label: "Rechazadas" },
+                  { key: "", label: "Todas" }
+                ].map((filter) => (
+                  <Pressable
+                    key={filter.key || "all"}
+                    style={[styles.tabItem, marketplaceStatusFilter === filter.key && styles.tabItemActive]}
+                    onPress={() => setMarketplaceStatusFilter(filter.key)}
+                  >
+                    <Text style={[styles.tabLabel, marketplaceStatusFilter === filter.key && styles.tabLabelActive]}>{filter.label}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              {marketplaceProducts.length === 0 ? (
+                <View style={styles.emptyStateBox}>
+                  <Ionicons name="cash-outline" size={22} color={colors.muted} />
+                  <Text style={styles.emptyText}>No hay publicaciones en este estado.</Text>
+                </View>
+              ) : null}
+
+              {marketplaceProducts.map((product) => (
+                <View key={product.id} style={[styles.brandRow, { alignItems: "flex-start" }]}>
+                  {product.image ? (
+                    <Image source={resolveContentImageSource(product.image)} style={styles.brandRowLogo} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.brandRowLogo, { alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceStrong }]}>
+                      <Ionicons name="cube-outline" size={18} color={colors.primary} />
+                    </View>
+                  )}
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Text style={styles.brandRowName}>{product.name}</Text>
+                    <Text style={styles.brandRowMeta}>{product.currency} {product.price.toLocaleString()} · {product.publicationStatus}</Text>
+                    {product.seller ? <Text style={styles.brandRowMeta}>Vendedor: {product.seller.name}</Text> : null}
+                    {product.lastPayment ? (
+                      <Text style={styles.brandRowMeta}>
+                        Pago: {product.lastPayment.status} ({product.lastPayment.currency} {(product.lastPayment.amountCents / 100).toLocaleString()})
+                      </Text>
+                    ) : null}
+                    {product.publicationStatus === "pending_review" ? (
+                      <View style={{ flexDirection: "row", gap: 8, marginTop: 6 }}>
+                        <Pressable
+                          style={styles.btnPrimary}
+                          disabled={marketplaceBusyId === product.id}
+                          onPress={async () => {
+                            setMarketplaceBusyId(product.id);
+                            try {
+                              await approveAdminMarketplaceProduct(product.id);
+                              await loadMarketplaceProducts(marketplaceStatusFilter);
+                            } catch (err: any) {
+                              Alert.alert("Error", err?.message ?? "No se pudo aprobar la publicación.");
+                            } finally {
+                              setMarketplaceBusyId(null);
+                            }
+                          }}
+                        >
+                          <Ionicons name="checkmark" size={16} color="#fff" />
+                          <Text style={styles.btnPrimaryText}>Aprobar</Text>
+                        </Pressable>
+                        <Pressable
+                          style={[styles.btnPrimary, { backgroundColor: colors.danger }]}
+                          disabled={marketplaceBusyId === product.id}
+                          onPress={async () => {
+                            setMarketplaceBusyId(product.id);
+                            try {
+                              await rejectAdminMarketplaceProduct(product.id);
+                              await loadMarketplaceProducts(marketplaceStatusFilter);
+                            } catch (err: any) {
+                              Alert.alert("Error", err?.message ?? "No se pudo rechazar la publicación.");
+                            } finally {
+                              setMarketplaceBusyId(null);
+                            }
+                          }}
+                        >
+                          <Ionicons name="close" size={16} color="#fff" />
+                          <Text style={styles.btnPrimaryText}>Rechazar</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              ))}
             </View>
           </View>
         )}

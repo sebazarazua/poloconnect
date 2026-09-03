@@ -25,6 +25,7 @@ type MarketContextValue = {
   addProduct: (product: ProductPayload) => Promise<ProductPublicationResult>;
   updateProduct: (productId: string, product: ProductPayload) => void;
   deleteProduct: (productId: string) => void;
+  refreshMarket: () => Promise<void>;
 };
 
 const MarketContext = createContext<MarketContextValue | null>(null);
@@ -113,9 +114,10 @@ export function MarketProvider({ children }: PropsWithChildren) {
       },
       addProduct,
       updateProduct,
-      deleteProduct
+      deleteProduct,
+      refreshMarket
     }),
-    [addProduct, deleteProduct, favoriteIds, favoriteProducts, myProducts, products, toggleFavorite, updateProduct]
+    [addProduct, deleteProduct, favoriteIds, favoriteProducts, myProducts, products, toggleFavorite, updateProduct, refreshMarket]
   );
 
   return <MarketContext.Provider value={value}>{children}</MarketContext.Provider>;

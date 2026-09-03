@@ -152,7 +152,7 @@ const translations = {
     "auth.reset.submit": "Cambiar contraseña",
     "auth.reset.backToLogin": "Volver al login",
     "auth.reset.backToProfile": "Volver al perfil",
-    "auth.reset.requested": "Te enviamos el código al mail.",
+    "auth.reset.requested": "Si ese email existe, te enviamos el código al mail.",
     "auth.reset.updated": "Tu contraseña se actualizó correctamente.",
     "auth.reset.error": "No se pudo completar el proceso.",
     "auth.reset.mismatch": "Las contraseñas no coinciden.",

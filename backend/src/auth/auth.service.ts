@@ -102,7 +102,7 @@ export class AuthService {
   async loginWithApple(dto: AppleLoginDto, req: any) {
     const profile = await this.verifyAppleIdentityToken(dto.identityToken);
     const user = await this.findOrCreateSocialUser("apple", profile.sub, {
-      email: profile.email ?? dto.email,
+      email: profile.email,
       emailVerified: profile.emailVerified,
       firstName: dto.firstName ?? profile.firstName,
       lastName: dto.lastName ?? profile.lastName
@@ -119,7 +119,7 @@ export class AuthService {
     });
 
     if (!user?.credential) {
-      throw new BadRequestException("No existe una cuenta con ese email.");
+      return { ok: true };
     }
 
     const resetCode = String(randomInt(100000, 1000000));
@@ -513,7 +513,11 @@ export class AuthService {
     `;
 
     if (!transporter) {
-      this.logger.warn(`Password reset code for ${email}: ${code}`);
+      if (process.env.NODE_ENV === "production") {
+        this.logger.warn("Password reset email requested but no mail provider is configured.");
+      } else {
+        this.logger.warn(`Password reset code for ${email}: ${code}`);
+      }
       return;
     }
 

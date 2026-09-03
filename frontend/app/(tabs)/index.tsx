@@ -46,8 +46,6 @@ function getResponsiveBannerHeight(baseHeight: number, currentWidth: number) {
   return Math.max(minHeight, Math.min(maxHeight, scaledHeight));
 }
 
-const appLogo = require("../../assets/logo.png");
-
 type HomeAdItem = {
   imageUrl: string;
   targetUrl?: string;
@@ -522,11 +520,7 @@ export default function HomeScreen() {
       </View>
 
 
-      {ads.length === 0 ? (
-        <View style={[styles.adBanner, styles.adPlaceholder, { width: bannerWidth, height: primaryBannerHeight }]}>
-          <Image source={appLogo} style={styles.adPlaceholderLogo} resizeMode="contain" />
-        </View>
-      ) : (
+      {ads.length > 0 ? (
         <ScrollView
           ref={carouselRef}
           horizontal
@@ -556,15 +550,17 @@ export default function HomeScreen() {
             </Pressable>
           ))}
         </ScrollView>
-      )}
-      <View style={styles.dots}>
-        {ads.map((_, index) => (
-          <View
-            key={`home-hero-dot-${index}`}
-            style={[styles.dot, index === activeAd ? styles.activeDot : null]}
-          />
-        ))}
-      </View>
+      ) : null}
+      {ads.length > 0 ? (
+        <View style={styles.dots}>
+          {ads.map((_, index) => (
+            <View
+              key={`home-hero-dot-${index}`}
+              style={[styles.dot, index === activeAd ? styles.activeDot : null]}
+            />
+          ))}
+        </View>
+      ) : null}
 
       <SectionTitle title={t("home.quickAccess")} />
       <View style={styles.quickGrid}>
@@ -717,17 +713,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderRadius: 18,
     backgroundColor: colors.surfaceStrong,
     overflow: "hidden"
-  },
-  adPlaceholder: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border
-  },
-  adPlaceholderLogo: {
-    width: "38%",
-    height: "46%",
-    opacity: 0.35
   },
   adImage: {
     width: "100%",

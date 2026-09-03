@@ -88,17 +88,8 @@ export function AdCarousel({ images, targetUrls = [], height = 100 }: AdCarousel
     await Linking.openURL(target.url);
   };
 
-  // A carousel with no published item must never collapse the layout: it keeps
-  // its slot with a neutral branded placeholder instead.
   if (images.length === 0) {
-    return (
-      <View>
-        <View style={[styles.banner, styles.placeholder, { width: bannerWidth, height: bannerHeight }]}>
-          <Image source={require("@/assets/logo.png")} style={styles.placeholderLogo} resizeMode="contain" />
-        </View>
-        <View style={styles.dots} />
-      </View>
-    );
+    return null;
   }
 
   return (
@@ -164,18 +155,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     // its parent; relying on the parent's overflow:hidden alone can leave a
     // hairline of the previous slide bleeding through the rounded edge.
     borderRadius: 14
-  },
-  placeholder: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 6
-  },
-  placeholderLogo: {
-    width: "38%",
-    height: "46%",
-    opacity: 0.35
   },
   dots: {
     flexDirection: "row",

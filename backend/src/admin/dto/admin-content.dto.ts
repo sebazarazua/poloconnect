@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString, Matches, MaxLength, Min } from "class-validator";
+import { IsArray, IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString, Matches, MaxLength, Min } from "class-validator";
 
 export const CONTENT_IMAGE_URL_PATTERN = /^(asset:[a-zA-Z0-9_\-/]+|https?:\/\/.+|\/(?:api\/v1\/)?(?:uploads|media)\/.+)$/;
 export const CONTENT_TARGET_URL_PATTERN = /^(https?:\/\/.+|app:shop\/[a-zA-Z0-9-]+)$/;
@@ -54,5 +54,5 @@ export class PatchAdminContentDto {
 export class ReorderAdminContentDto {
   @IsString() @MaxLength(120) section!: string;
   @IsString() @MaxLength(120) slot!: string;
-  @IsArray() @ArrayNotEmpty() @IsString({ each: true }) itemIds!: string[];
+  @IsArray() @IsString({ each: true }) itemIds!: string[];
 }

@@ -65,6 +65,15 @@ function PreviewImage({ uri, width, height, borderRadius }: { uri: string; width
   return <Image source={{ uri }} style={{ width, height, borderRadius }} resizeMode="contain" />;
 }
 
+function showDeleteError(title: string, message: string) {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    window.alert(`${title}\n\n${message}`);
+    return;
+  }
+
+  Alert.alert(title, message);
+}
+
 export default function HorseAuctionsAdminScreen() {
   const colors = useThemeColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -308,19 +317,34 @@ export default function HorseAuctionsAdminScreen() {
     }
   };
 
-  const removeEvent = async () => {
-    if (!selectedEventId) return;
+  const deleteSelectedEvent = async (eventId: string) => {
+    try {
+      await deleteHorseAuctionEvent(eventId);
+      setSelectedEventId(null);
+      setItems((current) => current.filter((item) => item.id !== eventId));
+      await load();
+    } catch (error) {
+      showDeleteError(t("profile.errorTitle"), error instanceof Error ? error.message : t("auctions.loadError"));
+    }
+  };
+
+  const removeEvent = () => {
+    const eventId = selectedEventId;
+    if (!eventId) return;
+
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      if (window.confirm(t("auctions.adminDeleteEventConfirm"))) {
+        void deleteSelectedEvent(eventId);
+      }
+      return;
+    }
 
     Alert.alert(t("common.delete"), t("auctions.adminDeleteEventConfirm"), [
       { text: t("common.cancel"), style: "cancel" },
       {
         text: t("common.delete"),
         style: "destructive",
-        onPress: async () => {
-          await deleteHorseAuctionEvent(selectedEventId);
-          setSelectedEventId(null);
-          await load();
-        }
+        onPress: () => void deleteSelectedEvent(eventId)
       }
     ]);
   };

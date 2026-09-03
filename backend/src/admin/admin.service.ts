@@ -9,17 +9,6 @@ import { AdminContentQueryDto, PatchAdminContentDto, ReorderAdminContentDto, Ups
 import { AdminCommunityBanDto, AdminCommunityMembershipDto, CreateCommunityRoomDto, UpdateCommunityRoomDto } from "./dto/admin-community.dto";
 import { CreateTeamDto, UpdateMatchDto, UpsertMatchDto, UpsertMatchStatDto, UpsertTournamentDto, UpsertSpotlightEventDto, UpdateSpotlightEventDto, UpsertLineupDto } from "./dto/admin-sports.dto";
 
-/**
- * Minimum number of published (active) items a carousel slot must keep once it has content.
- * An empty slot can always receive its first item; the rule only blocks emptying a live carousel.
- */
-export const CAROUSEL_MIN_PUBLISHED: Record<string, number> = {
-  "home:hero_ads": 1,
-  "home:compact_ads": 1,
-  "community:ads": 1,
-  "live:ads": 1
-};
-
 @Injectable()
 export class AdminService {
   constructor(private readonly prisma: PrismaService, private readonly media: MediaService) {}
@@ -77,6 +66,7 @@ export class AdminService {
       allowGoogleImport: true
     });
 
+    await this.parkDeletedContentSortOrders(dto.section, dto.slot, dto.type);
     const sortOrder = dto.sortOrder ?? (await this.nextSortOrder(dto.section, dto.slot, dto.type));
 
     const item = await this.runContentWrite(() =>
@@ -110,15 +100,12 @@ export class AdminService {
     const current = await this.ensureContent(id);
     const nextIsActive = dto.isActive ?? true;
 
-    if (current.isActive && (!nextIsActive || current.section !== dto.section || current.slot !== dto.slot)) {
-      await this.ensureCarouselMinimum(current.section, current.slot, id);
-    }
-
     const imageUrl = await this.media.ensureStoredMediaUrl("content", dto.imageUrl, {
       allowAsset: true,
       allowGoogleImport: true
     });
 
+    await this.parkDeletedContentSortOrders(dto.section, dto.slot, dto.type);
     const item = await this.runContentWrite(() =>
       this.prisma.appContentItem.update({
         where: { id },
@@ -150,16 +137,13 @@ export class AdminService {
     const current = await this.ensureContent(id);
     const nextSection = dto.section ?? current.section;
     const nextSlot = dto.slot ?? current.slot;
-    const nextIsActive = dto.isActive ?? current.isActive;
-
-    if (current.isActive && (!nextIsActive || current.section !== nextSection || current.slot !== nextSlot)) {
-      await this.ensureCarouselMinimum(current.section, current.slot, id);
-    }
+    const nextType = dto.type ?? current.type;
 
     const imageUrl = dto.imageUrl
       ? await this.media.ensureStoredMediaUrl("content", dto.imageUrl, { allowAsset: true, allowGoogleImport: true })
       : undefined;
 
+    await this.parkDeletedContentSortOrders(nextSection, nextSlot, nextType);
     const item = await this.runContentWrite(() =>
       this.prisma.appContentItem.update({
         where: { id },
@@ -186,6 +170,8 @@ export class AdminService {
   }
 
   async reorderContent(user: RequestUser, dto: ReorderAdminContentDto) {
+    await this.parkDeletedContentSortOrders(dto.section, dto.slot);
+
     const items = await this.prisma.appContentItem.findMany({
       where: { section: dto.section, slot: dto.slot, deletedAt: null },
       select: { id: true }
@@ -215,11 +201,8 @@ export class AdminService {
   async deleteContent(user: RequestUser, id: string) {
     const current = await this.ensureContent(id);
 
-    if (current.isActive) {
-      await this.ensureCarouselMinimum(current.section, current.slot, id);
-    }
-
     await this.prisma.appContentItem.update({ where: { id }, data: { deletedAt: new Date(), isActive: false, updatedBy: user.id } });
+    await this.parkDeletedContentSortOrders(current.section, current.slot, current.type);
     await this.audit(user, "admin.content.delete", "AppContentItem", id);
     return { ok: true };
   }
@@ -234,19 +217,32 @@ export class AdminService {
     return (last?.sortOrder ?? 0) + 1;
   }
 
-  private async ensureCarouselMinimum(section: string, slot: string, excludedItemId: string) {
-    const minimum = CAROUSEL_MIN_PUBLISHED[`${section}:${slot}`];
-    if (!minimum) return;
-
-    const remaining = await this.prisma.appContentItem.count({
-      where: { section, slot, isActive: true, deletedAt: null, id: { not: excludedItemId } }
+  private async parkDeletedContentSortOrders(section: string, slot: string, type?: string) {
+    const deletedItems = await this.prisma.appContentItem.findMany({
+      where: {
+        section,
+        slot,
+        deletedAt: { not: null },
+        ...(type ? { type: type as never } : {})
+      },
+      orderBy: [{ type: "asc" }, { sortOrder: "asc" }, { updatedAt: "asc" }],
+      select: { id: true, type: true }
     });
 
-    if (remaining < minimum) {
-      throw new BadRequestException(
-        `El carrusel "${section}/${slot}" necesita al menos ${minimum} publicación activa. Agregá otra antes de desactivar o eliminar esta.`
-      );
-    }
+    if (deletedItems.length === 0) return;
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const [index, item] of deletedItems.entries()) {
+        await tx.appContentItem.update({ where: { id: item.id }, data: { sortOrder: -1_000_000_000 - index } });
+      }
+
+      const nextSortOrderByType = new Map<string, number>();
+      for (const item of deletedItems) {
+        const nextSortOrder = (nextSortOrderByType.get(item.type) ?? 0) - 1;
+        nextSortOrderByType.set(item.type, nextSortOrder);
+        await tx.appContentItem.update({ where: { id: item.id }, data: { sortOrder: nextSortOrder } });
+      }
+    });
   }
 
   private async runContentWrite<T>(operation: () => Promise<T>): Promise<T> {

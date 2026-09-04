@@ -3,6 +3,7 @@ import { Href, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Alert, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Screen } from "@/components/Screen";
+import { SUPPORT_EMAIL } from "@/constants/publicLegal";
 import { AppColors, radius, useThemeColors } from "@/constants/theme";
 import { useLocale, type Locale } from "@/contexts/LocaleContext";
 
@@ -460,7 +461,7 @@ export default function HelpCenterScreen() {
   };
 
   const openSupportEmail = (subject: string) => {
-    const mailUrl = `mailto:soporte@poloconnect.app?subject=${encodeURIComponent(subject)}`;
+    const mailUrl = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`;
     Linking.openURL(mailUrl).catch(() => Alert.alert(copy.contactTitle, copy.contactText));
   };
 

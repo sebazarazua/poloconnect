@@ -13,6 +13,7 @@ import { ThemeProvider, useTheme } from "@/constants/theme";
 import { getMySettings } from "@/services/api/settings";
 import { isApiUrlConfigured } from "@/services/api/client";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { PUBLIC_LEGAL_ROUTES } from "@/constants/publicLegal";
 
 console.info("startup/app");
 
@@ -169,6 +170,11 @@ function PushNotificationNavigator() {
 }
 
 const WEB_ADMIN_PATHS = ["/admin-login", "/admin-panel", "/horse-auctions-admin"];
+const PUBLIC_WEB_PATHS: readonly string[] = [
+  PUBLIC_LEGAL_ROUTES.support,
+  PUBLIC_LEGAL_ROUTES.privacy,
+  PUBLIC_LEGAL_ROUTES.dataDeletion
+];
 
 function RootNavigator({ allowWebDev }: { allowWebDev: boolean }) {
   const { isAuthenticated, authReady, signOut } = useAuth();
@@ -183,6 +189,18 @@ function RootNavigator({ allowWebDev }: { allowWebDev: boolean }) {
 
   if (!authReady) {
     return null;
+  }
+
+  const isPublicWebPath = Platform.OS === "web" && PUBLIC_WEB_PATHS.includes(pathname);
+
+  if (isPublicWebPath) {
+    return (
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="support" />
+        <Stack.Screen name="privacy" />
+        <Stack.Screen name="data-deletion" />
+      </Stack>
+    );
   }
 
   if (!isApiUrlConfigured) {
@@ -237,6 +255,9 @@ function RootNavigator({ allowWebDev }: { allowWebDev: boolean }) {
       <Stack.Screen name="admin-login" />
       <Stack.Screen name="admin-panel" />
       <Stack.Screen name="horse-auctions-admin" />
+      <Stack.Screen name="support" />
+      <Stack.Screen name="privacy" />
+      <Stack.Screen name="data-deletion" />
     </Stack>
   );
 }

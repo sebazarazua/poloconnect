@@ -1,9 +1,0 @@
-env: load .env
-env: export EXPO_PUBLIC_API_URL EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
-Starting project at C:\Users\sebas\OneDrive\Documentos\Polo Connect\frontend
-Starting Metro Bundler
-warning: Bundler cache is empty, rebuilding (this may take a minute)
-Tunnel connected.
-Tunnel ready.
-Waiting on http://localhost:8081
-Logs for your project will appear below.

@@ -230,9 +230,11 @@ export default function ProductDetailScreen() {
 
           {/* Product Info Card */}
           <View style={styles.infoCard}>
-            <View style={styles.statusBadge}>
-              <Text style={styles.statusText}>{product.status.toUpperCase()}</Text>
-            </View>
+            {product.category !== "inmueble" ? (
+              <View style={styles.statusBadge}>
+                <Text style={styles.statusText}>{product.status.toUpperCase()}</Text>
+              </View>
+            ) : null}
 
             <Text style={styles.productName}>{product.name}</Text>
 
@@ -278,10 +280,12 @@ export default function ProductDetailScreen() {
                   <Text style={styles.detailValue}>{product.category}</Text>
                 </View>
 
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>{t("product.status")}</Text>
-                  <Text style={styles.detailValue}>{product.status}</Text>
-                </View>
+                {product.category !== "inmueble" ? (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>{t("product.status")}</Text>
+                    <Text style={styles.detailValue}>{product.status}</Text>
+                  </View>
+                ) : null}
 
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>{t("product.price")}</Text>

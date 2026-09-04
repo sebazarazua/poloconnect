@@ -9,6 +9,9 @@ import { useLocale } from "@/contexts/LocaleContext";
 import { formatCalendarMonth } from "@/constants/i18n";
 import { listTournaments, type Tournament } from "@/services/api/tournaments";
 
+const TOURNAMENT_CACHE_TTL_MS = 5 * 60 * 1000;
+const tournamentMonthCache = new Map<string, { items: Tournament[]; fetchedAt: number }>();
+
 const weekDays = {
   "es-AR": ["L", "M", "X", "J", "V", "S", "D"],
   "en-US": ["M", "Tu", "W", "Th", "F", "Sa", "Su"]
@@ -32,6 +35,10 @@ function getTournamentStartDateKey(tournament: Tournament) {
   return normalizeDateKey(tournament.startDateLocal) ?? fallbackStart;
 }
 
+function cacheKey(calendarDate: { year: number; month: number }) {
+  return `${calendarDate.year}-${padDatePart(calendarDate.month + 1)}`;
+}
+
 export default function TournamentsScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
@@ -43,11 +50,48 @@ export default function TournamentsScreen() {
   });
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [loadingTournaments, setLoadingTournaments] = useState(false);
+  const [tournamentsError, setTournamentsError] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    const key = cacheKey(calendarDate);
+    const cached = tournamentMonthCache.get(key);
+    const hasFreshCache = cached && Date.now() - cached.fetchedAt < TOURNAMENT_CACHE_TTL_MS;
+
+    if (cached) {
+      setTournaments(cached.items);
+      setTournamentsError(false);
+    }
+
+    if (hasFreshCache) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setLoadingTournaments(!cached);
     void listTournaments(calendarDate)
-      .then(setTournaments)
-      .catch(() => setTournaments([]));
+      .then((items) => {
+        tournamentMonthCache.set(key, { items, fetchedAt: Date.now() });
+        if (!cancelled) {
+          setTournaments(items);
+          setTournamentsError(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTournamentsError(true);
+          if (!cached) setTournaments([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTournaments(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [calendarDate]);
 
   const monthTournaments = useMemo(
@@ -170,6 +214,17 @@ export default function TournamentsScreen() {
       </Card>
 
       <SectionTitle title={t("tournaments.upcoming")} />
+      {loadingTournaments ? (
+        <Card style={styles.emptyCard}>
+          <Text style={styles.emptyText}>{t("common.loading")}</Text>
+        </Card>
+      ) : null}
+      {tournamentsError ? (
+        <Card style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>No se pudo actualizar el calendario</Text>
+          <Text style={styles.emptyText}>Mostramos la información disponible. Intentá nuevamente en unos minutos.</Text>
+        </Card>
+      ) : null}
       {monthTournaments.map((item) => (
         <Card
           key={item.id}
@@ -199,7 +254,7 @@ export default function TournamentsScreen() {
           </View>
         </Card>
       ))}
-      {monthTournaments.length === 0 ? (
+      {!loadingTournaments && monthTournaments.length === 0 ? (
         <Card style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>{t("tournaments.emptyTitle")}</Text>
           <Text style={styles.emptyText}>{t("tournaments.emptyText")}</Text>

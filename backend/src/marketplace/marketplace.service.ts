@@ -9,6 +9,7 @@ import { MercadoPagoService } from "./mercadopago.service";
 
 const PUBLICATION_CURRENCY = "ARS";
 const MP_RETURN_DEEP_LINK = "polo-connect://market-publish-return";
+const DEFAULT_PENDING_PAYMENT_TTL_MINUTES = 60;
 
 @Injectable()
 export class MarketplaceService {
@@ -41,11 +42,51 @@ export class MarketplaceService {
     return this.media.extractStorageKeyFromUrl(url);
   }
 
+  private getPendingPaymentTtlMinutes() {
+    const configured = Number(this.config.get<string>("MARKETPLACE_PENDING_PAYMENT_TTL_MINUTES", ""));
+    return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_PENDING_PAYMENT_TTL_MINUTES;
+  }
+
+  private getPendingPaymentExpiresAt(reference = new Date()) {
+    return new Date(reference.getTime() + this.getPendingPaymentTtlMinutes() * 60 * 1000);
+  }
+
+  private async discardStalePendingPaymentProducts() {
+    const cutoff = new Date(Date.now() - this.getPendingPaymentTtlMinutes() * 60 * 1000);
+    const staleProducts = await this.prisma.product.findMany({
+      where: {
+        deletedAt: null,
+        status: "pending_payment",
+        createdAt: { lt: cutoff }
+      },
+      select: { id: true }
+    });
+
+    if (staleProducts.length === 0) return;
+
+    const productIds = staleProducts.map((product) => product.id);
+    await this.prisma.$transaction([
+      this.prisma.marketplacePayment.updateMany({
+        where: { productId: { in: productIds }, status: "pending" },
+        data: { status: "cancelled" }
+      }),
+      this.prisma.product.updateMany({
+        where: { id: { in: productIds }, status: "pending_payment", deletedAt: null },
+        data: { deletedAt: new Date(), moderationNotes: "Pago no completado dentro del plazo.", version: { increment: 1 } }
+      })
+    ]);
+  }
+
   async listProducts(userId: string, query: ProductQueryDto) {
+    await this.discardStalePendingPaymentProducts();
     const limit = Number(query.limit ?? 20);
     const where: any = { deletedAt: null };
-    if (query.sellerId) where.sellerId = query.sellerId;
-    else where.status = query.status ?? "active";
+    if (query.sellerId) {
+      where.sellerId = query.sellerId;
+      where.status = query.status ?? { not: "pending_payment" };
+    } else {
+      where.status = query.status ?? "active";
+    }
     if (query.category) where.category = query.category;
     if (query.search) where.OR = [{ title: { contains: query.search, mode: "insensitive" } }, { description: { contains: query.search, mode: "insensitive" } }];
     if (query.cursor) where.id = { lt: query.cursor };
@@ -64,10 +105,14 @@ export class MarketplaceService {
       include: { images: { orderBy: { position: "asc" } }, favorites: { where: { userId } }, seller: true }
     });
     if (!product) throw new NotFoundException("Product not found.");
+    if (product.status === "pending_payment" || (product.status !== "active" && product.sellerId !== userId)) {
+      throw new NotFoundException("Product not found.");
+    }
     return this.toProductDto(product, true);
   }
 
   async createProduct(user: RequestUser, body: ProductUpsertDto) {
+    await this.discardStalePendingPaymentProducts();
     const isAdmin = user.roles.includes("admin");
 
     if (!isAdmin && !this.mercadoPago.isConfigured()) {
@@ -80,9 +125,9 @@ export class MarketplaceService {
       data: {
         sellerId: user.id,
         title: body.name.trim(),
-        description: body.description.trim(),
+        description: body.description,
         category: body.category,
-        condition: body.status,
+        condition: body.category === "inmueble" ? "Usado" : body.status ?? "Usado",
         priceCents: Math.round(body.price * 100),
         currency: body.currency ?? "USD",
         status: isAdmin ? "active" : "pending_payment",
@@ -111,6 +156,7 @@ export class MarketplaceService {
     // instead of leaving an orphan "pending_payment" row the seller can never pay for or retry cleanly.
     try {
       const amountCents = this.mercadoPago.getPublicationPriceCents();
+      const expiresAt = this.getPendingPaymentExpiresAt();
       const paymentRecord = await this.prisma.marketplacePayment.create({
         data: {
           productId: product.id,
@@ -126,7 +172,8 @@ export class MarketplaceService {
         title: `Publicación Polo Connect: ${product.title}`.slice(0, 250),
         amountCents,
         currency: PUBLICATION_CURRENCY,
-        returnUrl: MP_RETURN_DEEP_LINK
+        returnUrl: MP_RETURN_DEEP_LINK,
+        expiresAt
       });
 
       await this.prisma.marketplacePayment.update({
@@ -155,9 +202,9 @@ export class MarketplaceService {
       where: { id },
       data: {
         title: body.name.trim(),
-        description: body.description.trim(),
+        description: body.description,
         category: body.category,
-        condition: body.status,
+        condition: body.category === "inmueble" ? "Usado" : body.status ?? "Usado",
         priceCents: Math.round(body.price * 100),
         currency: body.currency ?? current.currency,
         location: body.location,
@@ -276,34 +323,42 @@ export class MarketplaceService {
       if (nextStatus === "rejected") {
         this.logger.error(`Mercado Pago payment ${payment.id} approved but amount/currency mismatch for ${record.id}; treating as rejected.`);
       }
-    } else if (payment.status === "rejected" || payment.status === "cancelled") {
+    } else if (payment.status === "rejected") {
       nextStatus = "rejected";
+    } else if (payment.status === "cancelled") {
+      nextStatus = "cancelled";
     }
 
-    await this.prisma.marketplacePayment.update({
-      where: { id: record.id },
-      data: {
-        mpPaymentId: payment.id,
-        status: nextStatus,
-        rawWebhookPayload: body ?? undefined
+    await this.prisma.$transaction(async (tx) => {
+      await tx.marketplacePayment.update({
+        where: { id: record.id },
+        data: {
+          mpPaymentId: payment.id,
+          status: nextStatus,
+          rawWebhookPayload: body ?? undefined
+        }
+      });
+
+      if (nextStatus === "approved") {
+        // Only advance a listing that is still waiting on this exact payment; never clobber a
+        // listing an admin already approved/rejected, or one already moved by a duplicate webhook.
+        await tx.product.updateMany({
+          where: { id: record.productId, status: "pending_payment" },
+          data: { status: "pending_review", deletedAt: null, moderationNotes: null }
+        });
+      } else if (nextStatus === "rejected" || nextStatus === "cancelled") {
+        await tx.product.updateMany({
+          where: { id: record.productId, status: "pending_payment", deletedAt: null },
+          data: { deletedAt: new Date(), moderationNotes: "Pago no completado.", version: { increment: 1 } }
+        });
       }
     });
-
-    if (nextStatus === "approved") {
-      // Only advance a listing that is still waiting on this exact payment; never clobber a
-      // listing an admin already approved/rejected, or one already moved by a duplicate webhook.
-      await this.prisma.product.updateMany({
-        where: { id: record.productId, status: "pending_payment" },
-        data: { status: "pending_review" }
-      });
-    }
-    // Rejected/cancelled payments intentionally leave the product in "pending_payment" so the
-    // seller can be offered a way to pay again, instead of mislabeling it as moderation-rejected.
 
     return { ok: true };
   }
 
   async listProductsForAdmin(status?: string) {
+    await this.discardStalePendingPaymentProducts();
     const where: any = { deletedAt: null };
     if (status) where.status = status;
 

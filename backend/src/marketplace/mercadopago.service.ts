@@ -48,7 +48,7 @@ export class MercadoPagoService {
     return `${base}/${prefix}/marketplace/payments/webhook`;
   }
 
-  async createPreference(params: { externalReference: string; title: string; amountCents: number; currency: string; returnUrl?: string }): Promise<MpPreference> {
+  async createPreference(params: { externalReference: string; title: string; amountCents: number; currency: string; returnUrl?: string; expiresAt?: Date }): Promise<MpPreference> {
     const accessToken = this.getAccessToken();
     if (!accessToken) {
       throw new BadRequestException("Mercado Pago is not configured.");
@@ -69,6 +69,12 @@ export class MercadoPagoService {
       external_reference: params.externalReference,
       notification_url: notificationUrl
     };
+
+    if (params.expiresAt) {
+      body.expires = true;
+      body.expiration_date_from = new Date().toISOString();
+      body.expiration_date_to = params.expiresAt.toISOString();
+    }
 
     if (backUrl) {
       body.back_urls = { success: backUrl, pending: backUrl, failure: backUrl };

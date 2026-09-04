@@ -48,6 +48,12 @@ export class AdminController {
   }
 
   @UseGuards(CsrfGuard)
+  @Delete("marketplace/products/:id")
+  deleteMarketplaceProduct(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.marketplace.deleteProduct(user, id);
+  }
+
+  @UseGuards(CsrfGuard)
   @Post("notifications/test-push")
   testPush(@CurrentUser() user: RequestUser) {
     return this.admin.sendTestPush(user);
@@ -172,6 +178,18 @@ export class AdminController {
   @Post("sports/tournaments")
   createTournament(@CurrentUser() user: RequestUser, @Body() dto: UpsertTournamentDto) {
     return this.admin.createTournament(user, dto);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Put("sports/tournaments/:tournamentId")
+  updateTournament(@CurrentUser() user: RequestUser, @Param("tournamentId") tournamentId: string, @Body() dto: UpsertTournamentDto) {
+    return this.admin.updateTournament(user, tournamentId, dto);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Delete("sports/tournaments/:tournamentId")
+  deleteTournament(@CurrentUser() user: RequestUser, @Param("tournamentId") tournamentId: string) {
+    return this.admin.deleteTournament(user, tournamentId);
   }
 
   @Get("sports/matches")

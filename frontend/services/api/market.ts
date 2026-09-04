@@ -74,7 +74,7 @@ function normalizeProduct(product: unknown): Product | null {
   const rawDescription = asString(product.description);
   const markerMatch = rawDescription.match(contactPhoneMarkerRegex);
   const contactPhone = markerMatch?.[1]?.trim() ? decodeContactPhone(markerMatch[1].trim()) : undefined;
-  const cleanDescription = rawDescription.replace(contactPhoneMarkerRegex, "").trim();
+  const cleanDescription = rawDescription.replace(contactPhoneMarkerRegex, "");
   const categoryValue = asString(product.category);
   const category = categoryValue in categoryFallbackImage ? categoryValue as Product["category"] : "equipamiento";
   const image = normalizeImageUrl(asString(product.image));
@@ -112,7 +112,7 @@ function normalizeProduct(product: unknown): Product | null {
 }
 
 function stripContactPhoneMarker(description: string) {
-  return description.replace(contactPhoneMarkerRegex, "").trim();
+  return description.replace(contactPhoneMarkerRegex, "");
 }
 
 function encodeDescription(description: string, contactPhone?: string) {

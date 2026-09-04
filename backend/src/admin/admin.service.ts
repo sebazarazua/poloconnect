@@ -38,6 +38,9 @@ export class AdminService {
     }>;
   } | null = null;
 
+  private readonly communityIcons = ["chatbubbles-outline", "people-outline", "trophy-outline", "newspaper-outline", "sparkles-outline"];
+  private readonly communityTones = ["#dbeafe", "#dcfce7", "#fef3c7", "#fce7f3", "#ede9fe", "#cffafe", "#ffedd5"];
+
   async dashboard() {
     const [users, products, rooms, matches, tournaments, contentItems, activity] = await Promise.all([
       this.prisma.user.count({ where: { deletedAt: null } }),
@@ -274,14 +277,15 @@ export class AdminService {
 
   async createRoom(user: RequestUser, dto: CreateCommunityRoomDto) {
     const externalCode = await this.resolveRoomCode(dto.externalCode ?? dto.title);
+    const visualIndex = randomBytes(1)[0];
 
     const room = await this.prisma.chatRoom.create({
       data: {
         title: dto.title.trim(),
         description: dto.description?.trim() || null,
-        kind: dto.kind?.trim() || "general",
-        icon: dto.icon?.trim() || "chatbubbles-outline",
-        tone: dto.tone?.trim() || null,
+        kind: "general",
+        icon: this.communityIcons[visualIndex % this.communityIcons.length],
+        tone: this.communityTones[visualIndex % this.communityTones.length],
         externalCode,
         isRecommended: dto.isRecommended ?? false,
         isPublic: dto.isPublic ?? true,
@@ -295,22 +299,13 @@ export class AdminService {
   }
 
   async updateRoom(user: RequestUser, roomId: string, dto: UpdateCommunityRoomDto) {
-    const current = await this.ensureRoom(roomId);
-
-    let externalCode = current.externalCode;
-    if (dto.externalCode !== undefined && dto.externalCode.trim() !== current.externalCode) {
-      externalCode = await this.resolveRoomCode(dto.externalCode || current.title, roomId);
-    }
+    await this.ensureRoom(roomId);
 
     const room = await this.prisma.chatRoom.update({
       where: { id: roomId },
       data: {
         title: dto.title?.trim(),
         description: dto.description === undefined ? undefined : dto.description.trim() || null,
-        kind: dto.kind?.trim(),
-        icon: dto.icon === undefined ? undefined : dto.icon.trim() || null,
-        tone: dto.tone === undefined ? undefined : dto.tone.trim() || null,
-        externalCode,
         isRecommended: dto.isRecommended,
         isPublic: dto.isPublic
       }
@@ -456,7 +451,7 @@ export class AdminService {
     const tournament = await this.prisma.tournament.create({
       data: {
         name: dto.name,
-        slug: dto.slug,
+        slug: await this.generateUniqueTournamentSlug(dto.slug || dto.name),
         clubId: dto.clubId,
         startDate: new Date(dto.startDate),
         endDate: dto.endDate ? new Date(dto.endDate) : null,
@@ -466,14 +461,57 @@ export class AdminService {
         maxTeams: dto.maxTeams,
         contactName: dto.contactName,
         contactPhone: dto.contactPhone,
-        registrationStatus: dto.registrationStatus,
-        status: dto.status,
+        registrationStatus: "open",
+        status: "scheduled",
         createdBy: user.id
       }
     });
 
     await this.audit(user, "admin.tournament.create", "Tournament", tournament.id);
     return tournament;
+  }
+
+  async updateTournament(user: RequestUser, tournamentId: string, dto: UpsertTournamentDto) {
+    await this.ensureTournament(tournamentId);
+
+    const tournament = await this.prisma.tournament.update({
+      where: { id: tournamentId },
+      data: {
+        name: dto.name,
+        clubId: dto.clubId,
+        startDate: new Date(dto.startDate),
+        endDate: dto.endDate ? new Date(dto.endDate) : null,
+        levelLabel: dto.levelLabel,
+        minHandicap: dto.minHandicap,
+        maxHandicap: dto.maxHandicap,
+        maxTeams: dto.maxTeams,
+        contactName: dto.contactName,
+        contactPhone: dto.contactPhone,
+        version: { increment: 1 }
+      }
+    });
+
+    await this.audit(user, "admin.tournament.update", "Tournament", tournamentId);
+    return tournament;
+  }
+
+  async deleteTournament(user: RequestUser, tournamentId: string) {
+    await this.ensureTournament(tournamentId);
+    await this.prisma.tournament.update({ where: { id: tournamentId }, data: { deletedAt: new Date(), version: { increment: 1 } } });
+    await this.audit(user, "admin.tournament.delete", "Tournament", tournamentId);
+    return { ok: true };
+  }
+
+  private async generateUniqueTournamentSlug(source: string) {
+    const base = this.slugify(source) || `torneo-${randomBytes(3).toString("hex")}`;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const candidate = attempt === 0 ? base : `${base}-${randomBytes(3).toString("hex")}`;
+      const existing = await this.prisma.tournament.findUnique({ where: { slug: candidate } });
+      if (!existing) return candidate;
+    }
+
+    return `${base}-${randomBytes(4).toString("hex")}`;
   }
 
   async listMatches() {
@@ -752,7 +790,7 @@ export class AdminService {
       });
 
       if (!response.ok) {
-        return [];
+        throw new Error(`Polo Hub feed returned ${response.status}`);
       }
 
       const xml = await response.text();
@@ -793,6 +831,10 @@ export class AdminService {
 
       const items = parsed.filter((item): item is NonNullable<typeof item> => Boolean(item)).slice(0, limit);
 
+      if (items.length === 0 && this.polohubCache?.items.length) {
+        return this.polohubCache.items.slice(0, limit);
+      }
+
       this.polohubCache = {
         expiresAt: now + 1000 * 60 * 10,
         items
@@ -800,6 +842,10 @@ export class AdminService {
 
       return items;
     } catch {
+      if (this.polohubCache?.items.length) {
+        return this.polohubCache.items.slice(0, limit);
+      }
+
       return [];
     }
   }
@@ -936,6 +982,12 @@ export class AdminService {
     const match = await this.prisma.match.findFirst({ where: { id: matchId, deletedAt: null } });
     if (!match) throw new NotFoundException("Match not found.");
     return match;
+  }
+
+  private async ensureTournament(tournamentId: string) {
+    const tournament = await this.prisma.tournament.findFirst({ where: { id: tournamentId, deletedAt: null } });
+    if (!tournament) throw new NotFoundException("Tournament not found.");
+    return tournament;
   }
 
   private async logModeration(user: RequestUser, roomId: string, targetUserId: string, action: "added" | "removed" | "banned" | "unbanned", reason?: string, metadata: Record<string, unknown> = {}) {

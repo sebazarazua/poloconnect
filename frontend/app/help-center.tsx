@@ -116,7 +116,7 @@ const helpContent: Record<Locale, HelpContent> = {
           "Si recordás la clave actual, usá Cambiar contraseña dentro de Mi perfil."
         ],
         icon: "key-outline",
-        route: "/forgot-password"
+        route: { pathname: "/profile", params: { section: "password" } }
       },
       {
         id: "market-buy",
@@ -309,7 +309,7 @@ const helpContent: Record<Locale, HelpContent> = {
         summary: "Use email code if you forgot it, or change it from profile.",
         steps: ["Tap Forgot password from login or profile.", "Request the code, check your email, and set a new password.", "If you know your current password, use Change password in My profile."],
         icon: "key-outline",
-        route: "/forgot-password"
+        route: { pathname: "/profile", params: { section: "password" } }
       },
       {
         id: "market-buy",

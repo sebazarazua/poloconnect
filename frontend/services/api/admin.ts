@@ -79,7 +79,7 @@ export type AdminTournament = {
 
 export type UpsertAdminTournamentPayload = {
   name: string;
-  slug: string;
+  slug?: string;
   clubId?: string;
   startDate: string;
   endDate?: string;
@@ -219,6 +219,19 @@ export async function createAdminTournament(payload: UpsertAdminTournamentPayloa
   return apiRequest<AdminTournament>("/admin/sports/tournaments", {
     method: "POST",
     body: JSON.stringify(payload)
+  });
+}
+
+export async function updateAdminTournament(id: string, payload: UpsertAdminTournamentPayload) {
+  return apiRequest<AdminTournament>(`/admin/sports/tournaments/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteAdminTournament(id: string) {
+  return apiRequest<{ ok: boolean }>(`/admin/sports/tournaments/${encodeURIComponent(id)}`, {
+    method: "DELETE"
   });
 }
 
@@ -429,3 +442,8 @@ export async function rejectAdminMarketplaceProduct(id: string, reason?: string)
   });
 }
 
+export async function deleteAdminMarketplaceProduct(id: string) {
+  return apiRequest<{ ok: boolean }>(`/admin/marketplace/products/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+}

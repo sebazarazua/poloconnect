@@ -258,27 +258,29 @@ export default function MarketPublishScreen() {
           />
         </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>{t("marketPublish.state")}</Text>
-          <View style={styles.stateRow}>
-            {productStates.map((state) => (
-              <Pressable
-                key={state}
-                style={[styles.stateChip, selectedState === state && styles.stateChipActive]}
-                onPress={() => setSelectedState(state)}
-              >
-                <Text
-                  style={[
-                    styles.stateChipText,
-                    selectedState === state && styles.stateChipTextActive
-                  ]}
+        {selectedCategory !== "inmueble" ? (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionLabel}>{t("marketPublish.state")}</Text>
+            <View style={styles.stateRow}>
+              {productStates.map((state) => (
+                <Pressable
+                  key={state}
+                  style={[styles.stateChip, selectedState === state && styles.stateChipActive]}
+                  onPress={() => setSelectedState(state)}
                 >
-                  {state === "Nuevo" ? t("marketPublish.status.new") : state === "Usado" ? t("marketPublish.status.used") : t("marketPublish.status.refurbished")}
-                </Text>
-              </Pressable>
-            ))}
+                  <Text
+                    style={[
+                      styles.stateChipText,
+                      selectedState === state && styles.stateChipTextActive
+                    ]}
+                  >
+                    {state === "Nuevo" ? t("marketPublish.status.new") : state === "Usado" ? t("marketPublish.status.used") : t("marketPublish.status.refurbished")}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
-        </View>
+        ) : null}
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionLabel}>{t("marketPublish.productType")}</Text>
@@ -367,7 +369,7 @@ export default function MarketPublishScreen() {
           {!useAccountPhone ? (
             <TextInput
               style={styles.input}
-              placeholder="Ej: +54 11 5555-5555"
+              placeholder=""
               placeholderTextColor={colors.muted}
               value={customContactPhone}
               onChangeText={setCustomContactPhone}
@@ -385,8 +387,8 @@ export default function MarketPublishScreen() {
               images: imageUrls,
               name: name.trim(),
               price: normalizedPrice,
-              status: selectedState,
-              description: description.trim(),
+              status: selectedCategory === "inmueble" ? "Usado" : selectedState,
+              description,
               category: selectedCategory,
               contactPhone: useAccountPhone ? undefined : customContactPhone.trim() || undefined
             };

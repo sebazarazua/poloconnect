@@ -4,6 +4,7 @@ import type { AuthUser } from "@/services/auth";
 export type UpdateProfilePayload = {
   firstName: string;
   lastName: string;
+  username?: string;
 };
 
 export type UploadableImage = {

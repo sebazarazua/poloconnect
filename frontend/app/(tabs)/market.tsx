@@ -151,7 +151,7 @@ export default function MarketScreen() {
 
         {/* Category Tabs */}
         <View style={styles.categoriesContainer}>
-          {(["todos", "equipamiento", "indumentaria", "vehiculos"] as const).map((category) => (
+          {(["todos", "equipamiento", "indumentaria", "vehiculos", "inmueble"] as const).map((category) => (
             <Pressable
               key={category}
               style={[
@@ -400,11 +400,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingBottom: 20
   },
   columnWrapper: {
-    gap: 12,
+    justifyContent: "space-between",
     marginBottom: 12
   },
   productCardContainer: {
-    flex: 1
+    width: "48%"
   },
   productCard: {
     backgroundColor: colors.surface,
@@ -412,8 +412,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: colors.border,
-    flex: 1,
-    minHeight: 280
+    height: 280
   },
   imageContainer: {
     position: "relative",

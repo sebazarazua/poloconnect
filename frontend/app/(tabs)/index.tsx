@@ -15,7 +15,7 @@ import {
   useWindowDimensions,
   View
 } from "react-native";
-import { SectionTitle } from "@/components/Card";
+import { Card, SectionTitle } from "@/components/Card";
 import { AdCarousel } from "@/components/AdCarousel";
 import { Screen } from "@/components/Screen";
 import { useAppDrawer } from "@/components/AppDrawer";
@@ -74,6 +74,8 @@ export default function HomeScreen() {
     compactAds: [],
     news: []
   });
+  const [homeContentLoading, setHomeContentLoading] = useState(true);
+  const [homeContentError, setHomeContentError] = useState(false);
   const [liveMatches, setLiveMatches] = useState<Match[]>([]);
   const [liveSpotlightEvents, setLiveSpotlightEvents] = useState<SpotlightEvent[]>([]);
 
@@ -111,8 +113,10 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
+    setHomeContentLoading(true);
     void getHomeContent()
       .then((payload) => {
+        setHomeContentError(false);
         setHomeContent({
           heroAds: payload.heroAds.map((item) => ({ imageUrl: item.imageUrl, targetUrl: item.targetUrl ?? undefined })),
           compactAds: payload.compactAds.map((item) => ({ imageUrl: item.imageUrl, targetUrl: item.targetUrl ?? undefined })),
@@ -126,7 +130,10 @@ export default function HomeScreen() {
         });
       })
       .catch(() => {
-        setHomeContent({ heroAds: [], compactAds: [], news: [] });
+        setHomeContentError(true);
+      })
+      .finally(() => {
+        setHomeContentLoading(false);
       });
 
     void listMatches(undefined, "live")
@@ -510,6 +517,16 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
+      {heroItems.length === 0 ? (
+        <Card style={styles.homeStatusCard}>
+          <Ionicons name={homeContentError ? "warning-outline" : "hourglass-outline"} size={20} color={homeContentError ? colors.danger : colors.primaryDark} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.homeStatusTitle}>{homeContentError ? "No se pudo cargar el inicio" : homeContentLoading ? t("common.loading") : "Sin contenido disponible"}</Text>
+            <Text style={styles.homeStatusText}>{homeContentError ? "Las noticias y destacados no están disponibles por un error del proveedor." : "Estamos preparando las noticias y destacados."}</Text>
+          </View>
+        </Card>
+      ) : null}
+
       <View style={styles.heroDots}>
         {heroItems.map((_, index) => (
           <View
@@ -840,6 +857,24 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     gap: 6,
     marginTop: 10,
     marginBottom: 14
+  },
+  homeStatusCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: colors.background,
+    marginBottom: 14
+  },
+  homeStatusTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  homeStatusText: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3
   },
 
   // News slide

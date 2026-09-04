@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Linking,
@@ -23,11 +23,13 @@ export default function ProfileScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const router = useRouter();
+  const params = useLocalSearchParams<{ section?: string }>();
   const { user, updateUser, signOut } = useAuth();
   const { t } = useLocale();
 
   const [firstName, setFirstName] = useState(user?.firstName ?? "");
   const [lastName, setLastName] = useState(user?.lastName ?? "");
+  const [usernameDraft, setUsernameDraft] = useState(user?.username ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -38,11 +40,24 @@ export default function ProfileScreen() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPhoto, setSavingPhoto] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
+  const screenScrollRef = useRef<any>(null);
+  const passwordSectionY = useRef(0);
 
   useEffect(() => {
     setFirstName(user?.firstName ?? "");
     setLastName(user?.lastName ?? "");
-  }, [user?.id, user?.firstName, user?.lastName]);
+    setUsernameDraft(user?.username ?? "");
+  }, [user?.id, user?.firstName, user?.lastName, user?.username]);
+
+  useEffect(() => {
+    if (params.section !== "password") return;
+
+    const timer = setTimeout(() => {
+      screenScrollRef.current?.scrollTo({ y: Math.max(0, passwordSectionY.current - 12), animated: true });
+    }, 180);
+
+    return () => clearTimeout(timer);
+  }, [params.section]);
 
   const uploadSelectedAvatar = async (asset: ImagePicker.ImagePickerAsset) => {
     if (!asset.uri) return;
@@ -122,9 +137,15 @@ export default function ProfileScreen() {
   const handleSaveProfile = async () => {
     const trimmedFirstName = firstName.trim();
     const trimmedLastName = lastName.trim();
+    const trimmedUsername = usernameDraft.trim().toLowerCase();
 
     if (trimmedFirstName.length < 2 || trimmedLastName.length < 2) {
       Alert.alert(t("profile.errorTitle"), t("profile.nameRequired"));
+      return;
+    }
+
+    if (!/^[a-z0-9._-]{3,30}$/.test(trimmedUsername)) {
+      Alert.alert(t("profile.errorTitle"), t("profile.usernameInvalid"));
       return;
     }
 
@@ -133,7 +154,8 @@ export default function ProfileScreen() {
     try {
       const nextUser = await updateMyProfile({
         firstName: trimmedFirstName,
-        lastName: trimmedLastName
+        lastName: trimmedLastName,
+        username: trimmedUsername
       });
       updateUser(nextUser);
       Alert.alert(t("profile.profileUpdatedTitle"), t("profile.profileUpdatedText"));
@@ -198,7 +220,10 @@ export default function ProfileScreen() {
   const email = user?.email ?? "—";
   const username = user?.username ?? "—";
   const avatarSource = resolveUploadedUrl(user?.avatarUrl);
-  const profileHasChanges = firstName.trim() !== (user?.firstName ?? "") || lastName.trim() !== (user?.lastName ?? "");
+  const profileHasChanges =
+    firstName.trim() !== (user?.firstName ?? "") ||
+    lastName.trim() !== (user?.lastName ?? "") ||
+    usernameDraft.trim().toLowerCase() !== (user?.username ?? "");
 
   return (
     <Screen
@@ -207,6 +232,7 @@ export default function ProfileScreen() {
       subtitle={t("profile.subtitle")}
       showBackButton
       onBackPress={() => router.back()}
+      scrollViewRef={screenScrollRef}
     >
       {/* Avatar */}
       <View style={styles.avatarSection}>
@@ -254,6 +280,19 @@ export default function ProfileScreen() {
               autoCapitalize="words"
             />
           </View>
+
+          <View style={styles.editableField}>
+            <Text style={styles.inputLabel}>{t("common.username")}</Text>
+            <TextInput
+              style={styles.profileInput}
+              value={usernameDraft}
+              onChangeText={setUsernameDraft}
+              placeholder=""
+              placeholderTextColor={colors.muted}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
         </View>
 
         <Pressable
@@ -282,22 +321,10 @@ export default function ProfileScreen() {
 
         <View style={styles.divider} />
 
-        <View style={styles.fieldRow}>
-          <View style={styles.fieldIcon}>
-            <Ionicons name="at-outline" size={16} color={colors.muted} />
-          </View>
-          <View style={styles.fieldBody}>
-            <Text style={styles.fieldLabel}>{t("common.username")}</Text>
-            <Text style={styles.fieldValue}>@{username}</Text>
-          </View>
-          <View style={styles.lockedBadge}>
-            <Ionicons name="lock-closed-outline" size={12} color={colors.muted} />
-          </View>
-        </View>
       </View>
 
       {/* Cambiar contraseña */}
-      <View style={styles.section}>
+      <View style={styles.section} onLayout={(event) => { passwordSectionY.current = event.nativeEvent.layout.y; }}>
         <Text style={styles.sectionTitle}>{t("profile.changePassword")}</Text>
 
         <View style={styles.inputWrap}>

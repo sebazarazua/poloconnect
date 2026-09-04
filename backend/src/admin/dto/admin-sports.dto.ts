@@ -3,7 +3,7 @@ import { IsDateString, IsInt, IsOptional, IsString, MaxLength, Min } from "class
 
 export class UpsertTournamentDto {
   @IsString() @MaxLength(140) name!: string;
-  @IsString() @MaxLength(140) slug!: string;
+  @IsOptional() @IsString() @MaxLength(140) slug?: string;
   @IsOptional() @IsString() clubId?: string;
   @IsDateString() startDate!: string;
   @IsOptional() @IsDateString() endDate?: string;

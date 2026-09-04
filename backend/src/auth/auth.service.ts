@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import * as argon2 from "argon2";
@@ -331,23 +332,27 @@ export class AuthService {
 
     if (!user) {
       const playerRole = await this.ensureRole("player", "Player");
-      const usernameSeed = this.createUsernameSeed(normalizedEmail ?? `${provider}-${providerSubject}`);
+      const usernameSeed = this.createUsernameSeed(
+        provider === "google" && normalizedEmail
+          ? normalizedEmail.split("@")[0]
+          : normalizedEmail ?? `${provider}-${providerSubject}`
+      );
       const username = await this.createUniqueUsername(usernameSeed);
       const passwordHash = await argon2.hash(randomBytes(32).toString("hex"));
 
-      user = await this.prisma.user.create({
+      user = await this.createSocialUserWithUniqueUsername({
+        usernameSeed,
+        initialUsername: username,
         data: {
           firstName: (profile.firstName?.trim() || "Usuario").slice(0, 100),
           lastName: (profile.lastName?.trim() || this.defaultLastName(provider)).slice(0, 100),
           email: normalizedEmail ?? `${provider}-${providerSubject}@polo-connect.local`,
-          username,
           phone: null,
           emailVerifiedAt: profile.emailVerified ? new Date() : null,
           credential: { create: { passwordHash } },
           settings: { create: {} },
           roles: { create: { roleId: playerRole.id } }
-        },
-        include: { roles: { include: { role: true } }, credential: true }
+        }
       });
     } else if (!user.credential) {
       const passwordHash = await argon2.hash(randomBytes(32).toString("hex"));
@@ -399,6 +404,35 @@ export class AuthService {
     }
 
     return candidate;
+  }
+
+  private async createSocialUserWithUniqueUsername(params: {
+    usernameSeed: string;
+    initialUsername: string;
+    data: Omit<Prisma.UserCreateInput, "username">;
+  }) {
+    let candidate = params.initialUsername;
+
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      try {
+        return await this.prisma.user.create({
+          data: {
+            ...params.data,
+            username: candidate
+          },
+          include: { roles: { include: { role: true } }, credential: true }
+        });
+      } catch (error) {
+        const uniqueTarget = error instanceof Prisma.PrismaClientKnownRequestError ? String(error.meta?.target ?? "") : "";
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" && uniqueTarget.includes("username"))) {
+          throw error;
+        }
+
+        candidate = `${params.usernameSeed}${attempt + 2}`;
+      }
+    }
+
+    throw new ConflictException("No se pudo generar un usuario único para esta cuenta.");
   }
 
   private createUsernameSeed(value: string) {

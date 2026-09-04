@@ -13,6 +13,7 @@ import {
   TextInput,
   View
 } from "react-native";
+import { AdminDateTimeField } from "@/components/AdminDateTimeField";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,6 +31,7 @@ import {
   uploadHorseAuctionEventImage,
   uploadHorseAuctionHorseImage
 } from "@/services/api/horse-auctions";
+import { ARGENTINA_TIME_ZONE, adminTimeZoneOptions, fromZonedDateTimeInputs, toZonedDateTimeInputs } from "@/utils/argentinaTime";
 
 function toSlug(value: string) {
   return value
@@ -38,10 +40,6 @@ function toSlug(value: string) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
-}
-
-function dateToInput(value: string) {
-  return new Date(value).toISOString().slice(0, 16);
 }
 
 function PreviewImage({ uri, width, height, borderRadius }: { uri: string; width: number; height: number; borderRadius: number }) {
@@ -94,6 +92,8 @@ export default function HorseAuctionsAdminScreen() {
   const [imageUrl, setImageUrl] = useState("");
   const [address, setAddress] = useState("");
   const [eventDate, setEventDate] = useState("");
+  const [eventTime, setEventTime] = useState("");
+  const [eventTimeZone, setEventTimeZone] = useState(ARGENTINA_TIME_ZONE);
   const [contactPhone, setContactPhone] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
@@ -115,7 +115,7 @@ export default function HorseAuctionsAdminScreen() {
 
   const persistEventImageIfEditing = async (nextImageUrl: string) => {
     if (!selectedEventId) return;
-    const parsedDate = new Date(eventDate);
+    const parsedDate = fromZonedDateTimeInputs(eventDate, eventTime, eventTimeZone);
     if (Number.isNaN(parsedDate.getTime())) {
       Alert.alert(t("profile.errorTitle"), t("auctions.loadError"));
       return;
@@ -163,7 +163,10 @@ export default function HorseAuctionsAdminScreen() {
       setSlug("");
       setImageUrl("");
       setAddress("");
-      setEventDate(new Date().toISOString().slice(0, 16));
+      const now = toZonedDateTimeInputs(new Date(), ARGENTINA_TIME_ZONE);
+      setEventDate(now.date);
+      setEventTime(now.time);
+      setEventTimeZone(ARGENTINA_TIME_ZONE);
       setContactPhone("");
       setContactEmail("");
       setWebsiteUrl("");
@@ -175,7 +178,10 @@ export default function HorseAuctionsAdminScreen() {
     setSlug(selectedEvent.slug);
     setImageUrl(selectedEvent.imageUrl ?? "");
     setAddress(selectedEvent.venue);
-    setEventDate(dateToInput(selectedEvent.eventDate));
+    const selectedDate = toZonedDateTimeInputs(new Date(selectedEvent.eventDate), ARGENTINA_TIME_ZONE);
+    setEventDate(selectedDate.date);
+    setEventTime(selectedDate.time);
+    setEventTimeZone(ARGENTINA_TIME_ZONE);
     setContactPhone(selectedEvent.contactPhone ?? "");
     setContactEmail(selectedEvent.contactEmail ?? "");
     setWebsiteUrl(selectedEvent.websiteUrl ?? "");
@@ -286,6 +292,12 @@ export default function HorseAuctionsAdminScreen() {
 
     setSavingEvent(true);
     try {
+      const parsedEventDate = fromZonedDateTimeInputs(eventDate, eventTime, eventTimeZone);
+      if (Number.isNaN(parsedEventDate.getTime())) {
+        Alert.alert(t("profile.errorTitle"), t("auctions.loadError"));
+        return;
+      }
+
       const payload = {
         slug: (slug.trim() || toSlug(title)).slice(0, 120),
         title: title.trim(),
@@ -294,7 +306,7 @@ export default function HorseAuctionsAdminScreen() {
         venue: address.trim(),
         city: address.trim(),
         country: "",
-        eventDate: new Date(eventDate).toISOString(),
+        eventDate: parsedEventDate.toISOString(),
         contactName: title.trim(),
         contactPhone: contactPhone.trim() || null,
         contactEmail: contactEmail.trim() || null,
@@ -458,7 +470,17 @@ export default function HorseAuctionsAdminScreen() {
             if (!selectedEventId) setSlug(toSlug(value));
           }} />
           <LabeledInput label="Dirección" value={address} onChangeText={setAddress} />
-          <LabeledInput label={t("auctions.dateTime")} value={eventDate} onChangeText={setEventDate} placeholder="2026-11-04T18:00" />
+          <AdminDateTimeField
+            label={t("auctions.dateTime")}
+            date={eventDate}
+            time={eventTime}
+            timezone={eventTimeZone}
+            timezoneOptions={adminTimeZoneOptions}
+            onDateChange={setEventDate}
+            onTimeChange={setEventTime}
+            onTimezoneChange={setEventTimeZone}
+            required
+          />
           <LabeledInput label={t("common.phone")} value={contactPhone} onChangeText={setContactPhone} />
           <LabeledInput label={t("common.email")} value={contactEmail} onChangeText={setContactEmail} autoCapitalize="none" />
           <LabeledInput label={t("auctions.viewWebsite")} value={websiteUrl} onChangeText={setWebsiteUrl} autoCapitalize="none" />

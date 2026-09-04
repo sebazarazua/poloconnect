@@ -2,6 +2,7 @@
 import { Redirect, useRouter } from "expo-router";
 import { type ComponentProps, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { AdminDateTimeField } from "@/components/AdminDateTimeField";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,6 +28,8 @@ import {
   deleteCommunityRoom,
   removeCommunityMember,
   createAdminTournament,
+  updateAdminTournament,
+  deleteAdminTournament,
   listAdminTournaments,
   createAdminTeam,
   listAdminTeams,
@@ -49,6 +52,7 @@ import {
   listAdminMarketplaceProducts,
   approveAdminMarketplaceProduct,
   rejectAdminMarketplaceProduct,
+  deleteAdminMarketplaceProduct,
   type AdminContentItem,
   type AdminTournament,
   type AdminTeam,
@@ -57,7 +61,7 @@ import {
   type AdminMarketplaceProduct
 } from "@/services/api/admin";
 import { fetchMatch, updateMatchLiveState } from "@/services/api/matches";
-import { fromArgentinaDateTimeInputs, toArgentinaDateTimeInputs } from "@/utils/argentinaTime";
+import { ARGENTINA_TIME_ZONE, adminTimeZoneOptions, fromZonedDateTimeInputs, toZonedDateTimeInputs } from "@/utils/argentinaTime";
 import {
   type Brand,
   type BrandProduct,
@@ -75,10 +79,8 @@ import {
 type Tab = "dashboard" | "content" | "community" | "brands" | "marketplace" | "auctions" | "tournaments" | "matches" | "events";
 
 const contentSections = [
-  { section: "branding", slot: "app_logo", titleKey: "adminPanel.section.logoTitle" as const, subtitleKey: "adminPanel.section.logoText" as const },
   { section: "home", slot: "hero_ads", titleKey: "adminPanel.section.homeHeroTitle" as const, subtitleKey: "adminPanel.section.homeHeroText" as const },
   { section: "home", slot: "compact_ads", titleKey: "adminPanel.section.homeCompactTitle" as const, subtitleKey: "adminPanel.section.homeCompactText" as const },
-  { section: "home", slot: "main_news", titleKey: "adminPanel.section.homeNewsTitle" as const, subtitleKey: "adminPanel.section.homeNewsText" as const },
   { section: "community", slot: "ads", titleKey: "adminPanel.section.communityTitle" as const, subtitleKey: "adminPanel.section.communityText" as const },
   { section: "live", slot: "ads", titleKey: "adminPanel.section.liveTitle" as const, subtitleKey: "adminPanel.section.liveText" as const }
 ];
@@ -108,8 +110,6 @@ function slugify(value: string) {
 }
 
 function inferType(section: string, slot: string): AdminContentItem["type"] {
-  if (section === "branding" && slot === "app_logo") return "logo";
-  if (section === "home" && slot === "main_news") return "news";
   return "ad";
 }
 
@@ -220,10 +220,6 @@ export default function AdminPanelScreen() {
   const emptyRoomForm = {
     title: "",
     description: "",
-    kind: "general",
-    icon: "chatbubbles-outline",
-    tone: "",
-    externalCode: "",
     isRecommended: false,
     isPublic: true
   };
@@ -261,10 +257,9 @@ export default function AdminPanelScreen() {
   // Tournaments state
   const [tournaments, setTournaments] = useState<AdminTournament[]>([]);
   const [tournamentSaving, setTournamentSaving] = useState(false);
+  const [editingTournamentId, setEditingTournamentId] = useState<string | null>(null);
   const [tournamentForm, setTournamentForm] = useState({
     name: "",
-    slug: "",
-    clubId: "",
     startDate: "",
     endDate: "",
     levelLabel: "",
@@ -272,9 +267,7 @@ export default function AdminPanelScreen() {
     maxHandicap: "",
     maxTeams: "",
     contactName: "",
-    contactPhone: "",
-    registrationStatus: "open",
-    status: "scheduled"
+    contactPhone: ""
   });
 
   const isAdmin = useMemo(() => {
@@ -300,6 +293,7 @@ export default function AdminPanelScreen() {
     tournamentId: "",
     scheduledDate: "",
     scheduledTime: "",
+    timeZone: ARGENTINA_TIME_ZONE,
     durationMinutes: "",
     competitionName: "",
     youtubeUrl: "",
@@ -327,6 +321,7 @@ export default function AdminPanelScreen() {
     description: "",
     scheduledDate: "",
     scheduledTime: "",
+    timeZone: ARGENTINA_TIME_ZONE,
     durationMinutes: "",
     youtubeUrl: "",
     backgroundImageUrl: ""
@@ -661,10 +656,6 @@ export default function AdminPanelScreen() {
     setRoomForm({
       title: room.title,
       description: room.description ?? "",
-      kind: room.kind ?? "general",
-      icon: room.icon ?? "chatbubbles-outline",
-      tone: room.tone ?? "",
-      externalCode: room.externalCode ?? "",
       isRecommended: room.isRecommended,
       isPublic: room.isPublic
     });
@@ -679,10 +670,6 @@ export default function AdminPanelScreen() {
     const payload = {
       title: roomForm.title.trim(),
       description: roomForm.description.trim() || undefined,
-      kind: roomForm.kind.trim() || undefined,
-      icon: roomForm.icon.trim() || undefined,
-      tone: roomForm.tone.trim() || undefined,
-      externalCode: roomForm.externalCode.trim() || undefined,
       isRecommended: roomForm.isRecommended,
       isPublic: roomForm.isPublic
     };
@@ -712,41 +699,80 @@ export default function AdminPanelScreen() {
     }
   };
 
+  const emptyTournamentForm = () => ({
+    name: "",
+    startDate: "",
+    endDate: "",
+    levelLabel: "",
+    minHandicap: "",
+    maxHandicap: "",
+    maxTeams: "",
+    contactName: "",
+    contactPhone: ""
+  });
+
+  const resetTournamentForm = () => {
+    setEditingTournamentId(null);
+    setTournamentForm(emptyTournamentForm());
+  };
+
+  const startEditTournament = (tournament: AdminTournament) => {
+    setEditingTournamentId(tournament.id);
+    setTournamentForm({
+      name: tournament.name,
+      startDate: toZonedDateTimeInputs(new Date(tournament.startDate), ARGENTINA_TIME_ZONE).date,
+      endDate: tournament.endDate ? toZonedDateTimeInputs(new Date(tournament.endDate), ARGENTINA_TIME_ZONE).date : "",
+      levelLabel: tournament.levelLabel ?? "",
+      minHandicap: tournament.minHandicap !== null && tournament.minHandicap !== undefined ? String(tournament.minHandicap) : "",
+      maxHandicap: tournament.maxHandicap !== null && tournament.maxHandicap !== undefined ? String(tournament.maxHandicap) : "",
+      maxTeams: tournament.maxTeams ? String(tournament.maxTeams) : "",
+      contactName: tournament.contactName ?? "",
+      contactPhone: tournament.contactPhone ?? ""
+    });
+  };
+
+  const removeTournament = async (tournament: AdminTournament) => {
+    try {
+      await deleteAdminTournament(tournament.id);
+      const next = await listAdminTournaments();
+      setTournaments(next);
+      if (editingTournamentId === tournament.id) resetTournamentForm();
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "No se pudo eliminar el torneo.");
+    }
+  };
+
   const saveTournament = async () => {
     if (!tournamentForm.name.trim()) {
       Alert.alert("Error", "El nombre del torneo es obligatorio.");
       return;
     }
 
-    const normalizedSlug = slugify(tournamentForm.slug.trim() || tournamentForm.name.trim());
-
     const startDateRaw = tournamentForm.startDate.trim();
     if (!startDateRaw) {
-      Alert.alert("Error", "La fecha de inicio es obligatoria (YYYY-MM-DD).");
+      Alert.alert("Error", "La fecha de inicio es obligatoria.");
       return;
     }
 
-    const startDateIso = new Date(`${startDateRaw}T09:00:00.000Z`);
+    const startDateIso = fromZonedDateTimeInputs(startDateRaw, "09:00", ARGENTINA_TIME_ZONE);
     if (Number.isNaN(startDateIso.getTime())) {
-      Alert.alert("Error", "La fecha de inicio no es válida. Usá formato YYYY-MM-DD.");
+      Alert.alert("Error", "La fecha de inicio no es válida.");
       return;
     }
 
     let endDateIso: Date | undefined;
     if (tournamentForm.endDate.trim()) {
-      endDateIso = new Date(`${tournamentForm.endDate.trim()}T23:00:00.000Z`);
+      endDateIso = fromZonedDateTimeInputs(tournamentForm.endDate.trim(), "23:59", ARGENTINA_TIME_ZONE);
       if (Number.isNaN(endDateIso.getTime())) {
-        Alert.alert("Error", "La fecha de fin no es válida. Usá formato YYYY-MM-DD.");
+        Alert.alert("Error", "La fecha de fin no es válida.");
         return;
       }
     }
 
     try {
       setTournamentSaving(true);
-      await createAdminTournament({
+      const payload = {
         name: tournamentForm.name.trim(),
-        slug: normalizedSlug,
-        clubId: tournamentForm.clubId.trim() || undefined,
         startDate: startDateIso.toISOString(),
         endDate: endDateIso?.toISOString(),
         levelLabel: tournamentForm.levelLabel.trim() || undefined,
@@ -754,31 +780,21 @@ export default function AdminPanelScreen() {
         maxHandicap: tournamentForm.maxHandicap.trim() ? Number(tournamentForm.maxHandicap) : undefined,
         maxTeams: tournamentForm.maxTeams.trim() ? Number(tournamentForm.maxTeams) : undefined,
         contactName: tournamentForm.contactName.trim() || undefined,
-        contactPhone: tournamentForm.contactPhone.trim() || undefined,
-        registrationStatus: tournamentForm.registrationStatus.trim() || undefined,
-        status: tournamentForm.status.trim() || undefined
-      });
+        contactPhone: tournamentForm.contactPhone.trim() || undefined
+      };
+
+      if (editingTournamentId) {
+        await updateAdminTournament(editingTournamentId, payload);
+      } else {
+        await createAdminTournament(payload);
+      }
 
       const next = await listAdminTournaments();
       setTournaments(next);
-      setTournamentForm({
-        name: "",
-        slug: "",
-        clubId: "",
-        startDate: "",
-        endDate: "",
-        levelLabel: "",
-        minHandicap: "",
-        maxHandicap: "",
-        maxTeams: "",
-        contactName: "",
-        contactPhone: "",
-        registrationStatus: "open",
-        status: "scheduled"
-      });
-      Alert.alert("Listo", "Torneo creado correctamente.");
+      resetTournamentForm();
+      Alert.alert("Listo", editingTournamentId ? "Torneo actualizado correctamente." : "Torneo creado correctamente.");
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "No se pudo crear el torneo.");
+      Alert.alert("Error", err?.message ?? "No se pudo guardar el torneo.");
     } finally {
       setTournamentSaving(false);
     }
@@ -823,7 +839,7 @@ export default function AdminPanelScreen() {
     const durationMinutes = match.endsAt
       ? Math.round((new Date(match.endsAt).getTime() - scheduled.getTime()) / 60000)
       : undefined;
-    const { date, time } = toArgentinaDateTimeInputs(scheduled);
+    const { date, time } = toZonedDateTimeInputs(scheduled, ARGENTINA_TIME_ZONE);
 
     setEditingMatchId(match.id);
     setMatchForm({
@@ -832,6 +848,7 @@ export default function AdminPanelScreen() {
       tournamentId: match.tournamentId ?? "",
       scheduledDate: date,
       scheduledTime: time,
+      timeZone: ARGENTINA_TIME_ZONE,
       durationMinutes: durationMinutes ? String(durationMinutes) : "",
       competitionName: match.competitionName ?? "",
       youtubeUrl: match.youtubeUrl ?? "",
@@ -925,7 +942,7 @@ export default function AdminPanelScreen() {
       return;
     }
 
-    const scheduledAt = fromArgentinaDateTimeInputs(matchForm.scheduledDate.trim(), matchForm.scheduledTime.trim());
+    const scheduledAt = fromZonedDateTimeInputs(matchForm.scheduledDate.trim(), matchForm.scheduledTime.trim(), matchForm.timeZone);
     if (Number.isNaN(scheduledAt.getTime())) {
       Alert.alert("Error", "La fecha/hora del partido no es válida.");
       return;
@@ -997,7 +1014,7 @@ export default function AdminPanelScreen() {
     const durationMinutes = event.endsAt
       ? Math.round((new Date(event.endsAt).getTime() - scheduled.getTime()) / 60000)
       : undefined;
-    const { date, time } = toArgentinaDateTimeInputs(scheduled);
+    const { date, time } = toZonedDateTimeInputs(scheduled, ARGENTINA_TIME_ZONE);
 
     setEditingEventId(event.id);
     setEventForm({
@@ -1005,6 +1022,7 @@ export default function AdminPanelScreen() {
       description: event.description ?? "",
       scheduledDate: date,
       scheduledTime: time,
+      timeZone: ARGENTINA_TIME_ZONE,
       durationMinutes: durationMinutes ? String(durationMinutes) : "",
       youtubeUrl: event.youtubeUrl ?? "",
       backgroundImageUrl: event.backgroundImageUrl ?? ""
@@ -1037,7 +1055,7 @@ export default function AdminPanelScreen() {
       return;
     }
 
-    const scheduledAt = fromArgentinaDateTimeInputs(eventForm.scheduledDate.trim(), eventForm.scheduledTime.trim());
+    const scheduledAt = fromZonedDateTimeInputs(eventForm.scheduledDate.trim(), eventForm.scheduledTime.trim(), eventForm.timeZone);
     if (Number.isNaN(scheduledAt.getTime())) {
       Alert.alert("Error", "La fecha/hora del evento no es válida.");
       return;
@@ -1152,7 +1170,7 @@ export default function AdminPanelScreen() {
                   <Text style={styles.panelTitle}>Biblioteca de contenido</Text>
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
-                  {(["all", "branding", "home", "community", "live"] as const).map((s) => (
+                  {(["all", "home", "community", "live"] as const).map((s) => (
                     <Pressable key={s} style={[styles.chip, activeSectionFilter === s && styles.chipActive]} onPress={() => setActiveSectionFilter(s)}>
                       <Text style={[styles.chipText, activeSectionFilter === s && styles.chipTextActive]}>{s === "all" ? "Todo" : s}</Text>
                     </Pressable>
@@ -1226,24 +1244,14 @@ export default function AdminPanelScreen() {
 
                 <View style={styles.fullField}>
                   <Text style={styles.fieldLabel}>Ubicación en la app</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shopSelectorRow}>
-                    {contentSections.map((group) => {
-                      const isSelected = newSection === group.section && newSlot === group.slot;
-                      return (
-                        <Pressable
-                          key={`${group.section}-${group.slot}`}
-                          style={[styles.shopChip, isSelected && styles.shopChipActive]}
-                          onPress={() => {
-                            setNewSection(group.section);
-                            setNewSlot(group.slot);
-                            setNewType(inferType(group.section, group.slot));
-                          }}
-                        >
-                          <Text style={[styles.shopChipText, isSelected && styles.shopChipTextActive]} numberOfLines={1}>{t(group.titleKey)}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
+                  <View style={styles.readOnlyLocation}>
+                    <Ionicons name="location-outline" size={16} color={colors.primaryDark} />
+                    <Text style={styles.readOnlyLocationText}>
+                      {contentSections.find((group) => group.section === newSection && group.slot === newSlot)?.titleKey
+                        ? t(contentSections.find((group) => group.section === newSection && group.slot === newSlot)!.titleKey)
+                        : `${newSection} / ${newSlot}`}
+                    </Text>
+                  </View>
                   <Text style={styles.helperText}>{newSection} / {newSlot}</Text>
                 </View>
 
@@ -1359,7 +1367,7 @@ export default function AdminPanelScreen() {
                 ) : rooms.map((room) => (
                   <Pressable key={room.id} style={[styles.brandRow, selectedRoomId === room.id && styles.brandRowActive]} onPress={() => setSelectedRoomId(room.id)}>
                     <View style={[styles.brandRowLogo, { alignItems: "center", justifyContent: "center", backgroundColor: room.tone || colors.surfaceStrong }]}>
-                      <Ionicons name="chatbubbles-outline" size={18} color={colors.primary} />
+                      <Ionicons name={(room.icon as keyof typeof Ionicons.glyphMap) || "chatbubbles-outline"} size={18} color={colors.primary} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.brandRowName}>{room.title}</Text>
@@ -1380,11 +1388,7 @@ export default function AdminPanelScreen() {
               <View style={[styles.panel, { gap: 10 }]}>
                 <Text style={styles.panelTitle}>{editingRoomId ? "Editar comunidad" : "Nueva comunidad"}</Text>
                 <View style={styles.formGrid}>
-                  <LabeledInput label="Título" value={roomForm.title} onChangeText={(value) => setRoomForm((c) => ({ ...c, title: value }))} placeholder="Ej: Palermo Abierto" />
-                  <LabeledInput label="Código (opcional)" value={roomForm.externalCode} onChangeText={(value) => setRoomForm((c) => ({ ...c, externalCode: value }))} placeholder="Se genera solo desde el título" />
-                  <LabeledInput label="Tipo" value={roomForm.kind} onChangeText={(value) => setRoomForm((c) => ({ ...c, kind: value }))} placeholder="general, club, tournament, market" />
-                  <LabeledInput label="Icono" value={roomForm.icon} onChangeText={(value) => setRoomForm((c) => ({ ...c, icon: value }))} placeholder="trophy-outline" />
-                  <LabeledInput label="Tono / color" value={roomForm.tone} onChangeText={(value) => setRoomForm((c) => ({ ...c, tone: value }))} placeholder="#d8ecff" />
+                  <LabeledInput label="Título" value={roomForm.title} onChangeText={(value) => setRoomForm((c) => ({ ...c, title: value }))} />
                 </View>
                 <View style={styles.fullField}>
                   <Text style={styles.fieldLabel}>Descripción</Text>
@@ -1392,7 +1396,7 @@ export default function AdminPanelScreen() {
                     style={[styles.input, { minHeight: 70 }]}
                     value={roomForm.description}
                     onChangeText={(value) => setRoomForm((c) => ({ ...c, description: value }))}
-                    placeholder="De qué se habla en esta comunidad"
+                    placeholder=""
                     placeholderTextColor={colors.muted}
                     multiline
                   />
@@ -1840,6 +1844,26 @@ export default function AdminPanelScreen() {
                         </Pressable>
                       </View>
                     ) : null}
+                    <View style={{ flexDirection: "row", gap: 8, marginTop: 6 }}>
+                      <Pressable
+                        style={styles.btnDanger}
+                        disabled={marketplaceBusyId === product.id}
+                        onPress={async () => {
+                          setMarketplaceBusyId(product.id);
+                          try {
+                            await deleteAdminMarketplaceProduct(product.id);
+                            await loadMarketplaceProducts(marketplaceStatusFilter);
+                          } catch (err: any) {
+                            Alert.alert("Error", err?.message ?? "No se pudo eliminar la publicación.");
+                          } finally {
+                            setMarketplaceBusyId(null);
+                          }
+                        }}
+                      >
+                        <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                        <Text style={styles.btnDangerText}>Eliminar</Text>
+                      </Pressable>
+                    </View>
                   </View>
                 </View>
               ))}
@@ -1902,26 +1926,29 @@ export default function AdminPanelScreen() {
           <View style={styles.section}>
             <View style={styles.twoCol}>
               <View style={styles.panel}>
-                <Text style={styles.panelTitle}>Crear torneo</Text>
+                <View style={styles.panelHeader}>
+                  <Text style={styles.panelTitle}>{editingTournamentId ? "Editar torneo" : "Crear torneo"}</Text>
+                  {editingTournamentId ? (
+                    <Pressable style={styles.btnSecondary} onPress={resetTournamentForm}>
+                      <Text style={styles.btnSecondaryText}>Nuevo</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
                 <Text style={styles.sectionLead}>Completá los datos principales para que aparezca en la app.</Text>
                 <View style={styles.formGrid}>
-                  <LabeledInput label="Nombre *" value={tournamentForm.name} onChangeText={(v) => setTournamentForm((f) => ({ ...f, name: v }))} placeholder="Ej: Copa Primavera" />
-                  <LabeledInput label="Slug (opcional)" value={tournamentForm.slug} onChangeText={(v) => setTournamentForm((f) => ({ ...f, slug: v }))} placeholder="copa-primavera" autoCapitalize="none" />
-                  <LabeledInput label="Club ID (opcional)" value={tournamentForm.clubId} onChangeText={(v) => setTournamentForm((f) => ({ ...f, clubId: v }))} placeholder="UUID del club" autoCapitalize="none" />
-                  <LabeledInput label="Inicio (YYYY-MM-DD) *" value={tournamentForm.startDate} onChangeText={(v) => setTournamentForm((f) => ({ ...f, startDate: v }))} placeholder="2026-09-12" />
-                  <LabeledInput label="Fin (YYYY-MM-DD)" value={tournamentForm.endDate} onChangeText={(v) => setTournamentForm((f) => ({ ...f, endDate: v }))} placeholder="2026-09-20" />
-                  <LabeledInput label="Nivel" value={tournamentForm.levelLabel} onChangeText={(v) => setTournamentForm((f) => ({ ...f, levelLabel: v }))} placeholder="Abierto" />
-                  <LabeledInput label="Handicap mínimo" value={tournamentForm.minHandicap} onChangeText={(v) => setTournamentForm((f) => ({ ...f, minHandicap: v }))} keyboardType="numeric" placeholder="0" />
-                  <LabeledInput label="Handicap máximo" value={tournamentForm.maxHandicap} onChangeText={(v) => setTournamentForm((f) => ({ ...f, maxHandicap: v }))} keyboardType="numeric" placeholder="8" />
-                  <LabeledInput label="Máx. equipos" value={tournamentForm.maxTeams} onChangeText={(v) => setTournamentForm((f) => ({ ...f, maxTeams: v }))} keyboardType="numeric" placeholder="12" />
-                  <LabeledInput label="Contacto" value={tournamentForm.contactName} onChangeText={(v) => setTournamentForm((f) => ({ ...f, contactName: v }))} placeholder="Nombre del organizador" />
-                  <LabeledInput label="Teléfono contacto" value={tournamentForm.contactPhone} onChangeText={(v) => setTournamentForm((f) => ({ ...f, contactPhone: v }))} placeholder="+54..." keyboardType="phone-pad" />
-                  <LabeledInput label="Estado inscripción" value={tournamentForm.registrationStatus} onChangeText={(v) => setTournamentForm((f) => ({ ...f, registrationStatus: v }))} placeholder="open" autoCapitalize="none" />
-                  <LabeledInput label="Estado torneo" value={tournamentForm.status} onChangeText={(v) => setTournamentForm((f) => ({ ...f, status: v }))} placeholder="scheduled" autoCapitalize="none" />
+                  <LabeledInput label="Nombre *" value={tournamentForm.name} onChangeText={(v) => setTournamentForm((f) => ({ ...f, name: v }))} />
+                  <AdminDateTimeField label="Inicio" date={tournamentForm.startDate} onDateChange={(v) => setTournamentForm((f) => ({ ...f, startDate: v }))} required />
+                  <AdminDateTimeField label="Fin" date={tournamentForm.endDate} onDateChange={(v) => setTournamentForm((f) => ({ ...f, endDate: v }))} />
+                  <LabeledInput label="Nivel" value={tournamentForm.levelLabel} onChangeText={(v) => setTournamentForm((f) => ({ ...f, levelLabel: v }))} />
+                  <LabeledInput label="Handicap mínimo" value={tournamentForm.minHandicap} onChangeText={(v) => setTournamentForm((f) => ({ ...f, minHandicap: v }))} keyboardType="numeric" />
+                  <LabeledInput label="Handicap máximo" value={tournamentForm.maxHandicap} onChangeText={(v) => setTournamentForm((f) => ({ ...f, maxHandicap: v }))} keyboardType="numeric" />
+                  <LabeledInput label="Máx. equipos" value={tournamentForm.maxTeams} onChangeText={(v) => setTournamentForm((f) => ({ ...f, maxTeams: v }))} keyboardType="numeric" />
+                  <LabeledInput label="Contacto" value={tournamentForm.contactName} onChangeText={(v) => setTournamentForm((f) => ({ ...f, contactName: v }))} />
+                  <LabeledInput label="Teléfono contacto" value={tournamentForm.contactPhone} onChangeText={(v) => setTournamentForm((f) => ({ ...f, contactPhone: v }))} keyboardType="phone-pad" />
                 </View>
                 <Pressable style={styles.btnPrimary} onPress={() => { void saveTournament(); }} disabled={tournamentSaving}>
                   <Ionicons name="save-outline" size={16} color="#fff" />
-                  <Text style={styles.btnPrimaryText}>{tournamentSaving ? "Guardando..." : "Guardar torneo"}</Text>
+                  <Text style={styles.btnPrimaryText}>{tournamentSaving ? "Guardando..." : editingTournamentId ? "Guardar cambios" : "Guardar torneo"}</Text>
                 </Pressable>
               </View>
 
@@ -1938,8 +1965,6 @@ export default function AdminPanelScreen() {
                   {tournaments.map((tournament) => (
                     <View key={tournament.id} style={styles.tournamentRow}>
                       <Text style={styles.tournamentName}>{tournament.name}</Text>
-                      <Text style={styles.tournamentMeta}>Slug: {tournament.slug}</Text>
-                      {tournament.clubId ? <Text style={styles.tournamentMeta}>Club ID: {tournament.clubId}</Text> : null}
                       <Text style={styles.tournamentMeta}>Inicio: {new Date(tournament.startDate).toLocaleDateString("es-AR")}</Text>
                       {tournament.endDate ? <Text style={styles.tournamentMeta}>Fin: {new Date(tournament.endDate).toLocaleDateString("es-AR")}</Text> : null}
                       {tournament.levelLabel ? <Text style={styles.tournamentMeta}>Nivel: {tournament.levelLabel}</Text> : null}
@@ -1949,7 +1974,14 @@ export default function AdminPanelScreen() {
                       {tournament.maxTeams ? <Text style={styles.tournamentMeta}>Máx. equipos: {tournament.maxTeams}</Text> : null}
                       {tournament.contactName ? <Text style={styles.tournamentMeta}>Contacto: {tournament.contactName}</Text> : null}
                       {tournament.contactPhone ? <Text style={styles.tournamentMeta}>Teléfono: {tournament.contactPhone}</Text> : null}
-                      <Text style={styles.tournamentMeta}>Inscripción: {tournament.registrationStatus ?? "open"} · Estado: {tournament.status ?? "scheduled"}</Text>
+                      <View style={styles.actionRow}>
+                        <Pressable style={styles.btnSecondary} onPress={() => startEditTournament(tournament)}>
+                          <Text style={styles.btnSecondaryText}>Editar</Text>
+                        </Pressable>
+                        <Pressable style={styles.btnDanger} onPress={() => { void removeTournament(tournament); }}>
+                          <Text style={styles.btnDangerText}>Eliminar</Text>
+                        </Pressable>
+                      </View>
                     </View>
                   ))}
                   {tournaments.length === 0 ? <Text style={styles.emptyText}>Todavía no hay torneos cargados desde admin.</Text> : null}
@@ -2052,8 +2084,17 @@ export default function AdminPanelScreen() {
                 </ScrollView>
 
                 <View style={styles.formGrid}>
-                  <LabeledInput label="Fecha (YYYY-MM-DD) *" value={matchForm.scheduledDate} onChangeText={(v) => setMatchForm((f) => ({ ...f, scheduledDate: v }))} placeholder="2026-09-12" />
-                  <LabeledInput label="Hora (HH:MM, hora Argentina) *" value={matchForm.scheduledTime} onChangeText={(v) => setMatchForm((f) => ({ ...f, scheduledTime: v }))} placeholder="14:00" />
+                  <AdminDateTimeField
+                    label="Fecha y hora"
+                    date={matchForm.scheduledDate}
+                    time={matchForm.scheduledTime}
+                    timezone={matchForm.timeZone}
+                    timezoneOptions={adminTimeZoneOptions}
+                    onDateChange={(v) => setMatchForm((f) => ({ ...f, scheduledDate: v }))}
+                    onTimeChange={(v) => setMatchForm((f) => ({ ...f, scheduledTime: v }))}
+                    onTimezoneChange={(v) => setMatchForm((f) => ({ ...f, timeZone: v }))}
+                    required
+                  />
                   <LabeledInput label="Duración (minutos, opcional)" value={matchForm.durationMinutes} onChangeText={(v) => setMatchForm((f) => ({ ...f, durationMinutes: v }))} keyboardType="numeric" placeholder="120" />
                   <LabeledInput label="Nombre de competencia (opcional)" value={matchForm.competitionName} onChangeText={(v) => setMatchForm((f) => ({ ...f, competitionName: v }))} placeholder="129° Abierto Argentino de Polo" />
                   <LabeledInput label="Link de YouTube" value={matchForm.youtubeUrl} onChangeText={(v) => setMatchForm((f) => ({ ...f, youtubeUrl: v }))} placeholder="https://www.youtube.com/live/..." autoCapitalize="none" />
@@ -2209,8 +2250,17 @@ export default function AdminPanelScreen() {
                 <View style={styles.formGrid}>
                   <LabeledInput label="Título *" value={eventForm.title} onChangeText={(v) => setEventForm((f) => ({ ...f, title: v }))} placeholder="Ej: Entrevista con Adolfo Cambiaso" />
                   <LabeledInput label="Descripción breve" value={eventForm.description} onChangeText={(v) => setEventForm((f) => ({ ...f, description: v }))} placeholder="Una frase corta" />
-                  <LabeledInput label="Fecha (YYYY-MM-DD) *" value={eventForm.scheduledDate} onChangeText={(v) => setEventForm((f) => ({ ...f, scheduledDate: v }))} placeholder="2026-09-12" />
-                  <LabeledInput label="Hora (HH:MM, hora Argentina) *" value={eventForm.scheduledTime} onChangeText={(v) => setEventForm((f) => ({ ...f, scheduledTime: v }))} placeholder="14:00" />
+                  <AdminDateTimeField
+                    label="Fecha y hora"
+                    date={eventForm.scheduledDate}
+                    time={eventForm.scheduledTime}
+                    timezone={eventForm.timeZone}
+                    timezoneOptions={adminTimeZoneOptions}
+                    onDateChange={(v) => setEventForm((f) => ({ ...f, scheduledDate: v }))}
+                    onTimeChange={(v) => setEventForm((f) => ({ ...f, scheduledTime: v }))}
+                    onTimezoneChange={(v) => setEventForm((f) => ({ ...f, timeZone: v }))}
+                    required
+                  />
                   <LabeledInput label="Duración (minutos, opcional)" value={eventForm.durationMinutes} onChangeText={(v) => setEventForm((f) => ({ ...f, durationMinutes: v }))} keyboardType="numeric" placeholder="30" />
                   <LabeledInput label="Link de YouTube" value={eventForm.youtubeUrl} onChangeText={(v) => setEventForm((f) => ({ ...f, youtubeUrl: v }))} placeholder="https://www.youtube.com/live/..." autoCapitalize="none" />
                 </View>
@@ -2326,7 +2376,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   btnPrimaryText: { color: "#fff", fontWeight: "900", fontSize: 14 },
   btnSecondary: { minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, justifyContent: "center", alignItems: "center", paddingHorizontal: 16 },
   btnSecondaryText: { color: colors.text, fontWeight: "800" },
-  btnDanger: { minHeight: 40, borderRadius: 12, backgroundColor: colors.dangerSoft, borderWidth: 1, borderColor: "#ffd0c9", justifyContent: "center", paddingHorizontal: 14 },
+  btnDanger: { minHeight: 40, borderRadius: 12, backgroundColor: colors.dangerSoft, borderWidth: 1, borderColor: "#ffd0c9", flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center", paddingHorizontal: 14 },
   btnDangerText: { color: colors.danger, fontWeight: "900" },
 
   // Filters / chips
@@ -2373,6 +2423,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   shopChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   shopChipText: { color: colors.text, fontWeight: "800", fontSize: 12 },
   shopChipTextActive: { color: "#fff" },
+  readOnlyLocation: { minHeight: 42, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceStrong, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12 },
+  readOnlyLocationText: { color: colors.text, fontSize: 13, fontWeight: "800" },
   assetChip: { borderRadius: 999, paddingHorizontal: 10, minHeight: 30, justifyContent: "center", backgroundColor: colors.primarySoft, borderWidth: 1, borderColor: colors.border },
   assetChipText: { color: colors.primaryDark, fontWeight: "800", fontSize: 11 },
   actionRow: { flexDirection: "row", gap: 10, flexWrap: "wrap" },

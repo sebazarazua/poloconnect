@@ -5,7 +5,7 @@ import {
   PublicRouteLink,
   PublicSection
 } from "@/components/PublicLegalPage";
-import { PUBLIC_LEGAL_ROUTES, SUPPORT_EMAIL } from "@/constants/publicLegal";
+import { PUBLIC_LEGAL_ROUTES, PUBLIC_WEB_SUPPORT_EMAIL } from "@/constants/publicLegal";
 
 export default function SupportPage() {
   return (
@@ -27,7 +27,7 @@ export default function SupportPage() {
 
       <PublicSection title="Contacto">
         <PublicParagraph>Mail de soporte:</PublicParagraph>
-        <PublicInlineLink label={SUPPORT_EMAIL} href={`mailto:${SUPPORT_EMAIL}`} />
+        <PublicInlineLink label={PUBLIC_WEB_SUPPORT_EMAIL} href={`mailto:${PUBLIC_WEB_SUPPORT_EMAIL}`} />
       </PublicSection>
 
       <PublicSection title="Información útil">

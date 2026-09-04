@@ -6,7 +6,7 @@ import {
   PublicRouteLink,
   PublicSection
 } from "@/components/PublicLegalPage";
-import { PUBLIC_LEGAL_ROUTES, SUPPORT_EMAIL } from "@/constants/publicLegal";
+import { PUBLIC_LEGAL_ROUTES, PUBLIC_WEB_SUPPORT_EMAIL } from "@/constants/publicLegal";
 
 export default function DataDeletionPage() {
   return (
@@ -20,7 +20,7 @@ export default function DataDeletionPage() {
           Actualmente la app no tiene un botón interno de eliminación de cuenta. Para solicitar la eliminación,
           escribí al mail de soporte desde el email asociado a tu cuenta.
         </PublicParagraph>
-        <PublicInlineLink label={SUPPORT_EMAIL} href={`mailto:${SUPPORT_EMAIL}?subject=Solicitud%20de%20eliminaci%C3%B3n%20de%20cuenta%20Polo%20Connect`} />
+        <PublicInlineLink label={PUBLIC_WEB_SUPPORT_EMAIL} href={`mailto:${PUBLIC_WEB_SUPPORT_EMAIL}?subject=Solicitud%20de%20eliminaci%C3%B3n%20de%20cuenta%20Polo%20Connect`} />
       </PublicSection>
 
       <PublicSection title="Qué incluir en el pedido">

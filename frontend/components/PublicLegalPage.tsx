@@ -3,7 +3,7 @@ import { Href, useRouter } from "expo-router";
 import { PropsWithChildren, useMemo } from "react";
 import { Image, Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { AppColors, useThemeColors } from "@/constants/theme";
-import { PUBLIC_LEGAL_ROUTES, SUPPORT_EMAIL } from "@/constants/publicLegal";
+import { PUBLIC_LEGAL_ROUTES, PUBLIC_WEB_SUPPORT_EMAIL } from "@/constants/publicLegal";
 
 type PublicLegalPageProps = PropsWithChildren<{
   eyebrow: string;
@@ -56,8 +56,8 @@ export function PublicLegalPage({ eyebrow, title, subtitle, children }: PublicLe
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Polo Connect</Text>
-          <Pressable onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`).catch(() => undefined)}>
-            <Text style={styles.footerLink}>{SUPPORT_EMAIL}</Text>
+          <Pressable onPress={() => Linking.openURL(`mailto:${PUBLIC_WEB_SUPPORT_EMAIL}`).catch(() => undefined)}>
+            <Text style={styles.footerLink}>{PUBLIC_WEB_SUPPORT_EMAIL}</Text>
           </Pressable>
         </View>
       </View>

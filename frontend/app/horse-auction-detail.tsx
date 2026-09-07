@@ -114,7 +114,7 @@ export default function HorseAuctionDetailScreen() {
                   )}
 
                   <View style={styles.horseInfoCol}>
-                    <View style={styles.horseTitleRow}><Text style={styles.horseTitle}>{horse.horseName}</Text><Pressable accessibilityLabel="Reportar caballo" style={styles.reportButton} onPress={() => setReportTarget({ contentType: "horse", contentId: horse.id, context: { eventId: event.id } })}><Ionicons name="ellipsis-horizontal" size={18} color={colors.primaryDark} /></Pressable></View>
+                    <View style={styles.horseTitleRow}><Text style={styles.horseTitle}>{horse.horseName}</Text><Pressable accessibilityLabel="Reportar caballo" style={styles.reportButton} onPress={() => setReportTarget({ contentType: "horse", contentId: horse.id, context: { eventId: event.id } })}><Ionicons name="flag-outline" size={16} color={colors.danger} /><Text style={styles.reportButtonText}>Reportar</Text></Pressable></View>
                     <Text style={styles.horseMeta}>{t("auctions.owner")}: {horse.ownerName}</Text>
                     <Text style={styles.horseMeta}>{t("auctions.breed")}: {horse.breed ?? t("auctions.notSpecified")}</Text>
                     <Text style={styles.horseMeta}>
@@ -262,7 +262,8 @@ const createStyles = (colors: AppColors) =>
       fontWeight: "900",
       marginBottom: 2
     },
-    reportButton: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
+    reportButton: { minHeight: 32, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 8, paddingHorizontal: 9, borderWidth: 1, borderColor: colors.danger, backgroundColor: colors.dangerSoft },
+    reportButtonText: { color: colors.danger, fontSize: 12, fontWeight: "800" },
     horseMeta: {
       color: colors.muted,
       fontSize: 13,

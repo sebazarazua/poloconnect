@@ -231,11 +231,6 @@ export default function ProductDetailScreen() {
                 color={isFavorite(product.id) ? colors.primary : "#ffffff"}
               />
             </Pressable>
-            {product.seller?.id && product.seller.id !== user?.id ? (
-              <Pressable accessibilityLabel="Opciones de seguridad" style={styles.moderationButton} onPress={handleModerationMenu}>
-                <Ionicons name="ellipsis-horizontal" size={22} color="#ffffff" />
-              </Pressable>
-            ) : null}
             {productImages.length > 1 ? (
               <View style={styles.carouselCounterPill}>
                 <Text style={styles.carouselCounterText}>{activeImageIndex + 1}/{productImages.length}</Text>
@@ -283,6 +278,30 @@ export default function ProductDetailScreen() {
               <Ionicons name="chatbubble-ellipses-outline" size={18} color="#ffffff" />
               <Text style={styles.contactButtonText}>{t("product.contactSeller")}</Text>
             </Pressable>
+
+            {product.seller?.id && product.seller.id !== user?.id ? (
+              <View style={styles.safetySection}>
+                <Text style={styles.safetyLabel}>Seguridad</Text>
+                <View style={styles.safetyActions}>
+                  <Pressable
+                    style={styles.reportListingButton}
+                    onPress={() => setReportTarget({ contentType: "marketplace_listing", contentId: product.id, reportedUserId: product.seller?.id })}
+                    accessibilityLabel="Reportar publicación"
+                  >
+                    <Ionicons name="flag-outline" size={17} color={colors.danger} />
+                    <Text style={styles.reportListingText}>Reportar publicación</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.sellerSafetyButton}
+                    onPress={handleModerationMenu}
+                    accessibilityLabel="Opciones de seguridad del vendedor"
+                  >
+                    <Ionicons name="shield-outline" size={17} color={colors.primaryDark} />
+                    <Text style={styles.sellerSafetyText}>Reportar o bloquear vendedor</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
           </View>
 
           {/* Tabs */}
@@ -465,17 +484,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.55)"
   },
-  moderationButton: {
-    position: "absolute",
-    right: 12,
-    bottom: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    alignItems: "center",
-    justifyContent: "center"
-  },
   carouselCounterText: {
     color: "#fff",
     fontSize: 12,
@@ -624,6 +632,52 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     color: "#ffffff",
     fontSize: 14,
     fontWeight: "700"
+  },
+  safetySection: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 8
+  },
+  safetyLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase"
+  },
+  safetyActions: {
+    gap: 8
+  },
+  reportListingButton: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    backgroundColor: colors.dangerSoft
+  },
+  reportListingText: {
+    color: colors.danger,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  sellerSafetyButton: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 8,
+    backgroundColor: colors.primarySoft
+  },
+  sellerSafetyText: {
+    color: colors.primaryDark,
+    fontSize: 13,
+    fontWeight: "800"
   },
   tabs: {
     flexDirection: "row",

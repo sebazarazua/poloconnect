@@ -123,7 +123,7 @@ export class ModerationService {
       orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
       take: limit + 1
     });
-    return page(reports.map((report) => this.toReportDto(report)), limit);
+    return page(await this.withReportedMessages(reports), limit);
   }
 
   async getReport(id: string) {
@@ -136,7 +136,8 @@ export class ModerationService {
       }
     });
     if (!report) throw new NotFoundException("Reporte no encontrado.");
-    return this.toReportDto(report);
+    const [reportWithMessage] = await this.withReportedMessages([report]);
+    return reportWithMessage;
   }
 
   async updateReport(moderator: RequestUser, id: string, dto: UpdateReportDto) {
@@ -314,6 +315,29 @@ export class ModerationService {
 
   private toPublicUser(user: { id: string; firstName: string; lastName: string; username: string; avatarUrl: string | null; email?: string }) {
     return { id: user.id, firstName: user.firstName, lastName: user.lastName, username: user.username, avatarUrl: user.avatarUrl, ...(user.email ? { email: user.email } : {}) };
+  }
+
+  private async withReportedMessages(reports: any[]) {
+    const messageIds = reports
+      .filter((report) => report.contentType === ReportContentType.chat_message && report.contentId)
+      .map((report) => report.contentId);
+    const messages = messageIds.length
+      ? await this.prisma.chatMessage.findMany({
+          where: { id: { in: messageIds } },
+          select: { id: true, body: true, bodySanitized: true, deletedAt: true }
+        })
+      : [];
+    const messagesById = new Map(messages.map((message) => [message.id, message]));
+
+    return reports.map((report) => {
+      const message = report.contentId ? messagesById.get(report.contentId) : null;
+      return this.toReportDto({
+        ...report,
+        reportedMessage: message
+          ? { body: message.deletedAt ? message.bodySanitized : message.body, removed: Boolean(message.deletedAt) }
+          : null
+      });
+    });
   }
 
   private toReportDto(report: any) {

@@ -1553,6 +1553,7 @@ export default function AdminPanelScreen() {
                   return <View key={report.id} style={styles.moderationReportCard}>
                     <View style={styles.moderationReportHeader}><View style={{ flex: 1 }}><Text style={styles.brandRowName}>{report.reason.replace(/_/g, " ")}</Text><Text style={styles.brandRowMeta}>{report.contentType.replace(/_/g, " ")} · Prioridad {report.priority} · {report.status}</Text></View><View style={styles.typeBadge}><Text style={styles.typeBadgeText}>{report._count?.actions ?? 0} acciones</Text></View></View>
                     <Text style={styles.brandRowMeta}>Reportado: {targetName} · Por: {reporterName}</Text>
+                    {report.contentType === "chat_message" ? <View style={styles.reportedMessage}><Text style={styles.reportedMessageLabel}>Mensaje reportado{report.reportedMessage?.removed ? " (retirado)" : ""}</Text><Text style={styles.reportedMessageBody}>{report.reportedMessage?.body ?? "El mensaje ya no está disponible."}</Text></View> : null}
                     {report.description ? <Text style={styles.moderationDescription}>{report.description}</Text> : null}
                     {report.status !== "resolved" && report.status !== "dismissed" ? <View style={styles.actionRow}>
                       {canHideContent ? <><Pressable disabled={moderationBusyId === report.id} style={styles.actionBtn} onPress={() => run("content_hidden")}><Text style={styles.actionBtnPrimary}>Ocultar</Text></Pressable><Pressable disabled={moderationBusyId === report.id} style={styles.btnDanger} onPress={deleteContent}><Text style={styles.btnDangerText}>Eliminar</Text></Pressable></> : null}
@@ -2548,6 +2549,9 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
 
   moderationReportCard: { gap: 7, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, marginBottom: 8 },
   moderationReportHeader: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  reportedMessage: { gap: 3, padding: 10, borderRadius: 8, backgroundColor: colors.surfaceStrong, borderLeftWidth: 3, borderLeftColor: colors.primary },
+  reportedMessageLabel: { color: colors.muted, fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
+  reportedMessageBody: { color: colors.text, fontSize: 13, lineHeight: 19 },
   moderationDescription: { color: colors.text, fontSize: 12, lineHeight: 18 },
   historyList: { gap: 10, marginTop: 12 },
   historyRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: 10 },

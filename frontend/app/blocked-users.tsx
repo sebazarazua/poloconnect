@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { AppColors, radius, useThemeColors } from "@/constants/theme";
@@ -48,19 +48,23 @@ export default function BlockedUsersScreen() {
   return (
     <Screen eyebrow="Privacidad" title="Usuarios bloqueados" subtitle="No verás su contenido ni podrán contactarse dentro de la app." showBackButton onBackPress={() => router.back()}>
       {loading ? <View style={styles.center}><ActivityIndicator color={colors.primary} /></View> : (
-        <FlatList
-          data={blocks}
-          keyExtractor={(item) => item.blockedUserId}
-          contentContainerStyle={blocks.length ? styles.list : styles.empty}
-          ListEmptyComponent={<><Ionicons name="shield-checkmark-outline" size={38} color={colors.primaryDark} /><Text style={styles.emptyTitle}>No bloqueaste a nadie</Text><Text style={styles.emptyText}>Cuando bloquees un usuario desde un chat o publicación, aparecerá acá.</Text></>}
-          renderItem={({ item }) => (
-            <View style={styles.row}>
-              <View style={styles.avatar}><Text style={styles.avatarText}>{`${item.blocked.firstName[0] ?? ""}${item.blocked.lastName[0] ?? ""}`.toUpperCase()}</Text></View>
-              <View style={styles.copy}><Text style={styles.name}>{item.blocked.firstName} {item.blocked.lastName}</Text><Text style={styles.username}>@{item.blocked.username}</Text></View>
-              <Pressable disabled={busyId === item.blockedUserId} onPress={() => unblock(item)} style={styles.unblock}><Text style={styles.unblockText}>{busyId === item.blockedUserId ? "..." : "Desbloquear"}</Text></Pressable>
-            </View>
-          )}
-        />
+        blocks.length ? (
+          <View style={styles.list}>
+            {blocks.map((block) => (
+              <View key={block.blockedUserId} style={styles.row}>
+                <View style={styles.avatar}><Text style={styles.avatarText}>{`${block.blocked.firstName[0] ?? ""}${block.blocked.lastName[0] ?? ""}`.toUpperCase()}</Text></View>
+                <View style={styles.copy}><Text style={styles.name}>{block.blocked.firstName} {block.blocked.lastName}</Text><Text style={styles.username}>@{block.blocked.username}</Text></View>
+                <Pressable disabled={busyId === block.blockedUserId} onPress={() => unblock(block)} style={styles.unblock}><Text style={styles.unblockText}>{busyId === block.blockedUserId ? "..." : "Desbloquear"}</Text></Pressable>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.empty}>
+            <Ionicons name="shield-checkmark-outline" size={38} color={colors.primaryDark} />
+            <Text style={styles.emptyTitle}>No bloqueaste a nadie</Text>
+            <Text style={styles.emptyText}>Cuando bloquees un usuario desde un chat o publicación, aparecerá acá.</Text>
+          </View>
+        )
       )}
     </Screen>
   );

@@ -26,6 +26,7 @@ export type ModerationReport = {
   internalNote?: string | null;
   actionTaken?: string | null;
   createdAt: string;
+  reportedMessage?: { body: string; removed: boolean } | null;
   reporter?: ModerationUser | null;
   reportedUser?: ModerationUser | null;
   moderator?: ModerationUser | null;

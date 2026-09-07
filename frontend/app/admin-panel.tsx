@@ -60,6 +60,7 @@ import {
   type AdminSpotlightEvent,
   type AdminMarketplaceProduct
 } from "@/services/api/admin";
+import { applyAdminModerationAction, listAdminModerationActions, listAdminReports, listAdminSanctions, updateAdminReport, type ModerationActionType, type ModerationReport, type ReportStatus } from "@/services/api/moderation";
 import { fetchMatch, updateMatchLiveState } from "@/services/api/matches";
 import { ARGENTINA_TIME_ZONE, adminTimeZoneOptions, fromZonedDateTimeInputs, toZonedDateTimeInputs } from "@/utils/argentinaTime";
 import {
@@ -76,7 +77,7 @@ import {
   uploadBrandImage
 } from "@/services/api/brands";
 
-type Tab = "dashboard" | "content" | "community" | "brands" | "marketplace" | "auctions" | "tournaments" | "matches" | "events";
+type Tab = "dashboard" | "content" | "community" | "moderation" | "brands" | "marketplace" | "auctions" | "tournaments" | "matches" | "events";
 
 const contentSections = [
   { section: "home", slot: "hero_ads", titleKey: "adminPanel.section.homeHeroTitle" as const, subtitleKey: "adminPanel.section.homeHeroText" as const },
@@ -248,6 +249,23 @@ export default function AdminPanelScreen() {
   const [marketplaceProducts, setMarketplaceProducts] = useState<AdminMarketplaceProduct[]>([]);
   const [marketplaceStatusFilter, setMarketplaceStatusFilter] = useState<string>("pending_review");
   const [marketplaceBusyId, setMarketplaceBusyId] = useState<string | null>(null);
+
+  const [reports, setReports] = useState<ModerationReport[]>([]);
+  const [reportStatusFilter, setReportStatusFilter] = useState<ReportStatus | "">("pending");
+  const [moderationBusyId, setModerationBusyId] = useState<string | null>(null);
+  const [recentModerationActions, setRecentModerationActions] = useState<Array<{ id: string; action: ModerationActionType; note?: string | null; createdAt: string; targetUser?: { firstName: string; lastName: string } | null }>>([]);
+  const [activeSanctionsCount, setActiveSanctionsCount] = useState(0);
+
+  const loadModeration = async (status = reportStatusFilter) => {
+    const [reportPage, actionPage, sanctionPage] = await Promise.all([
+      listAdminReports(status || undefined),
+      listAdminModerationActions(),
+      listAdminSanctions()
+    ]);
+    setReports(reportPage.data);
+    setRecentModerationActions(actionPage.data);
+    setActiveSanctionsCount(sanctionPage.data.length);
+  };
 
   const loadMarketplaceProducts = async (status: string) => {
     const next = await listAdminMarketplaceProducts(status || undefined).catch(() => []);
@@ -469,12 +487,18 @@ export default function AdminPanelScreen() {
     void listAdminTeams().then(setTeams).catch(() => {});
     void listAdminMatches().then(setMatches).catch(() => {});
     void listAdminSpotlightEvents().then(setSpotlightEvents).catch(() => {});
+    void loadModeration().catch(() => { setReports([]); setRecentModerationActions([]); });
   }, [isAdmin, router]);
 
   useEffect(() => {
     if (!isAdmin) return;
     void loadMarketplaceProducts(marketplaceStatusFilter);
   }, [isAdmin, marketplaceStatusFilter]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void loadModeration(reportStatusFilter).catch(() => setReports([]));
+  }, [isAdmin, reportStatusFilter]);
 
   useEffect(() => { if (selectedRoomId) void refreshRoomModeration(selectedRoomId).catch(() => { setMembers([]); setRoomBans([]); }); }, [selectedRoomId]);
 
@@ -1099,6 +1123,7 @@ export default function AdminPanelScreen() {
     { key: "dashboard", label: "Dashboard", icon: "grid-outline" },
     { key: "content", label: "Contenido", icon: "images-outline", count: contentItems.length },
     { key: "community", label: "Comunidad", icon: "people-outline", count: rooms.length },
+    { key: "moderation", label: "Moderación", icon: "shield-checkmark-outline", count: reports.length },
     { key: "brands", label: "Marcas", icon: "pricetags-outline", count: brands.length },
     { key: "marketplace", label: "Mercado", icon: "cash-outline", count: marketplaceProducts.length },
     { key: "auctions", label: "Remates", icon: "ribbon-outline" },
@@ -1486,6 +1511,65 @@ export default function AdminPanelScreen() {
                 </View>
               </>
             )}
+          </View>
+        )}
+
+        {/* ── UGC MODERATION ── */}
+        {activeTab === "moderation" && (
+          <View style={styles.section}>
+            <View style={styles.twoCol}>
+              <View style={styles.panel}>
+                <View style={styles.panelHeader}>
+                  <View><Text style={styles.panelTitle}>Reportes ({reports.length})</Text><Text style={styles.sectionLead}>Priorizados por gravedad y recurrencia.</Text></View>
+                  <Pressable style={styles.btnSecondary} onPress={() => void loadModeration().catch(() => {})}><Ionicons name="refresh-outline" size={16} color={colors.primaryDark} /><Text style={styles.btnSecondaryText}>Actualizar</Text></Pressable>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 12 }}>
+                  {[{ key: "pending", label: "Pendientes" }, { key: "in_review", label: "En revisión" }, { key: "resolved", label: "Resueltos" }, { key: "dismissed", label: "Descartados" }, { key: "", label: "Todos" }].map((filter) => <Pressable key={filter.key || "all"} style={[styles.tabItem, reportStatusFilter === filter.key && styles.tabItemActive]} onPress={() => setReportStatusFilter(filter.key as ReportStatus | "")}><Text style={[styles.tabLabel, reportStatusFilter === filter.key && styles.tabLabelActive]}>{filter.label}</Text></Pressable>)}
+                </ScrollView>
+                {reports.length === 0 ? <View style={styles.emptyStateBox}><Ionicons name="shield-checkmark-outline" size={24} color={colors.muted} /><Text style={styles.emptyText}>No hay reportes en este estado.</Text></View> : null}
+                {reports.map((report) => {
+                  const targetName = report.reportedUser ? `${report.reportedUser.firstName} ${report.reportedUser.lastName}` : "Sin usuario asociado";
+                  const reporterName = report.reporter ? `@${report.reporter.username}` : "Usuario eliminado";
+                  const canHideContent = Boolean(report.contentId && (report.contentType === "chat_message" || report.contentType === "marketplace_listing"));
+                  const canSanctionUser = Boolean(report.reportedUser?.id);
+                  const run = (action: ModerationActionType, durationDays?: number) => {
+                    setModerationBusyId(report.id);
+                    void applyAdminModerationAction(report.id, { action, durationDays })
+                      .then(() => loadModeration())
+                      .catch((error) => Alert.alert("Error", error instanceof Error ? error.message : "No se pudo aplicar la acción."))
+                      .finally(() => setModerationBusyId(null));
+                  };
+                  const dismiss = () => {
+                    setModerationBusyId(report.id);
+                    void updateAdminReport(report.id, { status: "dismissed", actionTaken: "dismissed" })
+                      .then(() => loadModeration())
+                      .catch((error) => Alert.alert("Error", error instanceof Error ? error.message : "No se pudo descartar el reporte."))
+                      .finally(() => setModerationBusyId(null));
+                  };
+                  const deleteContent = () => Alert.alert("Eliminar contenido", "Esta acción elimina el contenido y sus archivos asociados. No se puede deshacer.", [
+                    { text: "Cancelar", style: "cancel" },
+                    { text: "Eliminar", style: "destructive", onPress: () => run("content_deleted") }
+                  ]);
+                  return <View key={report.id} style={styles.moderationReportCard}>
+                    <View style={styles.moderationReportHeader}><View style={{ flex: 1 }}><Text style={styles.brandRowName}>{report.reason.replace(/_/g, " ")}</Text><Text style={styles.brandRowMeta}>{report.contentType.replace(/_/g, " ")} · Prioridad {report.priority} · {report.status}</Text></View><View style={styles.typeBadge}><Text style={styles.typeBadgeText}>{report._count?.actions ?? 0} acciones</Text></View></View>
+                    <Text style={styles.brandRowMeta}>Reportado: {targetName} · Por: {reporterName}</Text>
+                    {report.description ? <Text style={styles.moderationDescription}>{report.description}</Text> : null}
+                    {report.status !== "resolved" && report.status !== "dismissed" ? <View style={styles.actionRow}>
+                      {canHideContent ? <><Pressable disabled={moderationBusyId === report.id} style={styles.actionBtn} onPress={() => run("content_hidden")}><Text style={styles.actionBtnPrimary}>Ocultar</Text></Pressable><Pressable disabled={moderationBusyId === report.id} style={styles.btnDanger} onPress={deleteContent}><Text style={styles.btnDangerText}>Eliminar</Text></Pressable></> : null}
+                      {canSanctionUser ? <><Pressable disabled={moderationBusyId === report.id} style={styles.actionBtn} onPress={() => run("user_warned")}><Text style={styles.actionBtnPrimary}>Advertir</Text></Pressable><Pressable disabled={moderationBusyId === report.id} style={styles.actionBtn} onPress={() => run("user_temporarily_suspended", 7)}><Text style={styles.actionBtnDanger}>Suspender 7 días</Text></Pressable><Pressable disabled={moderationBusyId === report.id} style={styles.btnDanger} onPress={() => run("user_permanently_banned")}><Text style={styles.btnDangerText}>Banear</Text></Pressable></> : null}
+                      <Pressable disabled={moderationBusyId === report.id} style={styles.actionBtn} onPress={dismiss}><Text style={styles.actionBtnPrimary}>Descartar</Text></Pressable>
+                    </View> : null}
+                  </View>;
+                })}
+              </View>
+              <View style={styles.panel}>
+                <Text style={styles.panelTitle}>Historial</Text>
+                <Text style={styles.sectionLead}>Sanciones activas: {activeSanctionsCount}</Text>
+                <View style={styles.historyList}>
+                  {recentModerationActions.length === 0 ? <Text style={styles.emptyText}>Todavía no hay acciones registradas.</Text> : recentModerationActions.map((action) => <View key={action.id} style={styles.historyRow}><Ionicons name="shield-outline" size={16} color={colors.primaryDark} /><View style={{ flex: 1 }}><Text style={styles.brandRowName}>{action.action.replace(/_/g, " ")}</Text><Text style={styles.brandRowMeta}>{action.targetUser ? `${action.targetUser.firstName} ${action.targetUser.lastName} · ` : ""}{new Date(action.createdAt).toLocaleString("es-AR")}</Text>{action.note ? <Text style={styles.moderationDescription}>{action.note}</Text> : null}</View></View>)}
+                </View>
+              </View>
+            </View>
           </View>
         )}
 
@@ -2461,6 +2545,12 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   actionBtnDisabled: { opacity: 0.4 },
   actionBtnDanger: { color: colors.danger, fontWeight: "900", fontSize: 13 },
   actionBtnPrimary: { color: colors.primary, fontWeight: "900", fontSize: 13 },
+
+  moderationReportCard: { gap: 7, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, marginBottom: 8 },
+  moderationReportHeader: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  moderationDescription: { color: colors.text, fontSize: 12, lineHeight: 18 },
+  historyList: { gap: 10, marginTop: 12 },
+  historyRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: 10 },
 
   // Brands
   brandRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, marginBottom: 6 },

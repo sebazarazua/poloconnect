@@ -57,8 +57,34 @@ export class CommunityGateway implements OnGatewayConnection {
     return { event: "left_room", roomId: body?.roomId ?? null };
   }
 
-  emitMessage(roomId: string, message: Record<string, unknown>) {
-    this.server.to(this.roomChannel(roomId)).emit("message_received", { roomId, message });
+  async emitMessage(roomId: string, message: Record<string, unknown>) {
+    const senderId = typeof message.userId === "string" ? message.userId : null;
+    if (!senderId) {
+      this.server.to(this.roomChannel(roomId)).emit("message_received", { roomId, message });
+      return;
+    }
+
+    const sockets = await this.server.in(this.roomChannel(roomId)).fetchSockets();
+    const recipientIds = [...new Set(sockets.map((socket) => socket.data.userId).filter((id): id is string => typeof id === "string" && id !== senderId))];
+    const blocks = recipientIds.length
+      ? await this.prisma.userBlock.findMany({
+          where: {
+            OR: [
+              { blockerUserId: senderId, blockedUserId: { in: recipientIds } },
+              { blockedUserId: senderId, blockerUserId: { in: recipientIds } }
+            ]
+          },
+          select: { blockerUserId: true, blockedUserId: true }
+        })
+      : [];
+    const blockedRecipientIds = new Set(blocks.map((block) => block.blockerUserId === senderId ? block.blockedUserId : block.blockerUserId));
+
+    for (const socket of sockets) {
+      const recipientId = typeof socket.data.userId === "string" ? socket.data.userId : null;
+      if (!recipientId || !blockedRecipientIds.has(recipientId)) {
+        socket.emit("message_received", { roomId, message });
+      }
+    }
   }
 
   emitMembershipJoined(roomId: string, userId: string) {

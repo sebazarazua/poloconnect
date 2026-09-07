@@ -15,6 +15,7 @@ import { HealthController } from "./health/health.controller";
 import { HorseAuctionsModule } from "./horse-auctions/horse-auctions.module";
 import { MarketplaceModule } from "./marketplace/marketplace.module";
 import { MatchesModule } from "./matches/matches.module";
+import { ModerationModule } from "./moderation/moderation.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { SettingsModule } from "./settings/settings.module";
 import { TournamentsModule } from "./tournaments/tournaments.module";
@@ -39,6 +40,7 @@ import { UsersModule } from "./users/users.module";
     MarketplaceModule,
     CommunityModule,
     MatchesModule,
+    ModerationModule,
     TournamentsModule,
     HorseAuctionsModule,
     BrandsModule,

@@ -107,6 +107,14 @@ export class AccountDeletionService {
       await tx.communityBan.updateMany({ where: { createdBy: userId }, data: { createdBy: null } });
       await tx.communityBan.updateMany({ where: { revokedBy: userId }, data: { revokedBy: null } });
 
+      await tx.userBlock.deleteMany({ where: { OR: [{ blockerUserId: userId }, { blockedUserId: userId }] } });
+      await tx.report.updateMany({ where: { reporterUserId: userId }, data: { reporterUserId: null } });
+      await tx.report.updateMany({ where: { reportedUserId: userId }, data: { reportedUserId: null } });
+      await tx.report.updateMany({ where: { moderatorUserId: userId }, data: { moderatorUserId: null } });
+      await tx.moderationAction.updateMany({ where: { moderatorUserId: userId }, data: { moderatorUserId: null } });
+      await tx.moderationAction.updateMany({ where: { targetUserId: userId }, data: { targetUserId: null } });
+      await tx.userSanction.updateMany({ where: { moderatorUserId: userId }, data: { moderatorUserId: null } });
+
       await tx.tournament.updateMany({ where: { createdBy: userId }, data: { createdBy: null } });
       await tx.spotlightEvent.updateMany({ where: { createdBy: userId }, data: { createdBy: null } });
       await tx.matchEvent.updateMany({ where: { createdBy: userId }, data: { createdBy: null } });

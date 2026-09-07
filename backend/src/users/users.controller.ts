@@ -9,6 +9,7 @@ import { CsrfGuard } from "../common/guards/csrf.guard";
 import { PrismaService } from "../database/prisma.service";
 import { MediaService } from "../common/media/media.service";
 import { AccountDeletionService } from "./account-deletion.service";
+import { ContentFilterService } from "../moderation/content-filter.service";
 
 @Controller("users")
 export class UsersController {
@@ -16,7 +17,8 @@ export class UsersController {
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
     private readonly accountDeletion: AccountDeletionService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly contentFilter: ContentFilterService
   ) {}
 
   private clearAuthCookies(res: any) {
@@ -71,6 +73,7 @@ export class UsersController {
     if (username !== undefined && !/^[a-z0-9._-]{3,30}$/.test(username)) {
       throw new BadRequestException("Username must be 3-30 characters and use only letters, numbers, dots, underscores or hyphens.");
     }
+    this.contentFilter.assertAllowed(firstName, lastName, username);
 
     let data;
     try {

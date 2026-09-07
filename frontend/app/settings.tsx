@@ -302,6 +302,17 @@ export default function SettingsScreen() {
               <Text style={styles.infoLabel}>{t("common.privacy")}</Text>
               <Text style={styles.infoValue}>{t("settings.profileVisible")}</Text>
             </View>
+            <View style={styles.divider} />
+            <Pressable style={styles.linkRow} onPress={() => router.push("/blocked-users")}>
+              <View style={styles.linkRowIcon}><Ionicons name="ban-outline" size={18} color={colors.primaryDark} /></View>
+              <View style={styles.linkRowCopy}><Text style={styles.linkRowTitle}>Usuarios bloqueados</Text><Text style={styles.linkRowText}>Administrá a quiénes no ves ni pueden contactarte.</Text></View>
+              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            </Pressable>
+            <Pressable style={styles.linkRow} onPress={() => router.push("/community-guidelines")}>
+              <View style={styles.linkRowIcon}><Ionicons name="shield-checkmark-outline" size={18} color={colors.primaryDark} /></View>
+              <View style={styles.linkRowCopy}><Text style={styles.linkRowTitle}>Normas de la comunidad</Text><Text style={styles.linkRowText}>Conocé cómo reportar y mantener el espacio seguro.</Text></View>
+              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            </Pressable>
           </View>
 
           <View style={[styles.section, styles.dangerSection]}>
@@ -498,6 +509,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     height: 1,
     backgroundColor: colors.border
   },
+  linkRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 },
+  linkRowIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
+  linkRowCopy: { flex: 1 },
+  linkRowTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  linkRowText: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 2 },
   dangerSection: {
     borderColor: colors.dangerSoft,
     backgroundColor: colors.surface

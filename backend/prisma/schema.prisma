@@ -73,6 +73,53 @@ enum CommunityModerationActionType {
   unbanned
 }
 
+enum ReportContentType {
+  user
+  chat_message
+  marketplace_listing
+  horse
+  image
+  other
+}
+
+enum ReportReason {
+  inappropriate
+  harassment
+  spam
+  scam
+  false_information
+  sexual_content
+  violence
+  hate_speech
+  impersonation
+  rights_violation
+  other
+}
+
+enum ReportStatus {
+  pending
+  in_review
+  resolved
+  dismissed
+}
+
+enum ModerationActionType {
+  report_status_changed
+  content_hidden
+  content_deleted
+  user_warned
+  user_temporarily_suspended
+  user_permanently_banned
+  user_restored
+  content_restored
+}
+
+enum UserSanctionType {
+  warning
+  temporary_suspension
+  permanent_ban
+}
+
 model User {
   id              String          @id @default(uuid()) @db.Uuid
   firstName       String
@@ -103,6 +150,15 @@ model User {
   notifications   Notification[]
   registrations   TournamentRegistration[]
   pushTokens      PushToken[]
+  reportsFiled    Report[]              @relation("ReportReporter")
+  reportsReceived Report[]              @relation("ReportTarget")
+  reportsResolved Report[]              @relation("ReportModerator")
+  blocksCreated   UserBlock[]           @relation("UserBlocker")
+  blocksReceived  UserBlock[]           @relation("UserBlocked")
+  moderationActions ModerationAction[]  @relation("ModerationActor")
+  moderationTargets ModerationAction[]  @relation("ModerationTarget")
+  sanctions       UserSanction[]        @relation("SanctionTarget")
+  sanctionsIssued UserSanction[]        @relation("SanctionActor")
 
   @@index([status])
   @@index([deletedAt])
@@ -711,6 +767,85 @@ model CommunityModerationAction {
   @@index([roomId, createdAt])
   @@index([targetUserId, createdAt])
   @@index([action, createdAt])
+}
+
+model Report {
+  id              String            @id @default(uuid()) @db.Uuid
+  reporterUserId  String?           @db.Uuid
+  reportedUserId  String?           @db.Uuid
+  contentType     ReportContentType
+  contentId       String?           @db.Uuid
+  reason          ReportReason
+  description     String?
+  context         Json              @default("{}")
+  status          ReportStatus      @default(pending)
+  priority        Int               @default(0)
+  internalNote    String?
+  actionTaken     String?
+  moderatorUserId String?           @db.Uuid
+  resolvedAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  reporter        User?             @relation("ReportReporter", fields: [reporterUserId], references: [id], onDelete: SetNull)
+  reportedUser    User?             @relation("ReportTarget", fields: [reportedUserId], references: [id], onDelete: SetNull)
+  moderator       User?             @relation("ReportModerator", fields: [moderatorUserId], references: [id], onDelete: SetNull)
+  actions         ModerationAction[]
+  sanctions       UserSanction[]
+
+  @@index([status, priority, createdAt])
+  @@index([reportedUserId, createdAt])
+  @@index([reporterUserId, createdAt])
+  @@index([contentType, contentId])
+}
+
+model UserBlock {
+  blockerUserId String   @db.Uuid
+  blockedUserId String   @db.Uuid
+  createdAt     DateTime @default(now())
+  blocker       User     @relation("UserBlocker", fields: [blockerUserId], references: [id], onDelete: Cascade)
+  blocked       User     @relation("UserBlocked", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  @@id([blockerUserId, blockedUserId])
+  @@index([blockedUserId, createdAt])
+}
+
+model ModerationAction {
+  id              String               @id @default(uuid()) @db.Uuid
+  reportId        String?              @db.Uuid
+  moderatorUserId String?              @db.Uuid
+  targetUserId    String?              @db.Uuid
+  contentType     ReportContentType?
+  contentId       String?              @db.Uuid
+  action          ModerationActionType
+  note            String?
+  metadata        Json                 @default("{}")
+  createdAt       DateTime             @default(now())
+  report          Report?              @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  moderator       User?                @relation("ModerationActor", fields: [moderatorUserId], references: [id], onDelete: SetNull)
+  targetUser      User?                @relation("ModerationTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([reportId, createdAt])
+  @@index([targetUserId, createdAt])
+  @@index([action, createdAt])
+}
+
+model UserSanction {
+  id              String           @id @default(uuid()) @db.Uuid
+  userId          String           @db.Uuid
+  moderatorUserId String?          @db.Uuid
+  reportId        String?          @db.Uuid
+  type            UserSanctionType
+  reason          String?
+  startsAt        DateTime         @default(now())
+  endsAt          DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime         @default(now())
+  user            User             @relation("SanctionTarget", fields: [userId], references: [id], onDelete: Cascade)
+  moderator       User?            @relation("SanctionActor", fields: [moderatorUserId], references: [id], onDelete: SetNull)
+  report          Report?          @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@index([userId, revokedAt, endsAt])
+  @@index([reportId])
 }
 
 model Brand {

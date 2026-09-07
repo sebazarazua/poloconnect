@@ -7,6 +7,7 @@ import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
 import { HorseAuctionDetail, getHorseAuction, resolveAuctionImageUrl } from "@/services/api/horse-auctions";
+import { ReportModal, type ReportTarget } from "@/components/ReportModal";
 
 export default function HorseAuctionDetailScreen() {
   const colors = useThemeColors();
@@ -17,6 +18,7 @@ export default function HorseAuctionDetailScreen() {
   const [event, setEvent] = useState<HorseAuctionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
 
   useEffect(() => {
     const id = params.id;
@@ -112,9 +114,7 @@ export default function HorseAuctionDetailScreen() {
                   )}
 
                   <View style={styles.horseInfoCol}>
-                    <Text style={styles.horseTitle}>
-                      {horse.horseName}
-                    </Text>
+                    <View style={styles.horseTitleRow}><Text style={styles.horseTitle}>{horse.horseName}</Text><Pressable accessibilityLabel="Reportar caballo" style={styles.reportButton} onPress={() => setReportTarget({ contentType: "horse", contentId: horse.id, context: { eventId: event.id } })}><Ionicons name="ellipsis-horizontal" size={18} color={colors.primaryDark} /></Pressable></View>
                     <Text style={styles.horseMeta}>{t("auctions.owner")}: {horse.ownerName}</Text>
                     <Text style={styles.horseMeta}>{t("auctions.breed")}: {horse.breed ?? t("auctions.notSpecified")}</Text>
                     <Text style={styles.horseMeta}>
@@ -129,6 +129,7 @@ export default function HorseAuctionDetailScreen() {
           </ScrollView>
         </>
       ) : null}
+      <ReportModal visible={Boolean(reportTarget)} target={reportTarget} onClose={() => setReportTarget(null)} />
     </Screen>
   );
 }
@@ -253,12 +254,15 @@ const createStyles = (colors: AppColors) =>
       flex: 1,
       gap: 2
     },
+    horseTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
     horseTitle: {
+      flex: 1,
       color: colors.text,
       fontSize: 16,
       fontWeight: "900",
       marginBottom: 2
     },
+    reportButton: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
     horseMeta: {
       color: colors.muted,
       fontSize: 13,

@@ -48,13 +48,15 @@ Sin `SMTP_HOST`, el backend no envia correo y solo deja el codigo en logs para d
 
 Apple requiere configurar en backend:
 
-- `APPLE_OAUTH_CLIENT_ID`
+- `APPLE_OAUTH_CLIENT_ID=com.poloconnect.app` para validar el token emitido a la build iOS.
 
 Opcional para aceptar multiples audiencias (por ejemplo Expo Go + build real):
 
 - `APPLE_OAUTH_CLIENT_IDS` (lista separada por comas)
 
 Este valor debe coincidir con el `aud` del token de Apple (Service ID o Bundle ID segun configuracion en Apple Developer).
+
+Para completar el intercambio del authorization code y revocar la autorizacion en Apple cuando el usuario elimina su cuenta, el backend desplegado tambien necesita `APPLE_TEAM_ID`, `APPLE_KEY_ID` y `APPLE_PRIVATE_KEY`. Configuralos como secretos en Railway; nunca en variables `EXPO_PUBLIC_*` ni en el cliente.
 
 ## Almacenamiento de medios (S3)
 
@@ -80,3 +82,14 @@ Sin `MEDIA_BASE_URL`, el backend sirve los archivos el mismo a traves de `GET /a
 - Matches/live/broadcasts.
 - Tournaments y registro de equipos.
 - Notifications y push tokens.
+- Moderación UGC: reportes, bloqueos bidireccionales, sanciones, historial y filtro preventivo.
+
+## Moderación de contenido
+
+Luego de actualizar el código, aplicar la migración en el entorno correspondiente:
+
+```bash
+npm run prisma:deploy
+```
+
+El filtro preventivo usa una lista base mínima y puede ampliarse con `UGC_BLOCKLIST`, separada por comas. No reemplaza la revisión humana: los reportes se administran desde `Admin > Moderación` y generan un historial de acciones y sanciones.

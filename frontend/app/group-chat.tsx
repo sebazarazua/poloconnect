@@ -23,6 +23,8 @@ import { useCommunity } from "@/contexts/CommunityContext";
 import type { ChatIconName } from "@/contexts/CommunityContext";
 import { listMessages, sendMessage, subscribeToRoomMessages } from "@/services/api/community";
 import { resolveUploadedUrl } from "@/services/api/users";
+import { ReportModal, type ReportTarget } from "@/components/ReportModal";
+import { blockUser } from "@/services/api/moderation";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -85,10 +87,12 @@ function getInitials(name: string): string {
 
 function MessageBubble({
   msg,
-  showName
+  showName,
+  onModerate
 }: {
   msg: Message;
   showName: boolean;
+  onModerate?: (message: Message) => void;
 }) {
   const colors = useThemeColors();
   const styles = createStyles(colors);
@@ -108,7 +112,7 @@ function MessageBubble({
   const avatarSource = resolveUploadedUrl(msg.avatarUrl);
 
   return (
-    <View style={styles.rowOther}>
+    <Pressable style={styles.rowOther} onLongPress={() => onModerate?.(msg)} delayLongPress={350}>
       {showName ? (
         avatarSource ? (
           <View style={styles.avatarSmall}>
@@ -133,7 +137,7 @@ function MessageBubble({
           <Text style={styles.bubbleTimeOther}>{msg.time}</Text>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -155,6 +159,7 @@ export default function GroupChatScreen() {
   const [composerHeight, setComposerHeight] = useState(42);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
 
   const chat = joinedChats.find(c => c.id === chatId);
 
@@ -347,6 +352,30 @@ export default function GroupChatScreen() {
     );
   }
 
+  function handleMessageModeration(message: Message) {
+    if (message.isMe) return;
+    Alert.alert(message.userName, "¿Qué querés hacer?", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Reportar mensaje", onPress: () => setReportTarget({ contentType: "chat_message", contentId: message.id, reportedUserId: message.userId, context: { roomId: chatId } }) },
+      {
+        text: "Más opciones",
+        onPress: () => Alert.alert(message.userName, "Acciones sobre este usuario", [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Reportar usuario", onPress: () => setReportTarget({ contentType: "user", reportedUserId: message.userId, context: { roomId: chatId } }) },
+          {
+            text: "Bloquear usuario",
+            style: "destructive",
+            onPress: () => {
+              void blockUser(message.userId)
+                .then(() => setMessages((current) => current.filter((entry) => entry.userId !== message.userId)))
+                .catch((error) => Alert.alert("No se pudo bloquear", error instanceof Error ? error.message : "Intentá nuevamente."));
+            }
+          }
+        ])
+      }
+    ]);
+  }
+
   // Determine which messages should show sender name
   // (show name only when the previous message was from a different user)
   function shouldShowName(index: number): boolean {
@@ -402,7 +431,7 @@ export default function GroupChatScreen() {
           onScrollBeginDrag={Keyboard.dismiss}
         >
           {messages.map((msg, idx) => (
-            <MessageBubble key={msg.id} msg={msg} showName={shouldShowName(idx)} />
+            <MessageBubble key={msg.id} msg={msg} showName={shouldShowName(idx)} onModerate={handleMessageModeration} />
           ))}
         </ScrollView>
 
@@ -452,6 +481,7 @@ export default function GroupChatScreen() {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+      <ReportModal visible={Boolean(reportTarget)} target={reportTarget} onClose={() => setReportTarget(null)} />
     </SafeAreaView>
   );
 }

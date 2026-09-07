@@ -33,6 +33,10 @@ function createTx() {
       deleteMany: jest.fn().mockResolvedValue({ count: 1 })
     },
     communityBan: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    userBlock: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    report: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    moderationAction: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    userSanction: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     tournament: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     spotlightEvent: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     matchEvent: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
@@ -102,6 +106,8 @@ describe("AccountDeletionService", () => {
     });
     expect(tx.product.deleteMany).toHaveBeenCalledWith({ where: { sellerId: "user-1" } });
     expect(tx.tournamentRegistration.deleteMany).toHaveBeenCalledWith({ where: { captainUserId: "user-1" } });
+    expect(tx.userBlock.deleteMany).toHaveBeenCalledWith({ where: { OR: [{ blockerUserId: "user-1" }, { blockedUserId: "user-1" }] } });
+    expect(tx.report.updateMany).toHaveBeenCalledWith({ where: { reporterUserId: "user-1" }, data: { reporterUserId: null } });
     expect(tx.authSession.updateMany).toHaveBeenCalledWith({
       where: { userId: "user-1", revokedAt: null },
       data: { revokedAt: expect.any(Date) }

@@ -14,6 +14,8 @@ import { AdminContentQueryDto, PatchAdminContentDto, ReorderAdminContentDto, Ups
 import { AdminCommunityBanDto, AdminCommunityMembershipDto, CreateCommunityRoomDto, UpdateCommunityRoomDto } from "./dto/admin-community.dto";
 import { UpsertMatchDto, UpsertMatchStatDto, UpsertTournamentDto, CreateTeamDto, UpdateMatchDto, UpsertSpotlightEventDto, UpdateSpotlightEventDto, UpsertLineupDto } from "./dto/admin-sports.dto";
 import { MediaService } from "../common/media/media.service";
+import { ModerationService } from "../moderation/moderation.service";
+import { ApplyModerationActionDto, ModerationActionQueryDto, ReportQueryDto, SanctionQueryDto, UpdateReportDto } from "../moderation/dto/moderation.dto";
 
 @Roles("admin", "superadmin")
 @Controller("admin")
@@ -22,12 +24,56 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly brandsService: BrandsService,
     private readonly marketplace: MarketplaceService,
-    private readonly media: MediaService
+    private readonly media: MediaService,
+    private readonly moderation: ModerationService
   ) {}
 
   @Get("dashboard")
   dashboard() {
     return this.admin.dashboard();
+  }
+
+  @Get("moderation/reports")
+  listReports(@Query() query: ReportQueryDto) {
+    return this.moderation.listReports(query);
+  }
+
+  @Get("moderation/reports/:id")
+  getReport(@Param("id") id: string) {
+    return this.moderation.getReport(id);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Patch("moderation/reports/:id")
+  updateReport(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: UpdateReportDto) {
+    return this.moderation.updateReport(user, id, dto);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Post("moderation/reports/:id/actions")
+  applyModerationAction(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: ApplyModerationActionDto) {
+    return this.moderation.applyAction(user, id, dto);
+  }
+
+  @Get("moderation/actions")
+  listModerationActions(@Query() query: ModerationActionQueryDto) {
+    return this.moderation.listActions(query);
+  }
+
+  @Get("moderation/sanctions")
+  listSanctions(@Query() query: SanctionQueryDto) {
+    return this.moderation.listSanctions(query);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Post("moderation/sanctions/:id/revoke")
+  revokeSanction(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() body: { note?: string }) {
+    return this.moderation.revokeSanction(user, id, body.note);
+  }
+
+  @Get("moderation/blocks")
+  listBlocks() {
+    return this.moderation.listBlocks();
   }
 
   @Get("marketplace/products")

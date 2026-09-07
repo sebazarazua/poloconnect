@@ -138,7 +138,20 @@ export class NotificationsService {
 
   async notifyRoomMembers(roomId: string, senderId: string, payload: { kind: NotificationKind; title: string; body: string; data?: Prisma.InputJsonValue }) {
     const memberships = await this.prisma.chatMembership.findMany({ where: { roomId, leftAt: null, userId: { not: senderId } }, select: { userId: true } });
-    return this.notifyUsers(memberships.map((membership) => membership.userId), payload);
+    const recipientIds = memberships.map((membership) => membership.userId);
+    const blocks = recipientIds.length
+      ? await this.prisma.userBlock.findMany({
+          where: {
+            OR: [
+              { blockerUserId: senderId, blockedUserId: { in: recipientIds } },
+              { blockedUserId: senderId, blockerUserId: { in: recipientIds } }
+            ]
+          },
+          select: { blockerUserId: true, blockedUserId: true }
+        })
+      : [];
+    const blockedRecipientIds = new Set(blocks.map((block) => block.blockerUserId === senderId ? block.blockedUserId : block.blockerUserId));
+    return this.notifyUsers(recipientIds.filter((userId) => !blockedRecipientIds.has(userId)), payload);
   }
 
   async sendTestPush(userId: string) {

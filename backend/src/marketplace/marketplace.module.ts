@@ -4,8 +4,10 @@ import { MarketplacePaymentsController } from "./marketplace-payments.controller
 import { MarketplaceService } from "./marketplace.service";
 import { MercadoPagoService } from "./mercadopago.service";
 import { ProductsController } from "./products.controller";
+import { ModerationModule } from "../moderation/moderation.module";
 
 @Module({
+  imports: [ModerationModule],
   controllers: [ProductsController, FavoritesController, MarketplacePaymentsController],
   providers: [MarketplaceService, MercadoPagoService],
   exports: [MarketplaceService]

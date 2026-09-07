@@ -6,6 +6,8 @@ import { page, PaginationDto } from "../common/dto/pagination.dto";
 import { PrismaService } from "../database/prisma.service";
 import { ContactSellerDto, ProductQueryDto, ProductUpsertDto, RejectProductDto } from "./dto/marketplace.dto";
 import { MercadoPagoService } from "./mercadopago.service";
+import { ContentFilterService } from "../moderation/content-filter.service";
+import { ModerationService } from "../moderation/moderation.service";
 
 const PUBLICATION_CURRENCY = "ARS";
 const MP_RETURN_DEEP_LINK = "polo-connect://market-publish-return";
@@ -19,7 +21,9 @@ export class MarketplaceService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly media: MediaService,
-    private readonly mercadoPago: MercadoPagoService
+    private readonly mercadoPago: MercadoPagoService,
+    private readonly moderation: ModerationService,
+    private readonly contentFilter: ContentFilterService
   ) {}
 
   private async normalizeImageInputs(body: ProductUpsertDto) {
@@ -96,7 +100,8 @@ export class MarketplaceService {
       orderBy: { createdAt: "desc" },
       take: limit + 1
     });
-    return page(products.map((product) => this.toProductDto(product)), limit);
+    const blockedUserIds = await this.moderation.filterBlockedUserIds(userId, products.map((product) => product.sellerId));
+    return page(products.filter((product) => !blockedUserIds.has(product.sellerId)).map((product) => this.toProductDto(product)), limit);
   }
 
   async getProduct(userId: string, id: string) {
@@ -108,6 +113,7 @@ export class MarketplaceService {
     if (product.status === "pending_payment" || (product.status !== "active" && product.sellerId !== userId)) {
       throw new NotFoundException("Product not found.");
     }
+    await this.moderation.assertUsersCanInteract(userId, product.sellerId);
     return this.toProductDto(product, true);
   }
 
@@ -119,6 +125,7 @@ export class MarketplaceService {
       throw new BadRequestException("No se pudo iniciar el pago de la publicación. Intentá nuevamente más tarde.");
     }
 
+    this.contentFilter.assertAllowed(body.name, body.description, body.location);
     const imageUrls = await this.normalizeImageInputs(body);
 
     const product = await this.prisma.product.create({
@@ -196,6 +203,7 @@ export class MarketplaceService {
     const current = await this.prisma.product.findUnique({ where: { id } });
     if (!current || current.deletedAt) throw new NotFoundException("Product not found.");
     if (current.sellerId !== user.id && !user.roles.includes("admin")) throw new ForbiddenException("Product ownership required.");
+    this.contentFilter.assertAllowed(body.name, body.description, body.location);
     const imageUrls = await this.normalizeImageInputs(body);
 
     const product = await this.prisma.product.update({
@@ -239,7 +247,8 @@ export class MarketplaceService {
   }
 
   async addFavorite(userId: string, productId: string) {
-    await this.ensureProduct(productId);
+    const product = await this.ensureProduct(productId);
+    await this.moderation.assertUsersCanInteract(userId, product.sellerId);
     await this.prisma.productFavorite.upsert({ where: { userId_productId: { userId, productId } }, update: {}, create: { userId, productId } });
     return { ok: true };
   }
@@ -257,11 +266,13 @@ export class MarketplaceService {
       orderBy: { createdAt: "desc" },
       take: limit + 1
     });
-    return page(favorites.map((favorite) => this.toProductDto(favorite.product)), limit);
+    const blockedUserIds = await this.moderation.filterBlockedUserIds(userId, favorites.map((favorite) => favorite.product.sellerId));
+    return page(favorites.filter((favorite) => !blockedUserIds.has(favorite.product.sellerId)).map((favorite) => this.toProductDto(favorite.product)), limit);
   }
 
   async contactSeller(userId: string, productId: string, body: ContactSellerDto) {
     const product = await this.ensureProduct(productId);
+    await this.moderation.assertUsersCanInteract(userId, product.sellerId);
     const contact = await this.prisma.sellerContact.create({ data: { productId, buyerId: userId, sellerId: product.sellerId, contactType: body.contactType ?? "in_app", message: body.message } });
     return { ok: true, contactId: contact.id, sellerId: product.sellerId };
   }

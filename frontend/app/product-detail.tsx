@@ -16,9 +16,12 @@ import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useMarket } from "@/contexts/MarketContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { contactSeller } from "@/services/api/market";
 import { fetchProduct } from "@/services/api/market";
 import type { Product } from "@/services/market";
+import { ReportModal, type ReportTarget } from "@/components/ReportModal";
+import { blockUser } from "@/services/api/moderation";
 
 type ProductTab = "detalle" | "vendedor";
 
@@ -51,6 +54,7 @@ export default function ProductDetailScreen() {
   const styles = createStyles(colors);
   const router = useRouter();
   const { t } = useLocale();
+  const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { products, isFavorite, toggleFavorite } = useMarket();
   const cachedProduct = useMemo(() => products.find((item) => item.id === id), [id, products]);
@@ -59,6 +63,7 @@ export default function ProductDetailScreen() {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [imageCarouselWidth, setImageCarouselWidth] = useState(0);
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const imageCarouselRef = useRef<ScrollView>(null);
   const viewerCarouselRef = useRef<ScrollView>(null);
 
@@ -134,6 +139,30 @@ export default function ProductDetailScreen() {
     await Linking.openURL(waUrl);
   };
 
+  const handleModerationMenu = () => {
+    if (!product || !product.seller?.id || product.seller.id === user?.id) return;
+    Alert.alert("Opciones de seguridad", "Elegí una acción para esta publicación o su vendedor.", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Reportar publicación", onPress: () => setReportTarget({ contentType: "marketplace_listing", contentId: product.id, reportedUserId: product.seller?.id }) },
+      {
+        text: "Más opciones",
+        onPress: () => Alert.alert("Vendedor", "Acciones sobre este vendedor", [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Reportar vendedor", onPress: () => setReportTarget({ contentType: "user", reportedUserId: product.seller?.id }) },
+          {
+            text: "Bloquear vendedor",
+            style: "destructive",
+            onPress: () => {
+              void blockUser(product.seller!.id)
+                .then(() => router.replace("/(tabs)/market"))
+                .catch((error) => Alert.alert("No se pudo bloquear", error instanceof Error ? error.message : "Intentá nuevamente."));
+            }
+          }
+        ])
+      }
+    ]);
+  };
+
   if (!product) {
     return (
       <Screen title={t("product.notFoundTitle")} showBackButton onBackPress={() => router.back()}>
@@ -202,6 +231,11 @@ export default function ProductDetailScreen() {
                 color={isFavorite(product.id) ? colors.primary : "#ffffff"}
               />
             </Pressable>
+            {product.seller?.id && product.seller.id !== user?.id ? (
+              <Pressable accessibilityLabel="Opciones de seguridad" style={styles.moderationButton} onPress={handleModerationMenu}>
+                <Ionicons name="ellipsis-horizontal" size={22} color="#ffffff" />
+              </Pressable>
+            ) : null}
             {productImages.length > 1 ? (
               <View style={styles.carouselCounterPill}>
                 <Text style={styles.carouselCounterText}>{activeImageIndex + 1}/{productImages.length}</Text>
@@ -386,6 +420,7 @@ export default function ProductDetailScreen() {
           </View>
         </View>
       ) : null}
+      <ReportModal visible={Boolean(reportTarget)} target={reportTarget} onClose={() => setReportTarget(null)} />
     </View>
   );
 }
@@ -429,6 +464,17 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingHorizontal: 10,
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.55)"
+  },
+  moderationButton: {
+    position: "absolute",
+    right: 12,
+    bottom: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center"
   },
   carouselCounterText: {
     color: "#fff",

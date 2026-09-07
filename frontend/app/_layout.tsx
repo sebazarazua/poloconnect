@@ -240,6 +240,8 @@ function RootNavigator({ allowWebDev }: { allowWebDev: boolean }) {
         <Stack.Screen name="profile" />
         <Stack.Screen name="settings" />
         <Stack.Screen name="help-center" />
+        <Stack.Screen name="blocked-users" />
+        <Stack.Screen name="community-guidelines" />
         <Stack.Screen name="team-register" />
         <Stack.Screen name="group-chat" />
         <Stack.Screen name="watch-live" />

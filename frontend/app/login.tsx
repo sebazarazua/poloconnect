@@ -47,7 +47,7 @@ export default function LoginScreen() {
   const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
   const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
   const googleAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
-  const isExpoGo = Constants.appOwnership === "expo";
+  const isExpoGo = Constants.executionEnvironment === "storeClient" || Constants.appOwnership === "expo";
   const expoProxyProject = Constants.expoConfig?.originalFullName ?? "@anonymous/polo-connect";
   const expoProxyRedirectUri = `https://auth.expo.io/${expoProxyProject}`;
   const expoProxyReturnUri = getDefaultReturnUrl();
@@ -165,7 +165,6 @@ export default function LoginScreen() {
       } catch (loginError) {
         console.log("auth/google/error");
         setError(getOAuthErrorMessage("Google", t));
-        handledGoogleResponseRef.current = null;
       } finally {
         googleProcessingRef.current = false;
         setIsGoogleProcessing(false);
@@ -311,7 +310,7 @@ export default function LoginScreen() {
             disabled={isSubmitting || isGoogleProcessing || !hasGoogleConfig}
           />
 
-          {Platform.OS === "ios" ? (
+          {Platform.OS === "ios" && !isExpoGo ? (
             <SocialButton
               label={t("auth.login.apple")}
               icon="logo-apple"

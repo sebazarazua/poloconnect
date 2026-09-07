@@ -30,6 +30,15 @@ export class JwtAuthGuard implements CanActivate {
         include: { roles: { include: { role: true } } }
       });
       if (!user) throw new UnauthorizedException("Invalid access token.");
+      const activeSanction = await this.prisma.userSanction.findFirst({
+        where: {
+          userId: user.id,
+          revokedAt: null,
+          OR: [{ type: "permanent_ban" }, { type: "temporary_suspension", endsAt: { gt: new Date() } }]
+        },
+        select: { id: true }
+      });
+      if (activeSanction) throw new UnauthorizedException("Account is suspended.");
       request.user = {
         id: user.id,
         email: user.email,

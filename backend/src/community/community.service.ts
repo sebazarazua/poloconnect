@@ -4,13 +4,17 @@ import { PrismaService } from "../database/prisma.service";
 import { MessageQueryDto } from "./dto/community.dto";
 import { NotificationsService } from "../notifications/notifications.service";
 import { CommunityGateway } from "./community.gateway";
+import { ContentFilterService } from "../moderation/content-filter.service";
+import { ModerationService } from "../moderation/moderation.service";
 
 @Injectable()
 export class CommunityService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
-    private readonly gateway: CommunityGateway
+    private readonly gateway: CommunityGateway,
+    private readonly moderation: ModerationService,
+    private readonly contentFilter: ContentFilterService
   ) {}
 
   async listRooms(userId: string) {
@@ -56,13 +60,15 @@ export class CommunityService {
       orderBy: { messageNumber: "desc" },
       take: limit + 1
     });
-    return page(messages.reverse().map((message) => this.toMessageDto(message, userId)), limit);
+    const blockedUserIds = await this.moderation.filterBlockedUserIds(userId, messages.map((message) => message.userId));
+    return page(messages.filter((message) => !blockedUserIds.has(message.userId)).reverse().map((message) => this.toMessageDto(message, userId)), limit);
   }
 
   async sendMessage(userId: string, roomId: string, text: string, clientMessageId?: string) {
     await this.ensureNoActiveBan(userId, roomId);
     await this.ensureMembership(userId, roomId);
     const room = await this.ensureRoom(roomId);
+    this.contentFilter.assertAllowed(text);
     const last = await this.prisma.chatMessage.findFirst({ where: { roomId }, orderBy: { messageNumber: "desc" } });
     const messageNumber = BigInt(Number(last?.messageNumber ?? 0) + 1);
     const sanitized = text.trim().replace(/[<>]/g, "");
@@ -70,7 +76,7 @@ export class CommunityService {
     const messageDto = { ...this.toMessageDto(message, userId), clientMessageId };
     const realtimeMessageDto = this.toRealtimeMessageDto(message);
 
-    this.gateway.emitMessage(roomId, realtimeMessageDto as Record<string, unknown>);
+    await this.gateway.emitMessage(roomId, realtimeMessageDto as Record<string, unknown>);
 
     void this.notifications.notifyRoomMembers(roomId, userId, {
       kind: "message",

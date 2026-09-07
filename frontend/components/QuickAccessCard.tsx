@@ -23,17 +23,7 @@ export function QuickAccessCard({ title, subtitle, icon, onPress }: QuickAccessC
         </View>
 
         <View style={styles.textBlock}>
-          <Text
-            style={styles.title}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-            adjustsFontSizeToFit
-            minimumFontScale={0.8}
-            allowFontScaling={false}
-            maxFontSizeMultiplier={1}
-          >
-            {title}
-          </Text>
+          <Text style={styles.title} numberOfLines={1}>{title}</Text>
           <Text style={styles.subtitle} numberOfLines={2}>{subtitle}</Text>
         </View>
 
@@ -56,7 +46,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 12,
+    padding: 14,
     overflow: "hidden",
     shadowColor: "#0b1729",
     shadowOpacity: 0.12,
@@ -83,12 +73,12 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8
+    gap: 12
   },
   iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 46,
+    height: 46,
+    borderRadius: 14,
     backgroundColor: colors.primaryDark,
     alignItems: "center",
     justifyContent: "center",
@@ -104,7 +94,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   },
   textBlock: {
     flex: 1,
-    minWidth: 0,
     gap: 2
   },
   title: {

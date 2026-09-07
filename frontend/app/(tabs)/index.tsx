@@ -604,12 +604,15 @@ export default function HomeScreen() {
               </View>
               <Text
                 style={styles.quickText}
-                numberOfLines={1}
+                numberOfLines={2}
                 ellipsizeMode="tail"
                 adjustsFontSizeToFit
-                minimumFontScale={0.8}
+                minimumFontScale={0.75}
                 allowFontScaling={false}
                 maxFontSizeMultiplier={1}
+                textBreakStrategy="highQuality"
+                android_hyphenationFrequency="none"
+                lineBreakStrategyIOS="standard"
               >
                 {label}
               </Text>
@@ -768,7 +771,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: "rgba(232, 201, 122, 0.30)",
-    padding: 12,
+    padding: 14,
     justifyContent: "center",
     overflow: "hidden",
     shadowColor: "#C9A84C",
@@ -794,12 +797,12 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   quickRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8
+    gap: 12
   },
   quickIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 46,
+    height: 46,
+    borderRadius: 14,
     backgroundColor: colors.primaryDark,
     alignItems: "center",
     justifyContent: "center",
@@ -822,8 +825,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     fontWeight: "800",
-    flex: 1,
-    minWidth: 0
+    flex: 1
   },
   quickGoldDot: {
     position: "absolute",

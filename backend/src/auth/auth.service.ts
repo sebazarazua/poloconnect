@@ -396,7 +396,7 @@ export class AuthService {
         provider,
         providerSubject,
         email: normalizedEmail,
-        providerRefreshToken: profile.providerRefreshToken ?? null,
+        ...(profile.providerRefreshToken ? { providerRefreshToken: profile.providerRefreshToken } : {}),
         userId: user.id
       }
     });

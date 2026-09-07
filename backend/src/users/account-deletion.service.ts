@@ -24,7 +24,6 @@ export class AccountDeletionService {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, deletedAt: null },
       include: {
-        authIdentities: true,
         products: { include: { images: true } }
       }
     });
@@ -34,7 +33,7 @@ export class AccountDeletionService {
     }
 
     const mediaReferences = this.collectOwnedMediaReferences(user);
-    const appleRevocation = await this.revokeAppleAuthorizations(user.authIdentities);
+    const appleRevocation = await this.revokeAppleAuthorizations(await this.findAppleRevocationIdentities(userId));
 
     const deleted = await this.prisma.$transaction(async (tx) => {
       const messageIds = await tx.chatMessage.findMany({
@@ -143,7 +142,7 @@ export class AccountDeletionService {
     };
   }
 
-  private collectOwnedMediaReferences(user: Prisma.UserGetPayload<{ include: { authIdentities: true; products: { include: { images: true } } } }>): OwnedMediaReferences {
+  private collectOwnedMediaReferences(user: Prisma.UserGetPayload<{ include: { products: { include: { images: true } } } }>): OwnedMediaReferences {
     const urls = [
       user.avatarUrl,
       ...user.products.flatMap((product) => product.images.map((image) => image.url))
@@ -182,6 +181,18 @@ export class AccountDeletionService {
 
     if (localResult.status === "rejected") {
       this.logger.warn(`Account media cleanup failed for local files: ${localResult.reason}`);
+    }
+  }
+
+  private async findAppleRevocationIdentities(userId: string) {
+    try {
+      return await this.prisma.authIdentity.findMany({
+        where: { userId, provider: "apple" },
+        select: { provider: true, providerRefreshToken: true }
+      });
+    } catch (error) {
+      this.logger.warn(`Apple revocation lookup skipped during account deletion: ${error instanceof Error ? error.message : String(error)}`);
+      return [];
     }
   }
 

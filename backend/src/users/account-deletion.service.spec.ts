@@ -47,6 +47,7 @@ function createService(user: any) {
   const tx = createTx();
   const prisma = {
     user: { findFirst: jest.fn().mockResolvedValue(user) },
+    authIdentity: { findMany: jest.fn().mockResolvedValue(user?.authIdentities ?? []) },
     $transaction: jest.fn((callback: any) => callback(tx))
   };
   const media = {

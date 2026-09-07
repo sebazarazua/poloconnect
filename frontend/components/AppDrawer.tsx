@@ -324,14 +324,14 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     backgroundColor: colors.background
   },
   drawerHost: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 40
   },
   drawerDismissArea: {
-    ...StyleSheet.absoluteFillObject
+    ...StyleSheet.absoluteFill
   },
   drawerBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "#000000"
   },
   drawer: {

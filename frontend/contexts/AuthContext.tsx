@@ -11,6 +11,7 @@ import {
   type SignUpPayload
 } from "@/services/auth";
 import { getCurrentUser, logout as logoutApi } from "@/services/api/auth";
+import { deleteMyAccount as deleteMyAccountApi } from "@/services/api/users";
 import { clearAuthTokens, getAccessToken, hydrateAuthTokens, setSessionInvalidHandler } from "@/services/api/client";
 import { getAuthStorageItem, setAuthStorageItem } from "@/services/auth-storage";
 import { ActivityIndicator, Platform, View } from "react-native";
@@ -52,6 +53,7 @@ type AuthContextValue = {
   signInWithApple: (payload: AppleSignInPayload) => Promise<void>;
   signUp: (payload: SignUpPayload) => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   updateUser: (nextUser: AuthUser) => void;
 };
 
@@ -225,6 +227,28 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   };
 
+  const deleteAccount = async () => {
+    setIsSubmitting(true);
+
+    try {
+      await import("@/services/push-notifications")
+        .then((module) => module.unregisterCurrentDevicePushToken())
+        .catch(() => undefined);
+    } catch {
+      // Push token cleanup is best effort; the backend deletes all tokens for the account.
+    }
+
+    try {
+      await deleteMyAccountApi();
+      await clearAuthTokens();
+      await writeStoredUser(null);
+      setUser(null);
+      setHasSessionToken(false);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const updateUser = (nextUser: AuthUser) => {
     if (!getAccessToken()) {
       return;
@@ -252,6 +276,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         signInWithApple,
         signUp,
         signOut,
+        deleteAccount,
         updateUser
       }}
     >

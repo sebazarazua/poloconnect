@@ -459,7 +459,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     height: "100%"
   },
   viewerOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "#000",
     zIndex: 40
   },

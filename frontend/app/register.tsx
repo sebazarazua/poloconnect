@@ -82,7 +82,7 @@ export default function RegisterScreen() {
 
   return (
     <>
-      <StatusBar style="light" backgroundColor="#071221" />
+      <StatusBar style="light" />
       <AuthScaffold
         title={t("auth.register.title")}
         subtitle={t("auth.register.subtitle")}

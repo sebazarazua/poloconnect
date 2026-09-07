@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { randomBytes } from "crypto";
 import { existsSync, readFileSync } from "fs";
-import { basename, extname } from "path";
+import { unlink } from "fs/promises";
+import { basename, extname, resolve, sep } from "path";
 import { PrismaService } from "../../database/prisma.service";
 
 export type MediaUploadResult = {
@@ -89,6 +90,65 @@ export class MediaService implements OnModuleInit {
 
       throw new NotFoundException("Media file not found.");
     }
+  }
+
+  async deleteStorageKeys(storageKeys: string[]) {
+    const uniqueKeys = Array.from(new Set(storageKeys.map((key) => key?.trim().replace(/^\/+/, "")).filter(Boolean)));
+    if (uniqueKeys.length === 0) {
+      return { deleted: 0, skipped: 0, failed: 0 };
+    }
+
+    if (!this.isConfigured()) {
+      this.logger.warn(`Skipping deletion of ${uniqueKeys.length} remote media object(s): S3 media storage is not configured.`);
+      return { deleted: 0, skipped: uniqueKeys.length, failed: 0 };
+    }
+
+    let deleted = 0;
+    let failed = 0;
+
+    for (const key of uniqueKeys) {
+      try {
+        await this.getClient().send(new DeleteObjectCommand({ Bucket: this.getBucket(), Key: key }));
+        deleted += 1;
+      } catch (error: any) {
+        failed += 1;
+        const status = error?.$metadata?.httpStatusCode;
+        const code = error?.Code || error?.name || "UnknownError";
+        this.logger.warn(`Failed to delete media key "${key}": ${code} (status ${status ?? "n/a"}).`);
+      }
+    }
+
+    return { deleted, skipped: 0, failed };
+  }
+
+  async deleteLegacyUploadPaths(paths: string[]) {
+    const uniquePaths = Array.from(new Set(paths.map((path) => this.extractLegacyUploadPath(path)).filter((path): path is string => Boolean(path))));
+    let deleted = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const legacyPath of uniquePaths) {
+      const filePath = this.resolveLegacyUploadPath(legacyPath);
+      if (!filePath) {
+        skipped += 1;
+        continue;
+      }
+
+      try {
+        await unlink(filePath);
+        deleted += 1;
+      } catch (error: any) {
+        if (error?.code === "ENOENT") {
+          skipped += 1;
+          continue;
+        }
+
+        failed += 1;
+        this.logger.warn(`Failed to delete legacy upload "${legacyPath}": ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    return { deleted, skipped, failed };
   }
 
   mediaUrl(storageKey: string) {
@@ -317,6 +377,17 @@ export class MediaService implements OnModuleInit {
 
     await params.update(this.mediaUrl(storageKey), storageKey);
     return 1;
+  }
+
+  private resolveLegacyUploadPath(legacyPath: string) {
+    const uploadsRoot = resolve(process.cwd(), "uploads");
+    const filePath = resolve(process.cwd(), legacyPath.replace(/^\/+/, ""));
+    if (filePath !== uploadsRoot && !filePath.startsWith(`${uploadsRoot}${sep}`)) {
+      this.logger.warn(`Skipping unsafe legacy upload path "${legacyPath}".`);
+      return null;
+    }
+
+    return filePath;
   }
 
   private mimeFromPath(filePath: string) {

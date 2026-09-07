@@ -1,16 +1,29 @@
-import { BadRequestException, Body, ConflictException, Controller, Get, Patch, Post, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, ConflictException, Controller, Delete, Get, Patch, Post, Req, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Throttle } from "@nestjs/throttler";
 import { Prisma } from "@prisma/client";
 import { memoryStorage } from "multer";
+import { ConfigService } from "@nestjs/config";
 import { CurrentUser, RequestUser } from "../common/decorators/current-user.decorator";
 import { CsrfGuard } from "../common/guards/csrf.guard";
 import { PrismaService } from "../database/prisma.service";
 import { MediaService } from "../common/media/media.service";
+import { AccountDeletionService } from "./account-deletion.service";
 
 @Controller("users")
 export class UsersController {
-  constructor(private readonly prisma: PrismaService, private readonly media: MediaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly media: MediaService,
+    private readonly accountDeletion: AccountDeletionService,
+    private readonly config: ConfigService
+  ) {}
+
+  private clearAuthCookies(res: any) {
+    const isProd = this.config.get<string>("NODE_ENV") === "production";
+    const cookieBase = `Path=/; Max-Age=0; SameSite=Lax${isProd ? "; Secure" : ""}`;
+    res.setHeader("Set-Cookie", [`pc_refresh=; HttpOnly; ${cookieBase}`, `pc_csrf=; ${cookieBase}`]);
+  }
 
   private static imageFileFilter(_req: any, file: any, callback: (error: Error | null, acceptFile: boolean) => void) {
     if (!String(file.mimetype).startsWith("image/")) {
@@ -102,5 +115,14 @@ export class UsersController {
     });
 
     return this.toAuthUser(data);
+  }
+
+  @UseGuards(CsrfGuard)
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @Delete("me")
+  async deleteMe(@CurrentUser() user: RequestUser, @Req() req: any) {
+    const result = await this.accountDeletion.deleteOwnAccount(user.id);
+    this.clearAuthCookies(req.res);
+    return result;
   }
 }

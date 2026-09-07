@@ -89,7 +89,7 @@ export default function ForgotPasswordScreen() {
 
   return (
     <>
-      <StatusBar style="light" backgroundColor="#071221" />
+      <StatusBar style="light" />
       <AuthScaffold title={t("auth.reset.title")} subtitle={t("auth.reset.subtitle")} footerText={t("auth.login.footer")}> 
         <View style={styles.formBlock}>
           <FieldLabel label={t("auth.reset.email")} />

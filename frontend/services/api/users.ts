@@ -40,3 +40,9 @@ export async function uploadMyAvatar(image: UploadableImage) {
     body: formData
   });
 }
+
+export async function deleteMyAccount() {
+  return apiRequest<{ ok: boolean }>("/users/me", {
+    method: "DELETE"
+  });
+}

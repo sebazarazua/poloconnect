@@ -31,6 +31,7 @@ export type GoogleSignInPayload = {
 
 export type AppleSignInPayload = {
   identityToken: string;
+  authorizationCode?: string;
   email?: string;
   firstName?: string;
   lastName?: string;
@@ -149,6 +150,7 @@ export async function authenticateWithApple(payload: AppleSignInPayload) {
 
   return loginWithApple({
     identityToken: payload.identityToken.trim(),
+    authorizationCode: payload.authorizationCode?.trim() || undefined,
     email: payload.email?.trim() || undefined,
     firstName: payload.firstName?.trim() || undefined,
     lastName: payload.lastName?.trim() || undefined

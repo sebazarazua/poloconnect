@@ -233,6 +233,7 @@ export default function LoginScreen() {
 
       await signInWithApple({
         identityToken: response.identityToken,
+        authorizationCode: response.authorizationCode ?? undefined,
         email: response.email ?? undefined,
         firstName: response.fullName?.givenName ?? undefined,
         lastName: response.fullName?.familyName ?? undefined
@@ -246,7 +247,7 @@ export default function LoginScreen() {
 
   return (
     <>
-      <StatusBar style="light" backgroundColor="#071221" />
+      <StatusBar style="light" />
       <AuthScaffold
         title={t("auth.login.title")}
         subtitle={t("auth.login.subtitle")}

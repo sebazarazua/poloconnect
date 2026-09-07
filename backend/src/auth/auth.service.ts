@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import * as argon2 from "argon2";
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { createRemoteJWKSet, importPKCS8, jwtVerify, SignJWT } from "jose";
 import { createTransport, type Transporter } from "nodemailer";
 import { randomBytes, randomInt, randomUUID } from "crypto";
 import { PrismaService } from "../database/prisma.service";
@@ -102,11 +102,13 @@ export class AuthService {
 
   async loginWithApple(dto: AppleLoginDto, req: any) {
     const profile = await this.verifyAppleIdentityToken(dto.identityToken);
+    const providerRefreshToken = await this.exchangeAppleAuthorizationCode(dto.authorizationCode);
     const user = await this.findOrCreateSocialUser("apple", profile.sub, {
       email: profile.email,
       emailVerified: profile.emailVerified,
       firstName: dto.firstName ?? profile.firstName,
-      lastName: dto.lastName ?? profile.lastName
+      lastName: dto.lastName ?? profile.lastName,
+      providerRefreshToken
     });
 
     return this.issueTokens(user, req);
@@ -282,6 +284,7 @@ export class AuthService {
       emailVerified?: boolean;
       firstName?: string | null;
       lastName?: string | null;
+      providerRefreshToken?: string | null;
     }
   ) {
     const normalizedEmail = profile.email?.trim().toLowerCase() || null;
@@ -300,6 +303,21 @@ export class AuthService {
     });
 
     if (existingIdentity?.user) {
+      if (profile.providerRefreshToken) {
+        await this.prisma.authIdentity.update({
+          where: {
+            provider_providerSubject: {
+              provider,
+              providerSubject
+            }
+          },
+          data: {
+            providerRefreshToken: profile.providerRefreshToken,
+            email: normalizedEmail ?? existingIdentity.email
+          }
+        });
+      }
+
       if (normalizedEmail && existingIdentity.user.email !== normalizedEmail && profile.emailVerified) {
         const conflictingUser = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
         if (conflictingUser && conflictingUser.id !== existingIdentity.user.id) {
@@ -371,12 +389,14 @@ export class AuthService {
         }
       },
       update: {
-        email: normalizedEmail
+        email: normalizedEmail,
+        ...(profile.providerRefreshToken ? { providerRefreshToken: profile.providerRefreshToken } : {})
       },
       create: {
         provider,
         providerSubject,
         email: normalizedEmail,
+        providerRefreshToken: profile.providerRefreshToken ?? null,
         userId: user.id
       }
     });
@@ -539,6 +559,83 @@ export class AuthService {
       .filter(Boolean);
 
     return Array.from(new Set(rawValues));
+  }
+
+  private async exchangeAppleAuthorizationCode(authorizationCode?: string | null) {
+    const code = authorizationCode?.trim();
+    if (!code) {
+      return null;
+    }
+
+    const clientId = this.resolveAppleClientId();
+    if (!clientId || !this.hasAppleTokenExchangeConfig()) {
+      this.logger.warn("Apple authorization code received but Apple token exchange credentials are not configured.");
+      return null;
+    }
+
+    try {
+      const clientSecret = await this.createAppleClientSecret(clientId);
+      const response = await fetch("https://appleid.apple.com/auth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          code,
+          grant_type: "authorization_code"
+        })
+      });
+
+      if (!response.ok) {
+        this.logger.warn(`Apple token exchange failed with status ${response.status}.`);
+        return null;
+      }
+
+      const payload = (await response.json()) as { refresh_token?: string };
+      return payload.refresh_token ?? null;
+    } catch (error) {
+      this.logger.warn(`Apple token exchange failed: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
+  }
+
+  private hasAppleTokenExchangeConfig() {
+    return Boolean(
+      this.config.get<string>("APPLE_TEAM_ID")?.trim() &&
+        this.config.get<string>("APPLE_KEY_ID")?.trim() &&
+        this.config.get<string>("APPLE_PRIVATE_KEY")?.trim()
+    );
+  }
+
+  private async createAppleClientSecret(clientId: string) {
+    const teamId = this.config.get<string>("APPLE_TEAM_ID")?.trim();
+    const keyId = this.config.get<string>("APPLE_KEY_ID")?.trim();
+    const rawPrivateKey = this.config.get<string>("APPLE_PRIVATE_KEY")?.trim();
+
+    if (!teamId || !keyId || !rawPrivateKey) {
+      throw new Error("Missing Apple client secret configuration.");
+    }
+
+    const privateKey = await importPKCS8(rawPrivateKey.replace(/\\n/g, "\n"), "ES256");
+    return new SignJWT({})
+      .setProtectedHeader({ alg: "ES256", kid: keyId })
+      .setIssuer(teamId)
+      .setSubject(clientId)
+      .setAudience("https://appleid.apple.com")
+      .setIssuedAt()
+      .setExpirationTime("180d")
+      .sign(privateKey);
+  }
+
+  private resolveAppleClientId() {
+    return (
+      this.config.get<string>("APPLE_OAUTH_CLIENT_ID")?.trim() ||
+      this.config.get<string>("APPLE_OAUTH_CLIENT_IDS")
+        ?.split(",")
+        .map((value) => value.trim())
+        .find(Boolean) ||
+      null
+    );
   }
 
   private async sendPasswordResetEmail(email: string, code: string, firstName: string) {

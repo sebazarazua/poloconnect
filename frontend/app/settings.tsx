@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, TextStyle, View, ViewStyle } from "react-native";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, Text, TextStyle, View, ViewStyle } from "react-native";
 import { Screen } from "@/components/Screen";
 import { AppColors, ThemeMode, radius, useTheme } from "@/constants/theme";
+import { useAuth } from "@/contexts/AuthContext";
 import { supportedLocales, useLocale, type Locale } from "@/contexts/LocaleContext";
 import { getMySettings, updateMySettings, type NotificationPreferences, type UserSettings } from "@/services/api/settings";
 
@@ -54,6 +55,7 @@ const EMPTY_SETTINGS: UserSettings = {
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const { deleteAccount } = useAuth();
   const { colors, mode, setMode } = useTheme();
   const { locale, setLocale, t } = useLocale();
   const styles = createStyles(colors);
@@ -61,6 +63,7 @@ export default function SettingsScreen() {
   const [settings, setSettings] = useState<UserSettings>(EMPTY_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,6 +134,48 @@ export default function SettingsScreen() {
 
     setSettings(nextSettings);
     void persistSettings(nextSettings);
+  };
+
+  const performAccountDeletion = async () => {
+    if (deletingAccount) return;
+
+    setDeletingAccount(true);
+
+    try {
+      await deleteAccount();
+      Alert.alert(t("settings.deleteAccount.successTitle"), t("settings.deleteAccount.successText"), [
+        { text: t("common.done"), onPress: () => router.replace("/login") }
+      ]);
+    } catch (error) {
+      Alert.alert(
+        t("settings.deleteAccount.errorTitle"),
+        error instanceof Error ? error.message : t("settings.deleteAccount.errorText")
+      );
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
+  const confirmAccountDeletion = () => {
+    if (deletingAccount) return;
+
+    Alert.alert(t("settings.deleteAccount.title"), t("settings.deleteAccount.warning"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("settings.deleteAccount.continue"),
+        style: "destructive",
+        onPress: () => {
+          Alert.alert(t("settings.deleteAccount.confirmTitle"), t("settings.deleteAccount.confirmText"), [
+            { text: t("common.cancel"), style: "cancel" },
+            {
+              text: t("settings.deleteAccount.action"),
+              style: "destructive",
+              onPress: () => void performAccountDeletion()
+            }
+          ]);
+        }
+      }
+    ]);
   };
 
   return (
@@ -257,6 +302,35 @@ export default function SettingsScreen() {
               <Text style={styles.infoLabel}>{t("common.privacy")}</Text>
               <Text style={styles.infoValue}>{t("settings.profileVisible")}</Text>
             </View>
+          </View>
+
+          <View style={[styles.section, styles.dangerSection]}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.dangerIcon}>
+                <Ionicons name="trash-outline" size={20} color={colors.danger} />
+              </View>
+              <View style={styles.sectionCopy}>
+                <Text style={styles.dangerTitle}>{t("settings.deleteAccount.title")}</Text>
+                <Text style={styles.sectionText}>{t("settings.deleteAccount.description")}</Text>
+              </View>
+            </View>
+
+            <Pressable
+              style={[styles.deleteAccountButton, deletingAccount && styles.deleteAccountButtonDisabled]}
+              onPress={confirmAccountDeletion}
+              disabled={deletingAccount}
+              accessibilityRole="button"
+              accessibilityLabel={t("settings.deleteAccount.action")}
+            >
+              {deletingAccount ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <>
+                  <Ionicons name="trash-outline" size={17} color="#ffffff" />
+                  <Text style={styles.deleteAccountButtonText}>{t("settings.deleteAccount.action")}</Text>
+                </>
+              )}
+            </Pressable>
           </View>
         </View>
       )}
@@ -423,5 +497,39 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: colors.border
+  },
+  dangerSection: {
+    borderColor: colors.dangerSoft,
+    backgroundColor: colors.surface
+  },
+  dangerIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.dangerSoft,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  dangerTitle: {
+    color: colors.danger,
+    fontSize: 16,
+    fontWeight: "800"
+  },
+  deleteAccountButton: {
+    minHeight: 46,
+    borderRadius: 14,
+    backgroundColor: colors.danger,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8
+  },
+  deleteAccountButtonDisabled: {
+    opacity: 0.6
+  },
+  deleteAccountButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "800"
   }
 });

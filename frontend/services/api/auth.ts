@@ -117,6 +117,7 @@ export async function loginWithGoogle(accessToken: string) {
 
 export async function loginWithApple(payload: {
   identityToken: string;
+  authorizationCode?: string;
   email?: string;
   firstName?: string;
   lastName?: string;

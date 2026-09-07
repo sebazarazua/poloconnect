@@ -883,7 +883,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     position: "relative"
   },
   newsBackgroundImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: "100%",
     height: "100%",
     // Android only clips an Image reliably when it carries the same radius as
@@ -892,11 +892,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderRadius: 18
   },
   newsDarkLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(6, 16, 28, 0.39)"
   },
   newsBackdrop: {
-    ...StyleSheet.absoluteFillObject
+    ...StyleSheet.absoluteFill
   },
   newsGlowPrimary: {
     position: "absolute",

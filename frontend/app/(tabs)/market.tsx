@@ -12,6 +12,7 @@ import {
   View
 } from "react-native";
 import { Screen } from "@/components/Screen";
+import { useAppDrawer } from "@/components/AppDrawer";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useMarket } from "@/contexts/MarketContext";
@@ -24,6 +25,7 @@ export default function MarketScreen() {
   const styles = createStyles(colors);
   const router = useRouter();
   const { t } = useLocale();
+  const { setDrawerGestureBlocked } = useAppDrawer();
   const { products, favoriteIds, isFavorite, toggleFavorite } = useMarket();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<MarketCategory>("todos");
@@ -32,6 +34,10 @@ export default function MarketScreen() {
   useEffect(() => {
     void listBrands().then(setBrands).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    return () => setDrawerGestureBlocked(false);
+  }, [setDrawerGestureBlocked]);
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
@@ -96,7 +102,18 @@ export default function MarketScreen() {
               <Text style={styles.brandsSeeAllText}>Ver catálogo</Text>
             </Pressable>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.brandsTrack}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.brandsTrack}
+            onTouchStart={() => setDrawerGestureBlocked(true)}
+            onTouchEnd={() => setDrawerGestureBlocked(false)}
+            onTouchCancel={() => setDrawerGestureBlocked(false)}
+            onScrollBeginDrag={() => setDrawerGestureBlocked(true)}
+            onScrollEndDrag={() => setDrawerGestureBlocked(false)}
+            onMomentumScrollBegin={() => setDrawerGestureBlocked(true)}
+            onMomentumScrollEnd={() => setDrawerGestureBlocked(false)}
+          >
             {brands.length > 0 ? brands.map((brand) => (
               <Pressable
                 key={brand.id}

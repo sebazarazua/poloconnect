@@ -116,8 +116,8 @@ export class AuthService {
 
   async requestPasswordReset(dto: PasswordResetRequestDto) {
     const email = dto.email.trim().toLowerCase();
-    const user = await this.prisma.user.findUnique({
-      where: { email },
+    const user = await this.prisma.user.findFirst({
+      where: { email, deletedAt: null, status: "active" },
       include: { credential: true }
     });
 
@@ -147,8 +147,8 @@ export class AuthService {
 
   async confirmPasswordReset(dto: PasswordResetConfirmDto, req: any) {
     const email = dto.email.trim().toLowerCase();
-    const user = await this.prisma.user.findUnique({
-      where: { email },
+    const user = await this.prisma.user.findFirst({
+      where: { email, deletedAt: null, status: "active" },
       include: { credential: true, roles: { include: { role: true } } }
     });
 
@@ -235,7 +235,7 @@ export class AuthService {
   }
 
   async getMe(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { roles: { include: { role: true } } } });
+    const user = await this.prisma.user.findFirst({ where: { id: userId, deletedAt: null, status: "active" }, include: { roles: { include: { role: true } } } });
     if (!user) throw new UnauthorizedException();
     return this.toAuthUser(user);
   }
@@ -251,6 +251,7 @@ export class AuthService {
   }
 
   private async issueTokens(user: any, req: any, familyId = randomUUID()) {
+    this.assertUserCanIssueSession(user);
     const refreshToken = randomBytes(48).toString("base64url");
     const csrfToken = randomBytes(32).toString("base64url");
     const expiresAt = new Date(Date.now() + Number(this.config.get("REFRESH_TOKEN_DAYS", 30)) * 24 * 60 * 60 * 1000);
@@ -270,6 +271,12 @@ export class AuthService {
       { secret: this.config.get<string>("JWT_ACCESS_SECRET"), expiresIn: this.config.get<string>("JWT_ACCESS_EXPIRES_IN", "15m") }
     );
     return { accessToken, refreshToken, csrfToken, user: this.toAuthUser(user) };
+  }
+
+  private assertUserCanIssueSession(user: { deletedAt?: Date | null; status?: string | null } | null) {
+    if (!user || user.deletedAt || user.status !== "active") {
+      throw new UnauthorizedException("Account is not active.");
+    }
   }
 
   private async ensureRole(code: string, name: string) {
@@ -346,6 +353,10 @@ export class AuthService {
 
     if (user && !profile.emailVerified) {
       throw new UnauthorizedException("Social sign-in could not be linked automatically.");
+    }
+
+    if (user) {
+      this.assertUserCanIssueSession(user);
     }
 
     if (!user) {

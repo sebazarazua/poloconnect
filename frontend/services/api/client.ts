@@ -8,6 +8,17 @@ export type ApiTokens = {
   csrfToken?: string;
 };
 
+type ApiRequestInit = RequestInit & {
+  skipAuth?: boolean;
+};
+
+export type SessionInvalidReason =
+  | "access_token_rejected"
+  | "access_token_rejected_after_refresh"
+  | "manual_logout"
+  | "refresh_token_invalid"
+  | "session_storage_invalid";
+
 function getDefaultApiUrl() {
   if (Platform.OS === "web") {
     return "http://localhost:4000/api/v1";
@@ -60,18 +71,29 @@ const apiPathPrefix = apiUrl ? apiUrl.slice(apiOrigin.length).replace(/\/$/, "")
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
 let csrfToken: string | null = null;
-let refreshPromise: Promise<void> | null = null;
+let refreshPromise: { sessionVersion: number; refreshToken: string; promise: Promise<void> } | null = null;
 let authTokensHydrated = false;
 let authTokensHydrationPromise: Promise<void> | null = null;
-let sessionInvalidHandler: (() => void) | null = null;
+let sessionInvalidHandler: ((reason: SessionInvalidReason) => void) | null = null;
+let authSessionVersion = 0;
 
-export function setSessionInvalidHandler(handler: (() => void) | null) {
+export function setSessionInvalidHandler(handler: ((reason: SessionInvalidReason) => void) | null) {
   sessionInvalidHandler = handler;
 }
 
-function notifySessionInvalid() {
-  console.info("startup/auth/session-invalid");
-  sessionInvalidHandler?.();
+function notifySessionInvalid(reason: SessionInvalidReason) {
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.info(`[AUTH] session invalidated: ${reason}`);
+  }
+  sessionInvalidHandler?.(reason);
+}
+
+function isSameAuthSession(version: number) {
+  return authSessionVersion === version;
+}
+
+function isCurrentAccessToken(version: number, token: string | null) {
+  return isSameAuthSession(version) && accessToken === token;
 }
 
 function readCookie(name: string) {
@@ -102,11 +124,11 @@ export async function hydrateAuthTokens() {
 }
 
 export async function setAuthTokens(tokens: ApiTokens) {
-  console.info("setAuthTokens called: true");
   accessToken = tokens.accessToken;
   refreshToken = tokens.refreshToken ?? refreshToken;
   csrfToken = tokens.csrfToken ?? csrfToken;
   authTokensHydrated = true;
+  authSessionVersion += 1;
   await Promise.all([
     setAuthStorageItem("pc_access_token", accessToken),
     setAuthStorageItem("pc_refresh_token", refreshToken),
@@ -114,19 +136,19 @@ export async function setAuthTokens(tokens: ApiTokens) {
   ]);
 
   const persistedAccessToken = await getAuthStorageItem("pc_access_token");
-  console.info(`access token persisted: ${Boolean(persistedAccessToken)}`);
 
   if (!persistedAccessToken) {
-    await clearAuthTokens(true);
+    await clearAuthTokens(true, "session_storage_invalid");
     throw new Error("No se pudo guardar el access token.");
   }
 }
 
-export async function clearAuthTokens(notifySession = false) {
+export async function clearAuthTokens(notifySession = false, reason: SessionInvalidReason = "manual_logout") {
   accessToken = null;
   refreshToken = null;
   csrfToken = null;
   authTokensHydrated = true;
+  authSessionVersion += 1;
   await Promise.all([
     setAuthStorageItem("pc_access_token", null),
     setAuthStorageItem("pc_refresh_token", null),
@@ -134,7 +156,7 @@ export async function clearAuthTokens(notifySession = false) {
   ]);
 
   if (notifySession) {
-    notifySessionInvalid();
+    notifySessionInvalid(reason);
   }
 }
 
@@ -183,8 +205,8 @@ export function getAccessToken() {
   return accessToken;
 }
 
-async function refreshAccessToken() {
-  if (!refreshToken) {
+async function refreshAccessToken(tokenToRefresh: string, requestSessionVersion: number, requestAccessToken: string | null) {
+  if (!tokenToRefresh) {
     throw new Error("No hay sesión activa.");
   }
 
@@ -192,15 +214,21 @@ async function refreshAccessToken() {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshToken })
+    body: JSON.stringify({ refreshToken: tokenToRefresh })
   });
 
   if (!response.ok) {
-    await clearAuthTokens(true);
+    if (isSameAuthSession(requestSessionVersion) && refreshToken === tokenToRefresh) {
+      await clearAuthTokens(true, "refresh_token_invalid");
+    }
     throw new Error("La sesión expiró. Iniciá sesión nuevamente.");
   }
 
   const data = await response.json();
+  if (!isSameAuthSession(requestSessionVersion) || refreshToken !== tokenToRefresh) {
+    return;
+  }
+
   accessToken = data.accessToken;
   refreshToken = data.refreshToken ?? refreshToken;
   csrfToken = data.csrfToken ?? csrfToken;
@@ -224,21 +252,25 @@ async function parseError(response: Response) {
   return response.statusText || "No se pudo completar la solicitud.";
 }
 
-export async function apiRequest<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+export async function apiRequest<T>(path: string, init: ApiRequestInit = {}, retry = true): Promise<T> {
   await hydrateAuthTokens();
+  const { skipAuth = false, ...fetchInit } = init;
   const requestApiUrl = requireApiUrl();
+  const requestAccessToken = skipAuth ? null : accessToken;
+  const requestRefreshToken = skipAuth ? null : refreshToken;
+  const requestSessionVersion = authSessionVersion;
 
-  const headers = new Headers(init.headers);
+  const headers = new Headers(fetchInit.headers);
 
-  if (!(init.body instanceof FormData) && !headers.has("Content-Type")) {
+  if (!(fetchInit.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
-  if (accessToken) {
-    headers.set("Authorization", `Bearer ${accessToken}`);
+  if (requestAccessToken) {
+    headers.set("Authorization", `Bearer ${requestAccessToken}`);
   }
 
-  const method = String(init.method ?? "GET").toUpperCase();
+  const method = String(fetchInit.method ?? "GET").toUpperCase();
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
     const fallbackCsrf = csrfToken ?? readCookie("pc_csrf");
     if (fallbackCsrf) {
@@ -246,18 +278,43 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, retry 
     }
   }
 
-  const response = await fetch(`${requestApiUrl}${path}`, { ...init, headers, credentials: "include" });
+  const response = await fetch(`${requestApiUrl}${path}`, { ...fetchInit, headers, credentials: "include" });
 
-  if (response.status === 401 && refreshToken && retry) {
-    refreshPromise ??= refreshAccessToken().finally(() => {
-      refreshPromise = null;
-    });
-    await refreshPromise;
+  if (
+    response.status === 401 &&
+    requestAccessToken &&
+    requestRefreshToken &&
+    retry &&
+    isSameAuthSession(requestSessionVersion)
+  ) {
+    if (refreshToken !== requestRefreshToken) {
+      return apiRequest<T>(path, init, false);
+    }
+
+    if (
+      !refreshPromise ||
+      refreshPromise.sessionVersion !== requestSessionVersion ||
+      refreshPromise.refreshToken !== requestRefreshToken
+    ) {
+      refreshPromise = {
+        sessionVersion: requestSessionVersion,
+        refreshToken: requestRefreshToken,
+        promise: refreshAccessToken(requestRefreshToken, requestSessionVersion, requestAccessToken).finally(() => {
+          if (refreshPromise?.sessionVersion === requestSessionVersion && refreshPromise.refreshToken === requestRefreshToken) {
+            refreshPromise = null;
+          }
+        })
+      };
+    }
+    await refreshPromise.promise;
+    if (!isSameAuthSession(requestSessionVersion)) {
+      throw new Error(await parseError(response));
+    }
     return apiRequest<T>(path, init, false);
   }
 
-  if (response.status === 401) {
-    await clearAuthTokens(true);
+  if (response.status === 401 && requestAccessToken && isCurrentAccessToken(requestSessionVersion, requestAccessToken)) {
+    await clearAuthTokens(true, retry ? "access_token_rejected" : "access_token_rejected_after_refresh");
   }
 
   if (!response.ok) {

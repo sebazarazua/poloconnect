@@ -1,4 +1,4 @@
-import { PropsWithChildren, createContext, useContext, useEffect, useState } from "react";
+import { PropsWithChildren, createContext, useContext, useEffect, useRef, useState } from "react";
 import {
   authenticateWithApple,
   authenticateWithGoogle,
@@ -12,7 +12,13 @@ import {
 } from "@/services/auth";
 import { getCurrentUser, logout as logoutApi } from "@/services/api/auth";
 import { deleteMyAccount as deleteMyAccountApi } from "@/services/api/users";
-import { clearAuthTokens, getAccessToken, hydrateAuthTokens, setSessionInvalidHandler } from "@/services/api/client";
+import {
+  clearAuthTokens,
+  getAccessToken,
+  hydrateAuthTokens,
+  setSessionInvalidHandler,
+  type SessionInvalidReason
+} from "@/services/api/client";
 import { getAuthStorageItem, setAuthStorageItem } from "@/services/auth-storage";
 import { ActivityIndicator, Platform, View } from "react-native";
 
@@ -58,18 +64,34 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+type AuthStatus = "initializing" | "authenticated" | "unauthenticated";
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [hasSessionToken, setHasSessionToken] = useState(false);
-  const [isReady, setIsReady] = useState(false);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("initializing");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const isAuthenticated = user !== null && hasSessionToken;
+  const authOperationId = useRef(0);
+  const isReady = authStatus !== "initializing";
+  const isAuthenticated = authStatus === "authenticated" && user !== null && hasSessionToken;
+
+  const clearLocalSession = async (reason: SessionInvalidReason = "manual_logout") => {
+    authOperationId.current += 1;
+    await Promise.all([clearAuthTokens(false, reason), writeStoredUser(null)]);
+    setUser(null);
+    setHasSessionToken(false);
+    setAuthStatus("unauthenticated");
+  };
 
   useEffect(() => {
-    setSessionInvalidHandler(() => {
+    setSessionInvalidHandler((reason) => {
+      authOperationId.current += 1;
+      if (typeof __DEV__ !== "undefined" && __DEV__) {
+        console.info(`[AUTH] local session cleared: ${reason}`);
+      }
       setUser(null);
       setHasSessionToken(false);
+      setAuthStatus("unauthenticated");
       void writeStoredUser(null);
     });
 
@@ -80,21 +102,23 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const persistSignedInUser = async (nextUser: AuthUser) => {
     if (!getAccessToken()) {
-      await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
-      setUser(null);
-      setHasSessionToken(false);
+      await clearLocalSession("session_storage_invalid");
       throw new Error("El login no dejó una sesión con access token.");
     }
 
+    await writeStoredUser(nextUser);
     setUser(nextUser);
     setHasSessionToken(true);
-    await writeStoredUser(nextUser);
+    setAuthStatus("authenticated");
   };
 
   useEffect(() => {
     let cancelled = false;
+    const operationId = authOperationId.current;
 
-    console.info("startup/auth/hydration-start");
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      console.info("[AUTH] hydration started");
+    }
 
     void (async () => {
       try {
@@ -104,53 +128,46 @@ export function AuthProvider({ children }: PropsWithChildren) {
         const hasToken = Boolean(getAccessToken());
         const isProductionWeb = Platform.OS === "web" && !(typeof __DEV__ !== "undefined" && __DEV__);
         const isDemoUser = storedUser?.id.startsWith("demo-seed-") ?? false;
-        console.info(`startup/auth/storage-loaded: user=${Boolean(storedUser)} token=${hasToken}`);
+        if (typeof __DEV__ !== "undefined" && __DEV__) {
+          console.info(`[AUTH] storage loaded: user=${Boolean(storedUser)} token=${hasToken}`);
+        }
 
         if (isProductionWeb && isDemoUser) {
-          await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
-          console.info("startup/auth/session-invalid");
+          await clearLocalSession("session_storage_invalid");
           return null;
         }
 
-        if (storedUser && !hasToken) {
-          await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
-          console.info("startup/auth/session-invalid");
+        if (!hasToken) {
+          await writeStoredUser(null);
           return null;
         }
 
-        if (!storedUser && hasToken) {
-          try {
-            const currentUser = await getCurrentUser();
-            await writeStoredUser(currentUser);
-            console.info("startup/auth/session-valid");
-            return currentUser;
-          } catch {
-            await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
-            console.info("startup/auth/session-invalid");
+        try {
+          const currentUser = await getCurrentUser();
+          await writeStoredUser(currentUser);
+          return currentUser;
+        } catch {
+          if (!getAccessToken()) {
+            await writeStoredUser(null);
             return null;
           }
-        }
 
-        console.info(storedUser ? "startup/auth/session-valid" : "startup/auth/session-invalid");
-        return storedUser;
-      } catch {
-        console.info("startup/auth/session-invalid");
-        try {
-          await Promise.all([clearAuthTokens(), writeStoredUser(null)]);
-        } catch {
-          // Best effort cleanup; login must still be allowed to render.
+          return storedUser;
         }
+      } catch {
         return null;
       }
     })()
       .then((nextUser) => {
-        if (cancelled) return;
+        if (cancelled || operationId !== authOperationId.current) return;
+        const restored = Boolean(nextUser && getAccessToken());
         setUser(nextUser);
-        setHasSessionToken(Boolean(nextUser && getAccessToken()));
+        setHasSessionToken(restored);
+        setAuthStatus(restored ? "authenticated" : "unauthenticated");
       })
       .finally(() => {
-        if (!cancelled) {
-          setIsReady(true);
+        if (!cancelled && operationId === authOperationId.current) {
+          setAuthStatus((current) => (current === "initializing" ? "unauthenticated" : current));
         }
       });
 
@@ -160,10 +177,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const signIn = async (payload: SignInPayload) => {
+    const operationId = authOperationId.current + 1;
+    authOperationId.current = operationId;
     setIsSubmitting(true);
 
     try {
       const nextUser = await authenticateWithPassword(payload);
+      if (authOperationId.current !== operationId) return;
       await persistSignedInUser(nextUser);
     } finally {
       setIsSubmitting(false);
@@ -171,10 +191,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
   };
 
   const signInWithGoogle = async (payload: GoogleSignInPayload) => {
+    const operationId = authOperationId.current + 1;
+    authOperationId.current = operationId;
     setIsSubmitting(true);
 
     try {
       const nextUser = await authenticateWithGoogle(payload);
+      if (authOperationId.current !== operationId) return;
       await persistSignedInUser(nextUser);
     } finally {
       setIsSubmitting(false);
@@ -182,10 +205,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
   };
 
   const signInWithApple = async (payload: AppleSignInPayload) => {
+    const operationId = authOperationId.current + 1;
+    authOperationId.current = operationId;
     setIsSubmitting(true);
 
     try {
       const nextUser = await authenticateWithApple(payload);
+      if (authOperationId.current !== operationId) return;
       await persistSignedInUser(nextUser);
     } finally {
       setIsSubmitting(false);
@@ -193,10 +219,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
   };
 
   const signUp = async (payload: SignUpPayload) => {
+    const operationId = authOperationId.current + 1;
+    authOperationId.current = operationId;
     setIsSubmitting(true);
 
     try {
       const nextUser = await registerWithPassword(payload);
+      if (authOperationId.current !== operationId) return;
       await persistSignedInUser(nextUser);
     } finally {
       setIsSubmitting(false);
@@ -204,6 +233,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   };
 
   const signOut = async () => {
+    const operationId = authOperationId.current + 1;
+    authOperationId.current = operationId;
     setIsSubmitting(true);
 
     try {
@@ -219,15 +250,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
     } catch {
       // Local session cleanup still runs if the server session is already gone.
     } finally {
-      await clearAuthTokens();
-      await writeStoredUser(null);
-      setUser(null);
-      setHasSessionToken(false);
+      if (authOperationId.current === operationId) {
+        await clearLocalSession("manual_logout");
+      }
       setIsSubmitting(false);
     }
   };
 
   const deleteAccount = async () => {
+    const operationId = authOperationId.current + 1;
+    authOperationId.current = operationId;
     setIsSubmitting(true);
 
     try {
@@ -240,10 +272,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     try {
       await deleteMyAccountApi();
-      await clearAuthTokens();
-      await writeStoredUser(null);
-      setUser(null);
-      setHasSessionToken(false);
+      if (authOperationId.current === operationId) {
+        await clearLocalSession("manual_logout");
+      }
     } finally {
       setIsSubmitting(false);
     }

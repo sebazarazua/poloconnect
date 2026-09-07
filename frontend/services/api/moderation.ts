@@ -27,6 +27,18 @@ export type ModerationReport = {
   actionTaken?: string | null;
   createdAt: string;
   reportedMessage?: { body: string; removed: boolean } | null;
+  reportedListing?: {
+    title: string;
+    imageUrl: string | null;
+    description: string;
+    category: string;
+    condition: string;
+    priceCents: number;
+    currency: string;
+    status: string;
+    location: string | null;
+    removed: boolean;
+  } | null;
   reporter?: ModerationUser | null;
   reportedUser?: ModerationUser | null;
   moderator?: ModerationUser | null;

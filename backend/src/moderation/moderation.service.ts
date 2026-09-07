@@ -123,7 +123,7 @@ export class ModerationService {
       orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
       take: limit + 1
     });
-    return page(await this.withReportedMessages(reports), limit);
+    return page(await this.withReportedContent(reports), limit);
   }
 
   async getReport(id: string) {
@@ -136,8 +136,8 @@ export class ModerationService {
       }
     });
     if (!report) throw new NotFoundException("Reporte no encontrado.");
-    const [reportWithMessage] = await this.withReportedMessages([report]);
-    return reportWithMessage;
+    const [reportWithContent] = await this.withReportedContent([report]);
+    return reportWithContent;
   }
 
   async updateReport(moderator: RequestUser, id: string, dto: UpdateReportDto) {
@@ -317,9 +317,12 @@ export class ModerationService {
     return { id: user.id, firstName: user.firstName, lastName: user.lastName, username: user.username, avatarUrl: user.avatarUrl, ...(user.email ? { email: user.email } : {}) };
   }
 
-  private async withReportedMessages(reports: any[]) {
+  private async withReportedContent(reports: any[]) {
     const messageIds = reports
       .filter((report) => report.contentType === ReportContentType.chat_message && report.contentId)
+      .map((report) => report.contentId);
+    const listingIds = reports
+      .filter((report) => report.contentType === ReportContentType.marketplace_listing && report.contentId)
       .map((report) => report.contentId);
     const messages = messageIds.length
       ? await this.prisma.chatMessage.findMany({
@@ -327,14 +330,48 @@ export class ModerationService {
           select: { id: true, body: true, bodySanitized: true, deletedAt: true }
         })
       : [];
+    const listings = listingIds.length
+      ? await this.prisma.product.findMany({
+          where: { id: { in: listingIds } },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            category: true,
+            condition: true,
+            priceCents: true,
+            currency: true,
+            status: true,
+            location: true,
+            deletedAt: true,
+            images: { select: { url: true }, orderBy: { position: "asc" }, take: 1 }
+          }
+        })
+      : [];
     const messagesById = new Map(messages.map((message) => [message.id, message]));
+    const listingsById = new Map(listings.map((listing) => [listing.id, listing]));
 
     return reports.map((report) => {
       const message = report.contentId ? messagesById.get(report.contentId) : null;
+      const listing = report.contentId ? listingsById.get(report.contentId) : null;
       return this.toReportDto({
         ...report,
         reportedMessage: message
           ? { body: message.deletedAt ? message.bodySanitized : message.body, removed: Boolean(message.deletedAt) }
+          : null,
+        reportedListing: listing
+          ? {
+              title: listing.title,
+              imageUrl: listing.images[0]?.url ?? null,
+              description: listing.description,
+              category: listing.category,
+              condition: listing.condition,
+              priceCents: listing.priceCents,
+              currency: listing.currency,
+              status: listing.status,
+              location: listing.location,
+              removed: Boolean(listing.deletedAt)
+            }
           : null
       });
     });

@@ -252,6 +252,7 @@ export default function AdminPanelScreen() {
 
   const [reports, setReports] = useState<ModerationReport[]>([]);
   const [reportStatusFilter, setReportStatusFilter] = useState<ReportStatus | "">("pending");
+  const [expandedListingReportIds, setExpandedListingReportIds] = useState<Set<string>>(new Set());
   const [moderationBusyId, setModerationBusyId] = useState<string | null>(null);
   const [recentModerationActions, setRecentModerationActions] = useState<Array<{ id: string; action: ModerationActionType; note?: string | null; createdAt: string; targetUser?: { firstName: string; lastName: string } | null }>>([]);
   const [activeSanctionsCount, setActiveSanctionsCount] = useState(0);
@@ -1532,6 +1533,7 @@ export default function AdminPanelScreen() {
                   const reporterName = report.reporter ? `@${report.reporter.username}` : "Usuario eliminado";
                   const canHideContent = Boolean(report.contentId && (report.contentType === "chat_message" || report.contentType === "marketplace_listing"));
                   const canSanctionUser = Boolean(report.reportedUser?.id);
+                  const isListingExpanded = expandedListingReportIds.has(report.id);
                   const run = (action: ModerationActionType, durationDays?: number) => {
                     setModerationBusyId(report.id);
                     void applyAdminModerationAction(report.id, { action, durationDays })
@@ -1554,6 +1556,7 @@ export default function AdminPanelScreen() {
                     <View style={styles.moderationReportHeader}><View style={{ flex: 1 }}><Text style={styles.brandRowName}>{report.reason.replace(/_/g, " ")}</Text><Text style={styles.brandRowMeta}>{report.contentType.replace(/_/g, " ")} · Prioridad {report.priority} · {report.status}</Text></View><View style={styles.typeBadge}><Text style={styles.typeBadgeText}>{report._count?.actions ?? 0} acciones</Text></View></View>
                     <Text style={styles.brandRowMeta}>Reportado: {targetName} · Por: {reporterName}</Text>
                     {report.contentType === "chat_message" ? <View style={styles.reportedMessage}><Text style={styles.reportedMessageLabel}>Mensaje reportado{report.reportedMessage?.removed ? " (retirado)" : ""}</Text><Text style={styles.reportedMessageBody}>{report.reportedMessage?.body ?? "El mensaje ya no está disponible."}</Text></View> : null}
+                    {report.contentType === "marketplace_listing" ? <View style={styles.reportedListing}><View style={styles.reportedListingPreview}>{report.reportedListing?.imageUrl ? <Image source={resolveContentImageSource(report.reportedListing.imageUrl)} style={styles.reportedListingImage} resizeMode="cover" /> : <View style={styles.reportedListingImageFallback}><Ionicons name="image-outline" size={20} color={colors.muted} /></View>}<View style={{ flex: 1 }}><Text style={styles.reportedMessageLabel}>Publicación reportada{report.reportedListing?.removed ? " (retirada)" : ""}</Text><Text style={styles.reportedListingTitle}>{report.reportedListing?.title ?? "La publicación ya no está disponible."}</Text></View><Pressable style={styles.reportedListingToggle} onPress={() => setExpandedListingReportIds((current) => { const next = new Set(current); if (next.has(report.id)) next.delete(report.id); else next.add(report.id); return next; })}><Ionicons name={isListingExpanded ? "chevron-up" : "chevron-down"} size={18} color={colors.primaryDark} /></Pressable></View>{isListingExpanded && report.reportedListing ? <View style={styles.reportedListingDetails}><Text style={styles.reportedMessageBody}>{report.reportedListing.description}</Text><Text style={styles.brandRowMeta}>Categoría: {report.reportedListing.category} · Estado: {report.reportedListing.condition}</Text><Text style={styles.brandRowMeta}>Precio: {report.reportedListing.currency} {(report.reportedListing.priceCents / 100).toLocaleString("es-AR")}</Text><Text style={styles.brandRowMeta}>Ubicación: {report.reportedListing.location ?? "No informada"} · Publicación: {report.reportedListing.status}</Text></View> : null}</View> : null}
                     {report.description ? <Text style={styles.moderationDescription}>{report.description}</Text> : null}
                     {report.status !== "resolved" && report.status !== "dismissed" ? <View style={styles.actionRow}>
                       {canHideContent ? <><Pressable disabled={moderationBusyId === report.id} style={styles.actionBtn} onPress={() => run("content_hidden")}><Text style={styles.actionBtnPrimary}>Ocultar</Text></Pressable><Pressable disabled={moderationBusyId === report.id} style={styles.btnDanger} onPress={deleteContent}><Text style={styles.btnDangerText}>Eliminar</Text></Pressable></> : null}
@@ -2552,6 +2555,13 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   reportedMessage: { gap: 3, padding: 10, borderRadius: 8, backgroundColor: colors.surfaceStrong, borderLeftWidth: 3, borderLeftColor: colors.primary },
   reportedMessageLabel: { color: colors.muted, fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
   reportedMessageBody: { color: colors.text, fontSize: 13, lineHeight: 19 },
+  reportedListing: { gap: 8, padding: 10, borderRadius: 8, backgroundColor: colors.surfaceStrong, borderLeftWidth: 3, borderLeftColor: colors.primary },
+  reportedListingPreview: { flexDirection: "row", alignItems: "center", gap: 10 },
+  reportedListingImage: { width: 48, height: 48, borderRadius: 6, backgroundColor: colors.border },
+  reportedListingImageFallback: { width: 48, height: 48, borderRadius: 6, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
+  reportedListingTitle: { color: colors.text, fontSize: 14, fontWeight: "800", marginTop: 2 },
+  reportedListingToggle: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: colors.primarySoft },
+  reportedListingDetails: { gap: 4, paddingTop: 2 },
   moderationDescription: { color: colors.text, fontSize: 12, lineHeight: 18 },
   historyList: { gap: 10, marginTop: 12 },
   historyRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: 10 },

@@ -23,32 +23,36 @@ export class JwtAuthGuard implements CanActivate {
     const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
     if (!token) throw new UnauthorizedException("Missing access token.");
 
+    let payload: { sub: string; sessionId?: string };
     try {
-      const payload = await this.jwt.verifyAsync(token, { secret: this.config.get<string>("JWT_ACCESS_SECRET") });
-      const user = await this.prisma.user.findFirst({
-        where: { id: payload.sub, deletedAt: null, status: "active" },
-        include: { roles: { include: { role: true } } }
-      });
-      if (!user) throw new UnauthorizedException("Invalid access token.");
-      const activeSanction = await this.prisma.userSanction.findFirst({
-        where: {
-          userId: user.id,
-          revokedAt: null,
-          OR: [{ type: "permanent_ban" }, { type: "temporary_suspension", endsAt: { gt: new Date() } }]
-        },
-        select: { id: true }
-      });
-      if (activeSanction) throw new UnauthorizedException("Account is suspended.");
-      request.user = {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        roles: user.roles.map((entry) => entry.role.code),
-        sessionId: payload.sessionId
-      };
-      return true;
+      payload = await this.jwt.verifyAsync(token, { secret: this.config.get<string>("JWT_ACCESS_SECRET") });
     } catch {
       throw new UnauthorizedException("Invalid or expired access token.");
     }
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: payload.sub, deletedAt: null, status: "active" },
+      include: { roles: { include: { role: true } } }
+    });
+    if (!user) throw new UnauthorizedException("Invalid access token.");
+
+    const activeSanction = await this.prisma.userSanction.findFirst({
+      where: {
+        userId: user.id,
+        revokedAt: null,
+        OR: [{ type: "permanent_ban" }, { type: "temporary_suspension", endsAt: { gt: new Date() } }]
+      },
+      select: { id: true }
+    });
+    if (activeSanction) throw new UnauthorizedException("Account is suspended.");
+
+    request.user = {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      roles: user.roles.map((entry) => entry.role.code),
+      sessionId: payload.sessionId
+    };
+    return true;
   }
 }

@@ -12,6 +12,7 @@ import {
 import { AuthScaffold } from "@/components/AuthScaffold";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocale } from "@/contexts/LocaleContext";
+import { getRegisterErrorMessage } from "@/utils/authErrors";
 
 type RegisterForm = {
   firstName: string;
@@ -76,7 +77,7 @@ export default function RegisterScreen() {
         phone: form.phone
       });
     } catch (registerError) {
-      setError(registerError instanceof Error ? registerError.message : t("auth.register.error"));
+      setError(getRegisterErrorMessage(registerError, t));
     }
   };
 

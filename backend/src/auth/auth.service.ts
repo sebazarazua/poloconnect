@@ -31,7 +31,7 @@ export class AuthService {
     const email = dto.email.trim().toLowerCase();
     const username = dto.username.trim().toLowerCase();
     const existing = await this.prisma.user.findFirst({ where: { OR: [{ email }, { username }] } });
-    if (existing) throw new ConflictException("Email or username already exists.");
+    if (existing) throw new ConflictException("AUTH_ACCOUNT_ALREADY_EXISTS");
 
     const passwordHash = await argon2.hash(dto.password);
     const playerRole = await this.ensureRole("player", "Player");
@@ -61,10 +61,10 @@ export class AuthService {
       where: { OR: [{ email: identifier }, { username: identifier }], deletedAt: null, status: "active" },
       include: { credential: true, roles: { include: { role: true } } }
     });
-    if (!user?.credential) throw new UnauthorizedException("Invalid credentials.");
+    if (!user?.credential) throw new UnauthorizedException("AUTH_ACCOUNT_NOT_FOUND");
 
     if (user.credential.lockedUntil && user.credential.lockedUntil > new Date()) {
-      throw new UnauthorizedException("Account temporarily locked. Try again later.");
+      throw new UnauthorizedException("AUTH_ACCOUNT_LOCKED");
     }
 
     const valid = await argon2.verify(user.credential.passwordHash, dto.password);
@@ -75,7 +75,7 @@ export class AuthService {
         where: { userId: user.id },
         data: { failedLoginCount: nextFailedCount, lockedUntil: lockUntil }
       });
-      throw new UnauthorizedException("Invalid credentials.");
+      throw new UnauthorizedException("AUTH_INVALID_PASSWORD");
     }
 
     if (user.credential.failedLoginCount > 0 || user.credential.lockedUntil) {

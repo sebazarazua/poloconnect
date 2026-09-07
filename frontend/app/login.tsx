@@ -19,6 +19,7 @@ import {
 import { AuthScaffold } from "@/components/AuthScaffold";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocale } from "@/contexts/LocaleContext";
+import { getLoginErrorMessage, getOAuthErrorMessage } from "@/utils/authErrors";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -100,7 +101,7 @@ export default function LoginScreen() {
 
     if (googleResponse.type === "error") {
       console.log("auth/google/error");
-      setError(t("auth.oauth.error"));
+      setError(getOAuthErrorMessage("Google", t));
       return;
     }
 
@@ -127,12 +128,12 @@ export default function LoginScreen() {
           const authorizationCode = googleResponse.params?.code;
           if (!authorizationCode) {
             console.log("auth/google/error");
-            throw new Error(t("auth.oauth.error"));
+            throw new Error(getOAuthErrorMessage("Google", t));
           }
 
           if (!googleRequest?.clientId || !googleRequest.redirectUri || !googleRequest.codeVerifier) {
             console.log("auth/google/error");
-            throw new Error(t("auth.oauth.googleMissingConfig"));
+            throw new Error(getOAuthErrorMessage("Google", t));
           }
 
           console.log("auth/google/authorization-success");
@@ -155,7 +156,7 @@ export default function LoginScreen() {
 
         if (!accessToken) {
           console.log("auth/google/error");
-          throw new Error(t("auth.oauth.error"));
+          throw new Error(getOAuthErrorMessage("Google", t));
         }
 
         setError("");
@@ -163,7 +164,7 @@ export default function LoginScreen() {
         console.log("auth/google/backend-login-success");
       } catch (loginError) {
         console.log("auth/google/error");
-        setError(t("auth.oauth.error"));
+        setError(getOAuthErrorMessage("Google", t));
         handledGoogleResponseRef.current = null;
       } finally {
         googleProcessingRef.current = false;
@@ -185,7 +186,7 @@ export default function LoginScreen() {
     try {
       await signIn({ identifier, password });
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : t("auth.login.error"));
+      setError(getLoginErrorMessage(loginError, t));
     }
   };
 
@@ -197,7 +198,7 @@ export default function LoginScreen() {
     }
 
     if (!hasGoogleConfig || !googleRequest) {
-      setError(t("auth.oauth.googleMissingConfig"));
+      setError(getOAuthErrorMessage("Google", t));
       return;
     }
 
@@ -210,7 +211,7 @@ export default function LoginScreen() {
         await promptGoogle();
       }
     } catch (googleError) {
-      setError(t("auth.oauth.error"));
+      setError(getOAuthErrorMessage("Google", t));
     }
   };
 
@@ -218,7 +219,7 @@ export default function LoginScreen() {
     setError("");
 
     if (!appleAvailable) {
-      setError(t("auth.oauth.appleUnavailable"));
+      setError(getOAuthErrorMessage("Apple", t));
       return;
     }
 
@@ -228,7 +229,7 @@ export default function LoginScreen() {
       });
 
       if (!response.identityToken) {
-        throw new Error(t("auth.oauth.error"));
+        throw new Error(getOAuthErrorMessage("Apple", t));
       }
 
       await signInWithApple({
@@ -240,7 +241,7 @@ export default function LoginScreen() {
       });
     } catch (appleError) {
       if (appleError instanceof Error && (appleError as { code?: string }).code !== "ERR_REQUEST_CANCELED") {
-        setError(appleError.message);
+        setError(getOAuthErrorMessage("Apple", t));
       }
     }
   };

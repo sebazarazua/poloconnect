@@ -114,7 +114,7 @@ export default function MarketPublishScreen() {
 
     for (const asset of selectedAssets) {
       if (!asset.uri) continue;
-      const uploadedUrl = await uploadProductImage(asset.uri);
+      const uploadedUrl = await uploadProductImage({ uri: asset.uri, fileName: asset.fileName, mimeType: asset.mimeType });
       uploadedUrls.push(uploadedUrl);
     }
 
@@ -139,7 +139,8 @@ export default function MarketPublishScreen() {
 
     if (result.canceled || !result.assets[0]?.uri) return;
 
-    const uploadedUrl = await uploadProductImage(result.assets[0].uri);
+    const asset = result.assets[0];
+    const uploadedUrl = await uploadProductImage({ uri: asset.uri, fileName: asset.fileName, mimeType: asset.mimeType });
     appendImageUrls([uploadedUrl]);
   };
 

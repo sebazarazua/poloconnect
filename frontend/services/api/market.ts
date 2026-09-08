@@ -198,19 +198,15 @@ export async function updateProduct(id: string, product: ProductPayload) {
   return normalizedProduct;
 }
 
-export async function uploadProductImage(fileUri: string) {
-  const fileName = fileUri.split("/").pop() || `product-${Date.now()}.jpg`;
+export async function uploadProductImage(image: { uri: string; fileName?: string | null; mimeType?: string | null }) {
+  const fileName = image.fileName?.trim() || image.uri.split("/").pop()?.split("?")[0] || `product-${Date.now()}.jpg`;
   const lowerName = fileName.toLowerCase();
-  const mimeType =
-    lowerName.endsWith(".png")
-      ? "image/png"
-      : lowerName.endsWith(".webp")
-      ? "image/webp"
-      : "image/jpeg";
+  const mimeType = image.mimeType?.trim() ||
+    (lowerName.endsWith(".png") ? "image/png" : lowerName.endsWith(".webp") ? "image/webp" : "image/jpeg");
 
   const formData = new FormData();
   formData.append("file", {
-    uri: fileUri,
+    uri: image.uri,
     name: fileName,
     type: mimeType
   } as any);

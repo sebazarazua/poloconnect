@@ -3,7 +3,6 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { Throttle } from "@nestjs/throttler";
 import { memoryStorage } from "multer";
 import { CurrentUser, RequestUser } from "../common/decorators/current-user.decorator";
-import { CsrfGuard } from "../common/guards/csrf.guard";
 import { ContactSellerDto, ProductQueryDto, ProductUpsertDto } from "./dto/marketplace.dto";
 import { MarketplaceService } from "./marketplace.service";
 import { MediaService } from "../common/media/media.service";
@@ -36,7 +35,6 @@ export class ProductsController {
     return this.marketplace.getProduct(user.id, id);
   }
 
-  @UseGuards(CsrfGuard)
   @Throttle({ default: { ttl: 60_000, limit: 20 } })
   @Post("upload")
   @UseInterceptors(

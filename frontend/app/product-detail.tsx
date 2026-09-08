@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   Image,
@@ -24,17 +25,6 @@ import { ReportModal, type ReportTarget } from "@/components/ReportModal";
 import { blockUser } from "@/services/api/moderation";
 
 type ProductTab = "detalle" | "vendedor";
-
-const fallbackVendor = {
-  id: "fallback",
-  name: "Juan Martinez",
-  location: "Buenos Aires, Argentina",
-  rating: 4.8,
-  reviews: 42,
-  phone: "+54 11 4523-7890",
-  email: "jmartinez@correo.com",
-  description: "Vendedor de equipamiento polo con más de 10 años de experiencia."
-};
 
 function normalizePhone(phone?: string) {
   if (!phone) return "";
@@ -64,13 +54,47 @@ export default function ProductDetailScreen() {
   const [imageCarouselWidth, setImageCarouselWidth] = useState(0);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  const [isProductLoading, setIsProductLoading] = useState(Boolean(id));
+  const [productLoadError, setProductLoadError] = useState("");
+  const [isFavoriteUpdating, setIsFavoriteUpdating] = useState(false);
   const imageCarouselRef = useRef<ScrollView>(null);
   const viewerCarouselRef = useRef<ScrollView>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     setProduct(cachedProduct);
-    if (!id) return;
-    void fetchProduct(id).then(setProduct);
+    setProductLoadError("");
+
+    if (!id) {
+      setIsProductLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsProductLoading(!cachedProduct);
+
+    void fetchProduct(id)
+      .then((nextProduct) => {
+        if (!cancelled) {
+          setProduct(nextProduct);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProductLoadError("No se pudo cargar la publicación.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsProductLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [cachedProduct, id]);
 
   useEffect(() => {
@@ -92,16 +116,37 @@ export default function ProductDetailScreen() {
     return () => clearTimeout(timer);
   }, [activeImageIndex, viewerOpen]);
 
-  const vendor = product?.seller ?? fallbackVendor;
-  const effectivePhone = product?.contactPhone ?? vendor.phone;
+  const vendor = product?.seller;
+  const effectivePhone = product?.contactPhone ?? vendor?.phone;
+  const contactPhone = normalizePhone(effectivePhone);
+  const hasSellerContact = Boolean(vendor?.id && contactPhone);
   const productImages = product?.images?.length ? product.images : [product?.image ?? ""];
   const activeImage = productImages[activeImageIndex] ?? productImages[0] ?? product?.image ?? "";
   const carouselPageWidth = imageCarouselWidth || (Dimensions.get("window").width - 32);
+  const vendorInitials = vendor?.name
+    ?.split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "?";
+
+  const handleToggleFavorite = async () => {
+    if (!product || isFavoriteUpdating) return;
+
+    try {
+      setIsFavoriteUpdating(true);
+      await toggleFavorite(product.id);
+    } catch (error) {
+      Alert.alert("No se pudo actualizar favoritos", error instanceof Error ? error.message : "Intentá nuevamente.");
+    } finally {
+      setIsFavoriteUpdating(false);
+    }
+  };
 
   const handleCallSeller = async () => {
     if (!product) return;
 
-    const phone = normalizePhone(effectivePhone);
+    const phone = contactPhone;
     if (!phone) {
       Alert.alert(t("product.noPhone"));
       return;
@@ -163,11 +208,21 @@ export default function ProductDetailScreen() {
     ]);
   };
 
+  if (!product && isProductLoading) {
+    return (
+      <Screen title="" showBackButton onBackPress={() => router.back()}>
+        <View style={styles.centerContent}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </Screen>
+    );
+  }
+
   if (!product) {
     return (
       <Screen title={t("product.notFoundTitle")} showBackButton onBackPress={() => router.back()}>
         <View style={styles.centerContent}>
-          <Text style={styles.errorText}>{t("product.notAvailable")}</Text>
+          <Text style={styles.errorText}>{productLoadError || t("product.notAvailable")}</Text>
         </View>
       </Screen>
     );
@@ -223,13 +278,20 @@ export default function ProductDetailScreen() {
             </ScrollView>
             <Pressable
               style={styles.favoriteButton}
-              onPress={() => toggleFavorite(product.id)}
+              disabled={isFavoriteUpdating}
+              onPress={() => {
+                void handleToggleFavorite();
+              }}
             >
-              <Ionicons
-                name={isFavorite(product.id) ? "heart" : "heart-outline"}
-                size={28}
-                color={isFavorite(product.id) ? colors.primary : "#ffffff"}
-              />
+              {isFavoriteUpdating ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Ionicons
+                  name={isFavorite(product.id) ? "heart" : "heart-outline"}
+                  size={28}
+                  color={isFavorite(product.id) ? colors.primary : "#ffffff"}
+                />
+              )}
             </Pressable>
             {productImages.length > 1 ? (
               <View style={styles.carouselCounterPill}>
@@ -274,7 +336,11 @@ export default function ProductDetailScreen() {
 
             <Text style={styles.description}>{product.description}</Text>
 
-            <Pressable style={styles.contactButton} onPress={() => { void handleWhatsappSeller(); }}>
+            <Pressable
+              style={[styles.contactButton, !hasSellerContact && styles.contactButtonDisabled]}
+              disabled={!hasSellerContact}
+              onPress={() => { void handleWhatsappSeller(); }}
+            >
               <Ionicons name="chatbubble-ellipses-outline" size={18} color="#ffffff" />
               <Text style={styles.contactButtonText}>{t("product.contactSeller")}</Text>
             </Pressable>
@@ -356,47 +422,67 @@ export default function ProductDetailScreen() {
           {activeTab === "vendedor" ? (
             <View style={styles.tabContent}>
               <View style={styles.vendorCard}>
-                <View style={styles.vendorHeader}>
-                  <View style={styles.vendorAvatar}>
-                    <Text style={styles.vendorAvatarText}>JM</Text>
-                  </View>
-                  <View style={styles.vendorInfo}>
-                    <Text style={styles.vendorName}>{vendor.name}</Text>
-                    <Text style={styles.vendorLocation}>{vendor.location ?? t("product.locationMissing")}</Text>
-                    <View style={styles.ratingRow}>
-                      <Ionicons name="star" size={14} color={colors.primary} />
-                      <Text style={styles.ratingText}>
-                        {vendor.rating ?? 0} ({vendor.reviews ?? 0} {t("product.reviews")})
-                      </Text>
+                {vendor ? (
+                  <>
+                    <View style={styles.vendorHeader}>
+                      <View style={styles.vendorAvatar}>
+                        <Text style={styles.vendorAvatarText}>{vendorInitials}</Text>
+                      </View>
+                      <View style={styles.vendorInfo}>
+                        <Text style={styles.vendorName}>{vendor.name}</Text>
+                        <Text style={styles.vendorLocation}>{vendor.location ?? t("product.locationMissing")}</Text>
+                        <View style={styles.ratingRow}>
+                          <Ionicons name="star" size={14} color={colors.primary} />
+                          <Text style={styles.ratingText}>
+                            {vendor.rating ?? 0} ({vendor.reviews ?? 0} {t("product.reviews")})
+                          </Text>
+                        </View>
+                      </View>
                     </View>
+
+                    <Text style={styles.vendorDescription}>{t("product.verifiedVendor")}</Text>
+
+                    <View style={styles.contactInfo}>
+                      <View style={styles.contactRow}>
+                        <Ionicons name="call-outline" size={16} color={colors.primary} />
+                        <Text style={styles.contactValue}>{effectivePhone ?? t("product.noPhone")}</Text>
+                      </View>
+
+                      <View style={styles.contactRow}>
+                        <Ionicons name="mail-outline" size={16} color={colors.primary} />
+                        <Text style={styles.contactValue}>{vendor.email ?? t("product.noEmail")}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.actionButtons}>
+                      <Pressable
+                        style={[styles.callButton, !hasSellerContact && styles.contactButtonDisabled]}
+                        disabled={!hasSellerContact}
+                        onPress={() => { void handleCallSeller(); }}
+                      >
+                        <Ionicons name="call" size={18} color="#ffffff" />
+                        <Text style={styles.callButtonText}>{t("product.call")}</Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={[styles.whatsappButton, !hasSellerContact && styles.contactButtonDisabled]}
+                        disabled={!hasSellerContact}
+                        onPress={() => { void handleWhatsappSeller(); }}
+                      >
+                        <Ionicons name="logo-whatsapp" size={18} color="#ffffff" />
+                        <Text style={styles.whatsappButtonText}>WhatsApp</Text>
+                      </Pressable>
+                    </View>
+                  </>
+                ) : (
+                  <View style={styles.vendorMissingState}>
+                    <Ionicons name="person-circle-outline" size={42} color={colors.muted} />
+                    <Text style={styles.vendorMissingTitle}>Vendedor no disponible</Text>
+                    <Text style={styles.vendorMissingText}>
+                      No hay datos de contacto reales para esta publicación.
+                    </Text>
                   </View>
-                </View>
-
-                <Text style={styles.vendorDescription}>{t("product.verifiedVendor")}</Text>
-
-                <View style={styles.contactInfo}>
-                  <View style={styles.contactRow}>
-                    <Ionicons name="call-outline" size={16} color={colors.primary} />
-                    <Text style={styles.contactValue}>{effectivePhone ?? t("product.noPhone")}</Text>
-                  </View>
-
-                  <View style={styles.contactRow}>
-                    <Ionicons name="mail-outline" size={16} color={colors.primary} />
-                    <Text style={styles.contactValue}>{vendor.email ?? t("product.noEmail")}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.actionButtons}>
-                  <Pressable style={styles.callButton} onPress={() => { void handleCallSeller(); }}>
-                    <Ionicons name="call" size={18} color="#ffffff" />
-                    <Text style={styles.callButtonText}>{t("product.call")}</Text>
-                  </Pressable>
-
-                  <Pressable style={styles.whatsappButton} onPress={() => { void handleWhatsappSeller(); }}>
-                    <Ionicons name="logo-whatsapp" size={18} color="#ffffff" />
-                    <Text style={styles.whatsappButtonText}>WhatsApp</Text>
-                  </Pressable>
-                </View>
+                )}
               </View>
             </View>
           ) : null}
@@ -628,6 +714,9 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     gap: 8,
     marginTop: 4
   },
+  contactButtonDisabled: {
+    opacity: 0.5
+  },
   contactButtonText: {
     color: "#ffffff",
     fontSize: 14,
@@ -753,6 +842,23 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     gap: 16
+  },
+  vendorMissingState: {
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12
+  },
+  vendorMissingTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "800"
+  },
+  vendorMissingText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 18,
+    textAlign: "center"
   },
   vendorHeader: {
     flexDirection: "row",

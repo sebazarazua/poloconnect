@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useState } from "react";
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
@@ -23,6 +23,7 @@ export default function MarketMyPostsScreen() {
   const router = useRouter();
   const { t } = useLocale();
   const { myProducts, deleteProduct, refreshMarket } = useMarket();
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -50,6 +51,7 @@ export default function MarketMyPostsScreen() {
             const statusKey = product.publicationStatus && product.publicationStatus in publicationStatusKeys
               ? publicationStatusKeys[product.publicationStatus as keyof typeof publicationStatusKeys]
               : null;
+            const isDeleting = deletingProductId === product.id;
 
             return (
               <View key={product.id} style={styles.card}>
@@ -76,10 +78,24 @@ export default function MarketMyPostsScreen() {
                     </Pressable>
 
                     <Pressable
-                      style={[styles.actionButton, styles.deleteButton]}
-                      onPress={() => deleteProduct(product.id)}
+                      style={[styles.actionButton, styles.deleteButton, isDeleting && styles.actionButtonDisabled]}
+                      disabled={isDeleting}
+                      onPress={async () => {
+                        try {
+                          setDeletingProductId(product.id);
+                          await deleteProduct(product.id);
+                        } catch (error) {
+                          Alert.alert("No se pudo eliminar", error instanceof Error ? error.message : "Intentá nuevamente.");
+                        } finally {
+                          setDeletingProductId(null);
+                        }
+                      }}
                     >
-                      <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                      {isDeleting ? (
+                        <ActivityIndicator color={colors.danger} />
+                      ) : (
+                        <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                      )}
                       <Text style={[styles.actionText, styles.deleteText]}>{t("common.delete")}</Text>
                     </Pressable>
                   </View>
@@ -159,6 +175,9 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     justifyContent: "center",
     flexDirection: "row",
     gap: 6
+  },
+  actionButtonDisabled: {
+    opacity: 0.55
   },
   editButton: {
     backgroundColor: colors.primarySoft,

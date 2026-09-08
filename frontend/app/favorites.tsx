@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
@@ -40,7 +40,11 @@ export default function FavoritesScreen() {
 
             <Pressable
               style={styles.removeButton}
-              onPress={() => toggleFavorite(product.id)}
+              onPress={() => {
+                void toggleFavorite(product.id).catch((error) => {
+                  Alert.alert("No se pudo actualizar favoritos", error instanceof Error ? error.message : "Intentá nuevamente.");
+                });
+              }}
               accessibilityLabel={t("favorites.removeA11y", { name: product.name })}
             >
               <Ionicons name="heart" size={20} color={colors.danger} />

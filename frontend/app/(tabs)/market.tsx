@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   FlatList,
   Image,
   Pressable,
@@ -60,7 +61,11 @@ export default function MarketScreen() {
           />
           <Pressable
             style={styles.favoriteButton}
-            onPress={() => toggleFavorite(item.id)}
+            onPress={() => {
+              void toggleFavorite(item.id).catch((error) => {
+                Alert.alert("No se pudo actualizar favoritos", error instanceof Error ? error.message : "Intentá nuevamente.");
+              });
+            }}
           >
             <Ionicons
               name={isFavorite(item.id) ? "heart" : "heart-outline"}

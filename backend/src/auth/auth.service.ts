@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import * as argon2 from "argon2";
-import { createRemoteJWKSet, importPKCS8, jwtVerify, SignJWT } from "jose";
+import { createRemoteJWKSet, errors as joseErrors, importPKCS8, jwtVerify, SignJWT } from "jose";
 import { createTransport, type Transporter } from "nodemailer";
 import { randomBytes, randomInt, randomUUID } from "crypto";
 import { PrismaService } from "../database/prisma.service";
@@ -521,6 +521,12 @@ export class AuthService {
     const { payload } = await jwtVerify(identityToken, appleJwks, {
       issuer: "https://appleid.apple.com",
       audience: audienceValues.length === 1 ? audienceValues[0] : audienceValues
+    }).catch((error: unknown) => {
+      if (error instanceof joseErrors.JOSEError) {
+        throw new UnauthorizedException("Apple sign-in failed.");
+      }
+
+      throw error;
     });
     const applePayload = payload as {
       sub?: string;

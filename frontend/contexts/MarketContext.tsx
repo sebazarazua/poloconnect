@@ -1,4 +1,4 @@
-import { PropsWithChildren, createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { PropsWithChildren, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Product } from "@/services/market";
 import {
@@ -20,11 +20,11 @@ type MarketContextValue = {
   favoriteProducts: Product[];
   myProducts: Product[];
   isFavorite: (productId: string) => boolean;
-  toggleFavorite: (productId: string) => void;
+  toggleFavorite: (productId: string) => Promise<void>;
   clearFavorites: () => void;
   addProduct: (product: ProductPayload) => Promise<ProductPublicationResult>;
-  updateProduct: (productId: string, product: ProductPayload) => void;
-  deleteProduct: (productId: string) => void;
+  updateProduct: (productId: string, product: ProductPayload) => Promise<void>;
+  deleteProduct: (productId: string) => Promise<void>;
   refreshMarket: () => Promise<void>;
 };
 
@@ -36,6 +36,7 @@ export function MarketProvider({ children }: PropsWithChildren) {
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [favoriteProducts, setFavoriteProducts] = useState<Product[]>([]);
   const [myProducts, setMyProducts] = useState<Product[]>([]);
+  const favoriteOperationIdsRef = useRef<Set<string>>(new Set());
 
   const refreshMarket = useCallback(async () => {
     if (!isAuthenticated) {
@@ -68,36 +69,30 @@ export function MarketProvider({ children }: PropsWithChildren) {
     return result;
   }, [refreshMarket]);
 
-  const updateProduct = useCallback((productId: string, product: ProductPayload) => {
-    void updateProductApi(productId, product).then(refreshMarket);
+  const updateProduct = useCallback(async (productId: string, product: ProductPayload) => {
+    await updateProductApi(productId, product);
+    await refreshMarket();
   }, [refreshMarket]);
 
-  const deleteProduct = useCallback((productId: string) => {
-    setProducts((currentProducts) => currentProducts.filter((product) => product.id !== productId));
-    setFavoriteProducts((currentProducts) => currentProducts.filter((product) => product.id !== productId));
-    setMyProducts((currentProducts) => currentProducts.filter((product) => product.id !== productId));
-    setFavoriteIds((currentIds) => {
-      const nextIds = new Set(currentIds);
-      nextIds.delete(productId);
-      return nextIds;
-    });
-    void deleteProductApi(productId).then(refreshMarket);
+  const deleteProduct = useCallback(async (productId: string) => {
+    await deleteProductApi(productId);
+    await refreshMarket();
   }, [refreshMarket]);
 
-  const toggleFavorite = useCallback((productId: string) => {
+  const toggleFavorite = useCallback(async (productId: string) => {
+    if (favoriteOperationIdsRef.current.has(productId)) {
+      return;
+    }
+
+    favoriteOperationIdsRef.current.add(productId);
     const wasFavorite = favoriteIds.has(productId);
-    setFavoriteIds((currentIds) => {
-      const nextIds = new Set(currentIds);
 
-      if (wasFavorite) {
-        nextIds.delete(productId);
-      } else {
-        nextIds.add(productId);
-      }
-
-      return nextIds;
-    });
-    void (wasFavorite ? removeFavoriteApi(productId) : addFavoriteApi(productId)).then(refreshMarket);
+    try {
+      await (wasFavorite ? removeFavoriteApi(productId) : addFavoriteApi(productId));
+      await refreshMarket();
+    } finally {
+      favoriteOperationIdsRef.current.delete(productId);
+    }
   }, [favoriteIds, refreshMarket]);
 
   const value = useMemo(

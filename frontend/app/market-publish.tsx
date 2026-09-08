@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Keyboard,
@@ -47,6 +48,8 @@ export default function MarketPublishScreen() {
   const [description, setDescription] = useState("");
   const [useAccountPhone, setUseAccountPhone] = useState(true);
   const [customContactPhone, setCustomContactPhone] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const nameInputRef = useRef<TextInput>(null);
   const priceInputRef = useRef<TextInput>(null);
   const descriptionInputRef = useRef<TextInput>(null);
@@ -164,13 +167,15 @@ export default function MarketPublishScreen() {
 
   const isSubmitDisabled = useMemo(() => {
     return (
+      isSubmitting ||
+      isDeleting ||
       imageUrls.length === 0 ||
       !name.trim() ||
       !description.trim() ||
       !Number.isFinite(normalizedPrice) ||
       normalizedPrice <= 0
     );
-  }, [description, imageUrls.length, name, normalizedPrice]);
+  }, [description, imageUrls.length, isDeleting, isSubmitting, name, normalizedPrice]);
 
   return (
     <Screen
@@ -394,8 +399,10 @@ export default function MarketPublishScreen() {
             };
 
             try {
+              setIsSubmitting(true);
+
               if (existingProduct) {
-                updateProduct(existingProduct.id, payload);
+                await updateProduct(existingProduct.id, payload);
                 router.back();
                 return;
               }
@@ -415,22 +422,40 @@ export default function MarketPublishScreen() {
               router.back();
             } catch (error) {
               Alert.alert(t("marketPublish.errorTitle"), error instanceof Error ? error.message : t("marketPublish.errorFallback"));
+            } finally {
+              setIsSubmitting(false);
             }
           }}
         >
-          <Ionicons name="cash-outline" size={20} color="#ffffff" />
+          {isSubmitting ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <Ionicons name="cash-outline" size={20} color="#ffffff" />
+          )}
           <Text style={styles.publishButtonText}>{existingProduct ? t("marketPublish.saveChanges") : t("market.publish")}</Text>
         </Pressable>
 
         {existingProduct ? (
           <Pressable
-            style={styles.deleteOwnButton}
-            onPress={() => {
-              deleteProduct(existingProduct.id);
-              router.back();
+            style={[styles.deleteOwnButton, (isSubmitting || isDeleting) && styles.publishButtonDisabled]}
+            disabled={isSubmitting || isDeleting}
+            onPress={async () => {
+              try {
+                setIsDeleting(true);
+                await deleteProduct(existingProduct.id);
+                router.back();
+              } catch (error) {
+                Alert.alert(t("marketPublish.errorTitle"), error instanceof Error ? error.message : t("marketPublish.errorFallback"));
+              } finally {
+                setIsDeleting(false);
+              }
             }}
           >
-            <Ionicons name="trash-outline" size={18} color={colors.danger} />
+            {isDeleting ? (
+              <ActivityIndicator color={colors.danger} />
+            ) : (
+              <Ionicons name="trash-outline" size={18} color={colors.danger} />
+            )}
             <Text style={styles.deleteOwnButtonText}>{t("marketPublish.delete")}</Text>
           </Pressable>
         ) : null}

@@ -23,7 +23,7 @@ export function QuickAccessCard({ title, subtitle, icon, onPress }: QuickAccessC
         </View>
 
         <View style={styles.textBlock}>
-          <Text style={styles.title} numberOfLines={1}>{title}</Text>
+          <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{title}</Text>
           <Text style={styles.subtitle} numberOfLines={2}>{subtitle}</Text>
         </View>
 
@@ -41,7 +41,7 @@ export function QuickAccessCard({ title, subtitle, icon, onPress }: QuickAccessC
 const createStyles = (colors: AppColors) => StyleSheet.create({
   card: {
     width: "48%",
-    minHeight: 84,
+    minHeight: 96,
     borderRadius: 18,
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -99,6 +99,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   title: {
     color: colors.text,
     fontSize: 15,
+    lineHeight: 19,
     fontWeight: "800"
   },
   subtitle: {

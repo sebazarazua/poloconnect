@@ -370,7 +370,7 @@ export default function HomeScreen() {
                           resizeMode="cover"
                         />
                       </View>
-                      <Text style={styles.teamName} numberOfLines={1}>
+                      <Text style={styles.teamName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>
                         {item.team1.toUpperCase()}
                       </Text>
                     </View>
@@ -385,7 +385,7 @@ export default function HomeScreen() {
                           resizeMode="cover"
                         />
                       </View>
-                      <Text style={styles.teamName} numberOfLines={1}>
+                      <Text style={styles.teamName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>
                         {item.team2.toUpperCase()}
                       </Text>
                     </View>
@@ -712,6 +712,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   teamName: {
     color: "#ffffff",
     fontSize: 10,
+    lineHeight: 13,
     fontWeight: "900",
     textAlign: "center"
   },
@@ -766,7 +767,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   },
   quickItem: {
     width: "48%",
-    minHeight: 84,
+    minHeight: 96,
     borderRadius: 18,
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -824,6 +825,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   quickText: {
     color: colors.text,
     fontSize: 15,
+    lineHeight: 19,
     fontWeight: "800",
     flex: 1
   },

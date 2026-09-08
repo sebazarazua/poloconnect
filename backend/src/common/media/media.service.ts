@@ -52,12 +52,19 @@ export class MediaService implements OnModuleInit {
     }
 
     const storageKey = `${scope}/${Date.now()}-${randomBytes(8).toString("hex")}${this.fileExtension(file)}`;
-    await this.getClient().send(new PutObjectCommand({
-      Bucket: this.getBucket(),
-      Key: storageKey,
-      Body: file.buffer,
-      ContentType: file.mimetype || "application/octet-stream"
-    }));
+    try {
+      await this.getClient().send(new PutObjectCommand({
+        Bucket: this.getBucket(),
+        Key: storageKey,
+        Body: file.buffer,
+        ContentType: file.mimetype || "application/octet-stream"
+      }));
+    } catch (error: any) {
+      const code = error?.Code || error?.name || "UnknownError";
+      const status = error?.$metadata?.httpStatusCode;
+      this.logger.error(`Failed to upload media key "${storageKey}" to bucket "${this.getBucket()}": ${code} (status ${status ?? "n/a"}).`);
+      throw new BadRequestException("No se pudo guardar la imagen. Intentá nuevamente más tarde.");
+    }
 
     return {
       url: this.mediaUrl(storageKey),

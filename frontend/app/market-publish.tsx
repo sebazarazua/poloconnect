@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -29,6 +30,35 @@ type PublishCategory = Exclude<MarketCategory, "todos">;
 
 const publishCategories: PublishCategory[] = ["equipamiento", "indumentaria", "vehiculos", "inmueble"];
 const maxProductImages = 10;
+const productImageMaxDimension = 2048;
+
+function imageUploadErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (message.includes("8 MB") || message.includes("guardar la imagen")) {
+    return message;
+  }
+
+  return "No se pudo procesar o subir la foto. Probá nuevamente.";
+}
+
+async function prepareProductImage(asset: ImagePicker.ImagePickerAsset) {
+  const width = asset.width || productImageMaxDimension;
+  const height = asset.height || productImageMaxDimension;
+  const longestSide = Math.max(width, height);
+  const resizeAction = longestSide > productImageMaxDimension
+    ? [{ resize: width >= height ? { width: productImageMaxDimension } : { height: productImageMaxDimension } }]
+    : [];
+  const result = await manipulateAsync(asset.uri, resizeAction, {
+    compress: 0.78,
+    format: SaveFormat.JPEG
+  });
+
+  return uploadProductImage({
+    uri: result.uri,
+    fileName: `product-${Date.now()}.jpg`,
+    mimeType: "image/jpeg"
+  });
+}
 
 export default function MarketPublishScreen() {
   const colors = useThemeColors();
@@ -114,7 +144,7 @@ export default function MarketPublishScreen() {
 
     for (const asset of selectedAssets) {
       if (!asset.uri) continue;
-      const uploadedUrl = await uploadProductImage({ uri: asset.uri, fileName: asset.fileName, mimeType: asset.mimeType });
+      const uploadedUrl = await prepareProductImage(asset);
       uploadedUrls.push(uploadedUrl);
     }
 
@@ -140,7 +170,7 @@ export default function MarketPublishScreen() {
     if (result.canceled || !result.assets[0]?.uri) return;
 
     const asset = result.assets[0];
-    const uploadedUrl = await uploadProductImage({ uri: asset.uri, fileName: asset.fileName, mimeType: asset.mimeType });
+    const uploadedUrl = await prepareProductImage(asset);
     appendImageUrls([uploadedUrl]);
   };
 
@@ -150,16 +180,16 @@ export default function MarketPublishScreen() {
       {
         text: t("profile.takePhoto"),
         onPress: () => {
-          void uploadImageFromCamera().catch(() => {
-            Alert.alert(t("marketPublish.errorTitle"), t("marketPublish.errorFallback"));
+          void uploadImageFromCamera().catch((error) => {
+            Alert.alert(t("marketPublish.errorTitle"), imageUploadErrorMessage(error));
           });
         }
       },
       {
         text: t("profile.chooseGallery"),
         onPress: () => {
-          void uploadImageFromLibrary().catch(() => {
-            Alert.alert(t("marketPublish.errorTitle"), t("marketPublish.errorFallback"));
+          void uploadImageFromLibrary().catch((error) => {
+            Alert.alert(t("marketPublish.errorTitle"), imageUploadErrorMessage(error));
           });
         }
       }

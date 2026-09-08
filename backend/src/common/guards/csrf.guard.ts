@@ -34,6 +34,11 @@ export class CsrfGuard implements CanActivate {
     const csrfCookie = cookies.pc_csrf;
     const csrfHeader = request.headers?.["x-csrf-token"];
     const origin = request.headers?.origin;
+    const authorization = String(request.headers?.authorization ?? "");
+
+    if (/^Bearer\s+\S+/i.test(authorization)) {
+      return true;
+    }
 
     if (!csrfCookie && csrfHeader && this.isTrustedOrigin(origin)) {
       return true;

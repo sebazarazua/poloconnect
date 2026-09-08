@@ -2,19 +2,7 @@ import type { ImageSourcePropType } from "react-native";
 import { resolveApiMediaUrl } from "@/services/api/client";
 
 const assetImageMap: Record<string, ImageSourcePropType> = {
-  "asset:app/logo": require("@/assets/logo.png"),
-  "asset:home/hero-1": require("@/assets/ads/home/hero-1.png"),
-  "asset:home/hero-2": require("@/assets/ads/home/hero-2.png"),
-  "asset:home/hero-3": require("@/assets/ads/home/hero-3.png"),
-  "asset:home/compact-1": require("@/assets/ads/home/compact-1.png"),
-  "asset:home/compact-2": require("@/assets/ads/home/compact-2.png"),
-  "asset:home/compact-3": require("@/assets/ads/home/compact-3.png"),
-  "asset:community/slide-1": require("@/assets/ads/community/slide-1.png"),
-  "asset:community/slide-2": require("@/assets/ads/community/slide-2.png"),
-  "asset:community/slide-3": require("@/assets/ads/community/slide-3.png"),
-  "asset:live/slide-1": require("@/assets/ads/live/slide-1.png"),
-  "asset:live/slide-2": require("@/assets/ads/live/slide-2.png"),
-  "asset:live/slide-3": require("@/assets/ads/live/slide-3.png")
+  "asset:app/logo": require("@/assets/logo.png")
 };
 
 function normalizeContentImageUrl(imageUrl: string) {

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createHmac, timingSafeEqual } from "crypto";
 
@@ -114,6 +114,7 @@ export class MercadoPagoService {
     }
 
     const response = await fetch(`${MP_API_BASE}/v1/payments/${encodeURIComponent(paymentId)}`, {
+      signal: AbortSignal.timeout(15_000),
       headers: { Authorization: `Bearer ${accessToken}` }
     });
 
@@ -131,6 +132,37 @@ export class MercadoPagoService {
       transactionAmount: typeof data.transaction_amount === "number" ? data.transaction_amount : null,
       currencyId: data.currency_id ?? null
     };
+  }
+
+  async refundPayment(paymentId: string, idempotencyKey: string) {
+    const accessToken = this.getAccessToken();
+    if (!accessToken) throw new ServiceUnavailableException("Mercado Pago no está configurado para devolver el pago.");
+
+    let response: Response;
+    try {
+      response = await fetch(`${MP_API_BASE}/v1/payments/${encodeURIComponent(paymentId)}/refunds`, {
+        method: "POST",
+        signal: AbortSignal.timeout(15_000),
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "X-Idempotency-Key": idempotencyKey
+        },
+        // Omitting amount requests the full refund, per Mercado Pago's Payments API.
+        body: "{}"
+      });
+    } catch {
+      throw new ServiceUnavailableException("No se pudo confirmar el reembolso con Mercado Pago. Se reintentará automáticamente.");
+    }
+    if (!response.ok) {
+      this.logger.error(`Refund for payment ${paymentId} failed with HTTP ${response.status}.`);
+      throw new ServiceUnavailableException(`Mercado Pago no pudo completar el reembolso (HTTP ${response.status}). Se reintentará automáticamente.`);
+    }
+    const data = await response.json();
+    if (!data.id || String(data.payment_id) !== paymentId || typeof data.amount !== "number" || !data.status) {
+      throw new ServiceUnavailableException("Mercado Pago devolvió una confirmación de reembolso inválida.");
+    }
+    return { id: String(data.id), status: String(data.status), amount: data.amount };
   }
 
   /**

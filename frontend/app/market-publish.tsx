@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -20,8 +19,8 @@ import { Screen } from "@/components/Screen";
 import { AppColors, useTheme, useThemeColors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocale } from "@/contexts/LocaleContext";
-import { uploadProductImage } from "@/services/api/market";
-import { type ProductStatus, type MarketCategory } from "@/services/market";
+import { fetchProduct, uploadProductImage } from "@/services/api/market";
+import { type Product, type ProductStatus, type MarketCategory } from "@/services/market";
 import { useMarket } from "@/contexts/MarketContext";
 
 const productStates: ProductStatus[] = ["Nuevo", "Usado", "Reacondicionado"];
@@ -30,33 +29,22 @@ type PublishCategory = Exclude<MarketCategory, "todos">;
 
 const publishCategories: PublishCategory[] = ["equipamiento", "indumentaria", "vehiculos", "inmueble"];
 const maxProductImages = 10;
-const productImageMaxDimension = 2048;
 
 function imageUploadErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  if (message.includes("8 MB") || message.includes("guardar la imagen")) {
+  if (message) {
     return message;
   }
 
   return "No se pudo procesar o subir la foto. Probá nuevamente.";
 }
 
-async function prepareProductImage(asset: ImagePicker.ImagePickerAsset) {
-  const width = asset.width || productImageMaxDimension;
-  const height = asset.height || productImageMaxDimension;
-  const longestSide = Math.max(width, height);
-  const resizeAction = longestSide > productImageMaxDimension
-    ? [{ resize: width >= height ? { width: productImageMaxDimension } : { height: productImageMaxDimension } }]
-    : [];
-  const result = await manipulateAsync(asset.uri, resizeAction, {
-    compress: 0.78,
-    format: SaveFormat.JPEG
-  });
-
+function getProductImageUpload(asset: ImagePicker.ImagePickerAsset) {
   return uploadProductImage({
-    uri: result.uri,
-    fileName: `product-${Date.now()}.jpg`,
-    mimeType: "image/jpeg"
+    uri: asset.uri,
+    fileName: asset.fileName,
+    mimeType: asset.mimeType,
+    file: asset.file
   });
 }
 
@@ -68,8 +56,11 @@ export default function MarketPublishScreen() {
   const { t } = useLocale();
   const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { products, addProduct, updateProduct, deleteProduct, refreshMarket } = useMarket();
-  const existingProduct = useMemo(() => products.find((product) => product.id === id), [id, products]);
+  const { addProduct, updateProduct, deleteProduct, refreshMarket } = useMarket();
+  const [existingProduct, setExistingProduct] = useState<Product | null>(null);
+  const [isLoadingProduct, setIsLoadingProduct] = useState(Boolean(id));
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [selectedState, setSelectedState] = useState<ProductStatus>("Nuevo");
@@ -80,26 +71,46 @@ export default function MarketPublishScreen() {
   const [customContactPhone, setCustomContactPhone] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const imageUploadInProgress = useRef(false);
   const nameInputRef = useRef<TextInput>(null);
   const priceInputRef = useRef<TextInput>(null);
   const descriptionInputRef = useRef<TextInput>(null);
   const screenScrollRef = useRef<any>(null);
 
   useEffect(() => {
-    if (!existingProduct) {
+    if (!id) {
+      setExistingProduct(null);
+      setIsLoadingProduct(false);
+      setLoadError(null);
       return;
     }
 
-    const nextImages = (existingProduct.images ?? []).filter((entry) => Boolean(entry?.trim()));
-    setImageUrls(nextImages.length > 0 ? nextImages : (existingProduct.image ? [existingProduct.image] : []));
-    setName(existingProduct.name);
-    setSelectedState(existingProduct.status);
-    setSelectedCategory(existingProduct.category);
-    setPrice(String(existingProduct.price));
-    setDescription(existingProduct.description);
-    setCustomContactPhone(existingProduct.contactPhone ?? "");
-    setUseAccountPhone(!existingProduct.contactPhone);
-  }, [existingProduct]);
+    let cancelled = false;
+    setIsLoadingProduct(true);
+    setLoadError(null);
+    void fetchProduct(id).then((product) => {
+      if (cancelled) return;
+      if (product.publicationStatus === "rejected") {
+        throw new Error("Las publicaciones rechazadas no se pueden editar.");
+      }
+      setExistingProduct(product);
+      const nextImages = (product.images ?? []).filter((entry) => Boolean(entry?.trim()));
+      setImageUrls(nextImages.length > 0 ? nextImages : (product.image ? [product.image] : []));
+      setName(product.name);
+      setSelectedState(product.status);
+      setSelectedCategory(product.category);
+      setPrice(String(product.price));
+      setDescription(product.description);
+      setCustomContactPhone(product.contactPhone ?? "");
+      setUseAccountPhone(!product.contactPhone);
+    }).catch((error) => {
+      if (!cancelled) setLoadError(error instanceof Error ? error.message : "No se pudo cargar la publicación.");
+    }).finally(() => {
+      if (!cancelled) setIsLoadingProduct(false);
+    });
+    return () => { cancelled = true; };
+  }, [id, loadAttempt]);
 
   const appendImageUrls = (urls: string[]) => {
     setImageUrls((current) => {
@@ -118,6 +129,8 @@ export default function MarketPublishScreen() {
   const normalizedPrice = Number(price.replace(/[^0-9.]/g, ""));
 
   const uploadImageFromLibrary = async () => {
+    const availableSlots = Math.max(0, maxProductImages - imageUrls.length);
+    if (availableSlots === 0) return;
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert(t("profile.photoPermissionTitle"), t("profile.galleryPermissionText"));
@@ -125,30 +138,24 @@ export default function MarketPublishScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       allowsMultipleSelection: true,
-      selectionLimit: maxProductImages,
+      selectionLimit: availableSlots,
+      orderedSelection: true,
+      preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+      shouldDownloadFromNetwork: true,
       quality: 0.8
     });
 
     if (result.canceled || (result.assets?.length ?? 0) === 0) return;
 
-    const availableSlots = Math.max(0, maxProductImages - imageUrls.length);
-    if (availableSlots === 0) {
-      Alert.alert("Límite alcanzado", `Podés subir hasta ${maxProductImages} fotos por publicación.`);
-      return;
-    }
-
     const selectedAssets = result.assets.slice(0, availableSlots);
-    const uploadedUrls: string[] = [];
 
     for (const asset of selectedAssets) {
       if (!asset.uri) continue;
-      const uploadedUrl = await prepareProductImage(asset);
-      uploadedUrls.push(uploadedUrl);
+      const uploadedUrl = await getProductImageUpload(asset);
+      appendImageUrls([uploadedUrl]);
     }
-
-    appendImageUrls(uploadedUrls);
 
     if (result.assets.length > selectedAssets.length) {
       Alert.alert("Límite alcanzado", `Solo se agregaron ${selectedAssets.length} fotos porque el límite es ${maxProductImages}.`);
@@ -163,6 +170,7 @@ export default function MarketPublishScreen() {
     }
 
     const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
       allowsEditing: true,
       quality: 0.8
     });
@@ -170,27 +178,43 @@ export default function MarketPublishScreen() {
     if (result.canceled || !result.assets[0]?.uri) return;
 
     const asset = result.assets[0];
-    const uploadedUrl = await prepareProductImage(asset);
+    const uploadedUrl = await getProductImageUpload(asset);
     appendImageUrls([uploadedUrl]);
   };
 
+  const runImageUpload = async (source: "camera" | "library") => {
+    if (imageUploadInProgress.current) return;
+    imageUploadInProgress.current = true;
+    setIsUploadingImages(true);
+    try {
+      await (source === "camera" ? uploadImageFromCamera() : uploadImageFromLibrary());
+    } catch (error) {
+      if (__DEV__) console.warn("[market/image-upload]", error instanceof Error ? error.message : "Unknown upload error");
+      Alert.alert("No se pudo subir la foto", imageUploadErrorMessage(error));
+    } finally {
+      imageUploadInProgress.current = false;
+      setIsUploadingImages(false);
+    }
+  };
+
   const handlePickImage = () => {
+    if (imageUploadInProgress.current || isSubmitting || isDeleting) return;
+    if (imageUrls.length >= maxProductImages) {
+      Alert.alert("Límite alcanzado", `Podés subir hasta ${maxProductImages} fotos por publicación.`);
+      return;
+    }
     Alert.alert(t("marketPublish.uploadImage"), t("marketPublish.uploadText"), [
       { text: t("common.cancel"), style: "cancel" },
       {
         text: t("profile.takePhoto"),
         onPress: () => {
-          void uploadImageFromCamera().catch((error) => {
-            Alert.alert(t("marketPublish.errorTitle"), imageUploadErrorMessage(error));
-          });
+          void runImageUpload("camera");
         }
       },
       {
         text: t("profile.chooseGallery"),
         onPress: () => {
-          void uploadImageFromLibrary().catch((error) => {
-            Alert.alert(t("marketPublish.errorTitle"), imageUploadErrorMessage(error));
-          });
+          void runImageUpload("library");
         }
       }
     ]);
@@ -200,13 +224,29 @@ export default function MarketPublishScreen() {
     return (
       isSubmitting ||
       isDeleting ||
+      isUploadingImages ||
       imageUrls.length === 0 ||
       !name.trim() ||
       !description.trim() ||
       !Number.isFinite(normalizedPrice) ||
       normalizedPrice <= 0
     );
-  }, [description, imageUrls.length, isDeleting, isSubmitting, name, normalizedPrice]);
+  }, [description, imageUrls.length, isDeleting, isSubmitting, isUploadingImages, name, normalizedPrice]);
+
+  if (id && (isLoadingProduct || loadError || !existingProduct || existingProduct.id !== id)) {
+    return (
+      <Screen eyebrow={t("market.eyebrow")} title={t("marketPublish.editTitle")} showBackButton onBackPress={() => router.back()}>
+        {isLoadingProduct ? <ActivityIndicator color={colors.primaryDark} /> : (
+          <View style={styles.form}>
+            <Text style={styles.uploadText}>{loadError ?? "No se pudo cargar la publicación."}</Text>
+            <Pressable accessibilityLabel="Reintentar" style={styles.descriptionDoneButton} onPress={() => setLoadAttempt((value) => value + 1)}>
+              <Ionicons name="refresh-outline" size={20} color={colors.primaryDark} />
+            </Pressable>
+          </View>
+        )}
+      </Screen>
+    );
+  }
 
   return (
     <Screen
@@ -245,8 +285,15 @@ export default function MarketPublishScreen() {
       <View style={styles.form}>
         <View style={styles.sectionCard}>
           <Text style={styles.sectionLabel}>{t("marketPublish.image")} ({imageUrls.length}/{maxProductImages})</Text>
-          <Pressable style={[styles.uploadBox, imageUrls.length > 0 ? styles.uploadBoxWithImage : null]} onPress={handlePickImage}>
-            {imageUrls.length > 0 ? (
+          <Pressable
+            style={[styles.uploadBox, imageUrls.length > 0 ? styles.uploadBoxWithImage : null]}
+            onPress={handlePickImage}
+            disabled={isUploadingImages || isSubmitting || isDeleting}
+            accessibilityState={{ busy: isUploadingImages, disabled: isUploadingImages || isSubmitting || isDeleting }}
+          >
+            {isUploadingImages ? (
+              <ActivityIndicator size="large" color={colors.primaryDark} />
+            ) : imageUrls.length > 0 ? (
               <Image source={{ uri: imageUrls[0] }} style={styles.uploadPreview} resizeMode="cover" />
             ) : (
               <>
@@ -266,6 +313,7 @@ export default function MarketPublishScreen() {
                   </View>
                   <Pressable
                     style={styles.removeThumbBtn}
+                    disabled={isUploadingImages || isSubmitting || isDeleting}
                     onPress={() => {
                       setImageUrls((current) => current.filter((_, currentIndex) => currentIndex !== index));
                     }}
@@ -426,6 +474,7 @@ export default function MarketPublishScreen() {
               status: selectedCategory === "inmueble" ? "Usado" : selectedState,
               description,
               category: selectedCategory,
+              currency: existingProduct?.currency ?? "USD",
               contactPhone: useAccountPhone ? undefined : customContactPhone.trim() || undefined
             };
 
@@ -469,7 +518,7 @@ export default function MarketPublishScreen() {
         {existingProduct ? (
           <Pressable
             style={[styles.deleteOwnButton, (isSubmitting || isDeleting) && styles.publishButtonDisabled]}
-            disabled={isSubmitting || isDeleting}
+            disabled={isSubmitting || isDeleting || isUploadingImages}
             onPress={async () => {
               try {
                 setIsDeleting(true);

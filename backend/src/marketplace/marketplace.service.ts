@@ -8,6 +8,7 @@ import { ContactSellerDto, ProductQueryDto, ProductUpsertDto, RejectProductDto }
 import { MercadoPagoService } from "./mercadopago.service";
 import { ContentFilterService } from "../moderation/content-filter.service";
 import { ModerationService } from "../moderation/moderation.service";
+import { MarketplaceRefundsService, summarizeRefunds } from "./marketplace-refunds.service";
 
 const PUBLICATION_CURRENCY = "ARS";
 const MP_RETURN_DEEP_LINK = "polo-connect://market-publish-return";
@@ -23,7 +24,8 @@ export class MarketplaceService {
     private readonly media: MediaService,
     private readonly mercadoPago: MercadoPagoService,
     private readonly moderation: ModerationService,
-    private readonly contentFilter: ContentFilterService
+    private readonly contentFilter: ContentFilterService,
+    private readonly refunds: MarketplaceRefundsService
   ) {}
 
   private async normalizeImageInputs(body: ProductUpsertDto) {
@@ -87,7 +89,7 @@ export class MarketplaceService {
     const where: any = { deletedAt: null };
     if (query.sellerId) {
       where.sellerId = query.sellerId;
-      where.status = query.status ?? { not: "pending_payment" };
+      where.status = query.status ?? (query.sellerId === userId ? undefined : "active");
     } else {
       where.status = query.status ?? "active";
     }
@@ -96,7 +98,7 @@ export class MarketplaceService {
     if (query.cursor) where.id = { lt: query.cursor };
     const products = await this.prisma.product.findMany({
       where,
-      include: { images: { orderBy: { position: "asc" } }, favorites: { where: { userId } }, seller: true },
+      include: { images: { orderBy: { position: "asc" } }, favorites: { where: { userId } }, seller: true, payments: query.sellerId === userId },
       orderBy: { createdAt: "desc" },
       take: limit + 1
     });
@@ -110,7 +112,7 @@ export class MarketplaceService {
       include: { images: { orderBy: { position: "asc" } }, favorites: { where: { userId } }, seller: true }
     });
     if (!product) throw new NotFoundException("Product not found.");
-    if (product.status === "pending_payment" || (product.status !== "active" && product.sellerId !== userId)) {
+    if (product.status !== "active" && product.sellerId !== userId) {
       throw new NotFoundException("Product not found.");
     }
     await this.moderation.assertUsersCanInteract(userId, product.sellerId);
@@ -203,11 +205,12 @@ export class MarketplaceService {
     const current = await this.prisma.product.findUnique({ where: { id } });
     if (!current || current.deletedAt) throw new NotFoundException("Product not found.");
     if (current.sellerId !== user.id && !user.roles.includes("admin")) throw new ForbiddenException("Product ownership required.");
+    if (current.status === "rejected") throw new ForbiddenException("Las publicaciones rechazadas no se pueden editar.");
     this.contentFilter.assertAllowed(body.name, body.description, body.location);
     const imageUrls = await this.normalizeImageInputs(body);
 
     const product = await this.prisma.product.update({
-      where: { id },
+      where: { id, deletedAt: null, status: { not: "rejected" } },
       data: {
         title: body.name.trim(),
         description: body.description,
@@ -216,26 +219,23 @@ export class MarketplaceService {
         priceCents: Math.round(body.price * 100),
         currency: body.currency ?? current.currency,
         location: body.location,
-        version: { increment: 1 }
-      },
-      include: { images: true, favorites: { where: { userId: user.id } }, seller: true }
-    });
-
-    if (imageUrls.length > 0) {
-      await this.prisma.$transaction([
-        this.prisma.productImage.deleteMany({ where: { productId: id } }),
-        this.prisma.productImage.createMany({
-          data: imageUrls.map((url, index) => ({
-            productId: id,
+        version: { increment: 1 },
+        images: imageUrls.length > 0 ? {
+          deleteMany: {},
+          create: imageUrls.map((url, index) => ({
             url,
             storageKey: this.storageKeyFromUrl(url) ?? undefined,
             position: index + 1
           }))
-        })
-      ]);
-    }
+        } : undefined
+      },
+      include: { images: { orderBy: { position: "asc" } }, favorites: { where: { userId: user.id } }, seller: true }
+    }).catch((error) => {
+      if (error?.code === "P2025") throw new ForbiddenException("La publicación ya no está disponible para editar.");
+      throw error;
+    });
 
-    return this.getProduct(user.id, id);
+    return this.toProductDto(product, true);
   }
 
   async deleteProduct(user: RequestUser, id: string) {
@@ -320,13 +320,23 @@ export class MarketplaceService {
       return { ok: true };
     }
 
-    // Idempotency: this exact payment id was already fully processed by a previous webhook call.
-    if (record.mpPaymentId === payment.id && record.status !== "pending") {
+    if (record.status === "refunded" || record.refundedAt) return { ok: true };
+    if (payment.status === "refunded") {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.marketplacePayment.update({ where: { id: record.id }, data: {
+          status: "refunded", mpPaymentId: payment.id, refundedAt: new Date(), refundLastError: null,
+          refundNextAttemptAt: null, rawWebhookPayload: body ?? undefined
+        } });
+        await tx.product.updateMany({
+          where: { id: record.productId, status: { in: ["pending_payment", "pending_review", "active"] }, deletedAt: null },
+          data: { status: "paused", version: { increment: 1 } }
+        });
+      });
       return { ok: true };
     }
 
-    const amountMatches = payment.transactionAmount === null || Math.round(payment.transactionAmount * 100) === record.amountCents;
-    const currencyMatches = !payment.currencyId || payment.currencyId.toUpperCase() === record.currency.toUpperCase();
+    const amountMatches = payment.transactionAmount !== null && Math.round(payment.transactionAmount * 100) === record.amountCents;
+    const currencyMatches = payment.currencyId?.toUpperCase() === record.currency.toUpperCase();
 
     let nextStatus: "pending" | "approved" | "rejected" | "cancelled" = "pending";
     if (payment.status === "approved") {
@@ -340,23 +350,27 @@ export class MarketplaceService {
       nextStatus = "cancelled";
     }
 
+    if (record.status === "approved" && nextStatus !== "approved") return { ok: true };
+    if (record.mpPaymentId === payment.id && record.status === nextStatus && nextStatus !== "approved") return { ok: true };
+
     await this.prisma.$transaction(async (tx) => {
-      await tx.marketplacePayment.update({
-        where: { id: record.id },
+      const changed = await tx.marketplacePayment.updateMany({
+        where: { id: record.id, refundedAt: null, status: { not: "refunded" } },
         data: {
           mpPaymentId: payment.id,
           status: nextStatus,
           rawWebhookPayload: body ?? undefined
         }
       });
+      if (!changed.count) return;
 
       if (nextStatus === "approved") {
-        // Only advance a listing that is still waiting on this exact payment; never clobber a
-        // listing an admin already approved/rejected, or one already moved by a duplicate webhook.
+        // Repeated approvals must not reactivate rejected, paused, sold or deleted listings.
         await tx.product.updateMany({
-          where: { id: record.productId, status: "pending_payment" },
-          data: { status: "pending_review", deletedAt: null, moderationNotes: null }
+          where: { id: record.productId, status: { in: ["pending_payment", "pending_review"] }, deletedAt: null },
+          data: { status: "active", moderationNotes: null, version: { increment: 1 } }
         });
+        await this.refunds.requestForProduct(record.productId, tx);
       } else if (nextStatus === "rejected" || nextStatus === "cancelled") {
         await tx.product.updateMany({
           where: { id: record.productId, status: "pending_payment", deletedAt: null },
@@ -365,6 +379,7 @@ export class MarketplaceService {
       }
     });
 
+    if (nextStatus === "approved") await this.refunds.processProduct(record.productId);
     return { ok: true };
   }
 
@@ -378,7 +393,7 @@ export class MarketplaceService {
       include: {
         images: { orderBy: { position: "asc" } },
         seller: true,
-        payments: { orderBy: { createdAt: "desc" }, take: 1 }
+        payments: { orderBy: { createdAt: "desc" } }
       },
       orderBy: { createdAt: "desc" },
       take: 100
@@ -387,7 +402,8 @@ export class MarketplaceService {
     return products.map((product) => ({
       ...this.toProductDto(product, true),
       lastPayment: product.payments[0]
-        ? { status: product.payments[0].status, amountCents: product.payments[0].amountCents, currency: product.payments[0].currency }
+        ? { status: product.payments[0].status, amountCents: product.payments[0].amountCents, currency: product.payments[0].currency,
+            refundStatus: summarizeRefunds(product.payments), refundError: product.payments[0].refundLastError }
         : null
     }));
   }
@@ -400,9 +416,12 @@ export class MarketplaceService {
     }
 
     const updated = await this.prisma.product.update({
-      where: { id },
+      where: { id, status: "pending_review", deletedAt: null },
       data: { status: "active", moderationNotes: null, version: { increment: 1 } },
       include: { images: true, favorites: true, seller: true }
+    }).catch((error) => {
+      if (error?.code === "P2025") throw new BadRequestException("La publicación ya no está disponible para aprobar.");
+      throw error;
     });
 
     return this.toProductDto(updated, true);
@@ -411,16 +430,21 @@ export class MarketplaceService {
   async rejectProduct(admin: RequestUser, id: string, dto: RejectProductDto) {
     const product = await this.prisma.product.findFirst({ where: { id, deletedAt: null } });
     if (!product) throw new NotFoundException("Product not found.");
-    if (product.status !== "pending_review" && product.status !== "pending_payment") {
+    if (!["pending_review", "pending_payment", "active", "rejected"].includes(product.status)) {
       throw new BadRequestException("Esta publicación no se puede rechazar en su estado actual.");
     }
 
-    const updated = await this.prisma.product.update({
-      where: { id },
-      data: { status: "rejected", moderationNotes: dto.reason?.trim() || null, version: { increment: 1 } },
-      include: { images: true, favorites: true, seller: true }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id },
+        data: { status: "rejected", moderationNotes: dto.reason?.trim() || product.moderationNotes, version: { increment: 1 } }
+      });
+      await this.refunds.requestForProduct(id, tx);
     });
-
+    await this.refunds.processProduct(id);
+    const updated = await this.prisma.product.findUniqueOrThrow({
+      where: { id }, include: { images: { orderBy: { position: "asc" } }, favorites: true, seller: true, payments: true }
+    });
     return this.toProductDto(updated, true);
   }
 
@@ -430,7 +454,7 @@ export class MarketplaceService {
       id: product.id,
       ownerId: product.sellerId,
       name: product.title,
-      price: Math.round(product.priceCents / 100),
+      price: product.priceCents / 100,
       priceCents: product.priceCents,
       currency: product.currency,
       category: product.category,
@@ -438,6 +462,7 @@ export class MarketplaceService {
       images: product.images?.map((entry: any) => entry.url) ?? [],
       status: product.condition,
       publicationStatus: product.status,
+      refundStatus: summarizeRefunds(product.payments ?? []),
       description: product.description,
       isFavorite: (product.favorites?.length ?? 0) > 0,
       createdAt: product.createdAt,

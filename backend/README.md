@@ -73,6 +73,24 @@ Sin `MEDIA_BASE_URL`, el backend sirve los archivos el mismo a traves de `GET /a
 
 **CloudFront queda en stand-by** para una futura iteracion. Cuando se habilite, alcanza con setear `MEDIA_BASE_URL` al dominio de la distribucion (por ej. `https://dxxxxxxxxxxxx.cloudfront.net`) para que las URLs de medios se sirvan via CDN en lugar del proxy propio; no requiere cambios de codigo.
 
+## Reembolsos de publicaciones
+
+El rechazo desde Admin registra una solicitud de devolucion y envia un reembolso
+total a Mercado Pago. La clave de idempotencia se mantiene en cada reintento.
+El backend comprueba las solicitudes pendientes cada minuto y espera cinco
+minutos tras un error. Solo marca `refunded` cuando Mercado Pago confirma la
+devolucion; conserva el estado y el error para mostrarlo en el panel.
+
+Antes de iniciar esta version, aplicar la migracion
+`20260909000000_add_marketplace_refunds` con `npm run prisma:deploy`.
+El Dockerfile de Railway ya ejecuta ese comando antes de arrancar la API.
+Se usa el mismo `MP_ACCESS_TOKEN` del cobro; no hay variables nuevas.
+
+Las publicaciones rechazadas antes de este cambio no generan transferencias
+retroactivas al desplegar. En Admin > Marketplace > Rechazadas, usar
+`Reembolsar pago` para solicitar su devolucion. Los pagos confirmados despues
+del rechazo tambien se devuelven mediante el webhook.
+
 ## Modulos incluidos
 
 - Auth con JWT access + refresh rotativo.

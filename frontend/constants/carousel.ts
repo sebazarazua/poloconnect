@@ -1,0 +1,1 @@
+export const CAROUSEL_INTERVAL_MS = 8_000;

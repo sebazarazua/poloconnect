@@ -1892,9 +1892,17 @@ export default function AdminPanelScreen() {
                         Pago: {product.lastPayment.status} ({product.lastPayment.currency} {(product.lastPayment.amountCents / 100).toLocaleString()})
                       </Text>
                     ) : null}
-                    {product.publicationStatus === "pending_review" ? (
-                      <View style={{ flexDirection: "row", gap: 8, marginTop: 6 }}>
-                        <Pressable
+                    {product.refundStatus && product.refundStatus !== "none" ? (
+                      <Text style={styles.brandRowMeta}>
+                        {t(`myPosts.refund.${product.refundStatus}`)}
+                        {product.lastPayment?.refundError ? `: ${product.lastPayment.refundError}` : ""}
+                      </Text>
+                    ) : null}
+                    {(["pending_review", "pending_payment", "active"].includes(product.publicationStatus ?? "") ||
+                      (product.publicationStatus === "rejected" && product.refundStatus !== "refunded" &&
+                        (product.lastPayment?.status === "approved" || product.refundStatus === "pending" || product.refundStatus === "failed"))) ? (
+                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+                        {product.publicationStatus === "pending_review" ? <Pressable
                           style={styles.btnPrimary}
                           disabled={marketplaceBusyId === product.id}
                           onPress={async () => {
@@ -1911,15 +1919,20 @@ export default function AdminPanelScreen() {
                         >
                           <Ionicons name="checkmark" size={16} color="#fff" />
                           <Text style={styles.btnPrimaryText}>Aprobar</Text>
-                        </Pressable>
+                        </Pressable> : null}
                         <Pressable
-                          style={[styles.btnPrimary, { backgroundColor: colors.danger }]}
+                          style={[styles.btnPrimary, { backgroundColor: colors.danger, maxWidth: "100%" }]}
                           disabled={marketplaceBusyId === product.id}
                           onPress={async () => {
                             setMarketplaceBusyId(product.id);
                             try {
-                              await rejectAdminMarketplaceProduct(product.id);
+                              const result = await rejectAdminMarketplaceProduct(product.id);
                               await loadMarketplaceProducts(marketplaceStatusFilter);
+                              Alert.alert("Publicación rechazada", result.refundStatus === "refunded"
+                                ? "Mercado Pago confirmó el reembolso del pago de publicación."
+                                : result.refundStatus === "pending" || result.refundStatus === "failed"
+                                ? "La devolución todavía no fue confirmada. Quedó registrada y se reintentará automáticamente."
+                                : "Si hay un pago pendiente, se devolverá cuando Mercado Pago lo confirme.");
                             } catch (err: any) {
                               Alert.alert("Error", err?.message ?? "No se pudo rechazar la publicación.");
                             } finally {
@@ -1928,7 +1941,7 @@ export default function AdminPanelScreen() {
                           }}
                         >
                           <Ionicons name="close" size={16} color="#fff" />
-                          <Text style={styles.btnPrimaryText}>Rechazar</Text>
+                          <Text style={[styles.btnPrimaryText, { flexShrink: 1 }]}>{product.publicationStatus === "rejected" ? "Reembolsar pago" : "Rechazar y reembolsar"}</Text>
                         </Pressable>
                       </View>
                     ) : null}

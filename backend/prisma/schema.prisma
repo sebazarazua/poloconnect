@@ -41,6 +41,7 @@ enum MarketplacePaymentStatus {
   approved
   rejected
   cancelled
+  refunded
 }
 
 enum MatchStatus {
@@ -564,12 +565,18 @@ model MarketplacePayment {
   mpPreferenceId    String?
   mpPaymentId       String?                  @unique
   rawWebhookPayload Json?
+  refundRequestedAt DateTime?
+  refundedAt        DateTime?
+  refundNextAttemptAt DateTime?
+  mpRefundId        String?
+  refundLastError    String?
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
   product           Product                  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
   @@index([status])
+  @@index([refundedAt, refundNextAttemptAt])
 }
 
 model ProductImage {

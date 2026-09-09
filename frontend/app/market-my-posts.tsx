@@ -24,11 +24,27 @@ export default function MarketMyPostsScreen() {
   const { t } = useLocale();
   const { myProducts, deleteProduct, refreshMarket } = useMarket();
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+  const hasPendingPayment = myProducts.some((product) => product.publicationStatus === "pending_payment" || product.refundStatus === "pending" || product.refundStatus === "failed");
 
   useFocusEffect(
     useCallback(() => {
-      void refreshMarket().catch(() => undefined);
-    }, [refreshMarket])
+      let focused = true;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const refresh = async () => {
+        try {
+          await refreshMarket();
+        } catch {
+          // Keep the last loaded listings when the connection is unavailable.
+        } finally {
+          if (focused && hasPendingPayment) timer = setTimeout(() => void refresh(), 5000);
+        }
+      };
+      void refresh();
+      return () => {
+        focused = false;
+        clearTimeout(timer);
+      };
+    }, [hasPendingPayment, refreshMarket])
   );
 
   return (
@@ -66,16 +82,20 @@ export default function MarketMyPostsScreen() {
                   <Text style={styles.name} numberOfLines={2}>
                     {product.name.replace("\n", " ")}
                   </Text>
-                  <Text style={styles.price}>USD {product.price.toLocaleString()}</Text>
+                  <Text style={styles.price}>{product.currency ?? "USD"} {product.price.toLocaleString()}</Text>
+                  {product.refundStatus && product.refundStatus !== "none" ? (
+                    <Text style={styles.actionText}>{t(`myPosts.refund.${product.refundStatus}`)}</Text>
+                  ) : null}
 
                   <View style={styles.actions}>
-                    <Pressable
+                    {product.publicationStatus !== "rejected" ? <Pressable
                       style={[styles.actionButton, styles.editButton]}
+                      disabled={isDeleting}
                       onPress={() => router.push(`/market-publish?id=${product.id}`)}
                     >
                       <Ionicons name="create-outline" size={16} color={colors.primaryDark} />
                       <Text style={styles.actionText}>{t("common.edit")}</Text>
-                    </Pressable>
+                    </Pressable> : null}
 
                     <Pressable
                       style={[styles.actionButton, styles.deleteButton, isDeleting && styles.actionButtonDisabled]}

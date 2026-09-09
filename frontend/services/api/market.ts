@@ -1,3 +1,5 @@
+import { File as NativeFile } from "expo-file-system";
+import { Platform } from "react-native";
 import { apiRequest, resolveApiMediaUrl } from "@/services/api/client";
 import type { Product } from "@/services/market";
 
@@ -143,7 +145,7 @@ function toBackendProduct(product: ProductPayload) {
     price: product.price,
     imageUrl: mainImage,
     imageUrls,
-    currency: "USD"
+    currency: product.currency ?? "USD"
   };
 }
 
@@ -198,25 +200,52 @@ export async function updateProduct(id: string, product: ProductPayload) {
   return normalizedProduct;
 }
 
-export async function uploadProductImage(image: { uri: string; fileName?: string | null; mimeType?: string | null }) {
-  const fileName = image.fileName?.trim() || image.uri.split("/").pop()?.split("?")[0] || `product-${Date.now()}.jpg`;
-  const lowerName = fileName.toLowerCase();
-  const mimeType = image.mimeType?.trim() ||
-    (lowerName.endsWith(".png") ? "image/png" : lowerName.endsWith(".webp") ? "image/webp" : "image/jpeg");
+export async function uploadProductImage(image: { uri: string; fileName?: string | null; mimeType?: string | null; file?: File }) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90_000);
 
-  const formData = new FormData();
-  formData.append("file", {
-    uri: image.uri,
-    name: fileName,
-    type: mimeType
-  } as any);
+  try {
+    let file: Blob;
+    let fileName: string;
+    if (Platform.OS === "web") {
+      const source = image.file ?? await fetch(image.uri, { signal: controller.signal }).then((response) => {
+        if (!response.ok) throw new Error("No se pudo leer la foto seleccionada.");
+        return response.blob();
+      });
+      if (!source) throw new Error("No se pudo leer la foto seleccionada.");
+      file = source;
+      fileName = image.file?.name || image.fileName?.trim() || "product.jpg";
+    } else {
+      // Expo 57 fetch needs file bytes; RN's legacy { uri, name, type } part is rejected.
+      const source = new NativeFile(image.uri);
+      if (!source.exists) throw new Error("La foto ya no está disponible. Seleccionala nuevamente.");
+      file = source;
+      fileName = source.name;
+    }
 
-  const response = await apiRequest<UploadProductImageResponse>("/products/upload", {
-    method: "POST",
-    body: formData
-  });
+    if (!file.size) throw new Error("La foto está vacía o no se pudo leer.");
+    if (file.size > 8 * 1024 * 1024) throw new Error("La imagen supera el límite permitido de 8 MB.");
 
-  return normalizeImageUrl(response.url);
+    const formData = new FormData();
+    formData.append("file", file, fileName);
+    const response = await apiRequest<UploadProductImageResponse>("/products/upload", {
+      method: "POST",
+      body: formData,
+      signal: controller.signal
+    });
+
+    const url = normalizeImageUrl(response.url);
+    if (!url) throw new Error("El servidor no devolvió la foto subida. Probá nuevamente.");
+    return url;
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("La subida de la foto tardó demasiado. Revisá tu conexión y probá nuevamente.");
+    if (error instanceof TypeError && /network|fetch/i.test(error.message)) {
+      throw new Error("No se pudo conectar para subir la foto. Revisá tu conexión y probá nuevamente.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function deleteProduct(id: string) {

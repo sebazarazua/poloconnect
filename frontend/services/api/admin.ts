@@ -418,10 +418,16 @@ export type AdminMarketplaceProduct = {
   currency: string;
   image: string;
   publicationStatus: string;
+  refundStatus?: "none" | "pending" | "failed" | "refunded";
   description: string;
   seller?: { id: string; name: string; phone?: string; email?: string };
   createdAt?: string;
-  lastPayment: { status: "pending" | "approved" | "rejected" | "cancelled"; amountCents: number; currency: string } | null;
+  lastPayment: {
+    status: "pending" | "approved" | "rejected" | "cancelled" | "refunded";
+    amountCents: number; currency: string;
+    refundStatus?: "none" | "pending" | "failed" | "refunded";
+    refundError?: string | null;
+  } | null;
 };
 
 export async function listAdminMarketplaceProducts(status?: string) {

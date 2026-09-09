@@ -16,6 +16,7 @@ import { useRouter } from "expo-router";
 import { useAppDrawer } from "@/components/AppDrawer";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { parseContentTarget } from "@/services/content-targets";
+import { CAROUSEL_INTERVAL_MS } from "@/constants/carousel";
 
 interface AdCarouselProps {
   images: ImageSourcePropType[];
@@ -52,7 +53,7 @@ export function AdCarousel({ images, targetUrls = [], height = 100 }: AdCarousel
       return;
     }
 
-    const timer = setInterval(() => {
+    const timer = setTimeout(() => {
       setActiveItem((currentItem) => {
         const nextItem = (currentItem + 1) % images.length;
 
@@ -63,10 +64,10 @@ export function AdCarousel({ images, targetUrls = [], height = 100 }: AdCarousel
 
         return nextItem;
       });
-    }, 4000);
+    }, CAROUSEL_INTERVAL_MS);
 
-    return () => clearInterval(timer);
-  }, [bannerWidth, images.length]);
+    return () => clearTimeout(timer);
+  }, [activeItem, bannerWidth, images.length]);
 
   const handleMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const nextItem = Math.round(event.nativeEvent.contentOffset.x / bannerWidth);

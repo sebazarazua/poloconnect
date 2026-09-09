@@ -13,6 +13,7 @@ export type Product = {
   images?: string[];
   status: ProductStatus;
   publicationStatus?: string;
+  refundStatus?: "none" | "pending" | "failed" | "refunded";
   description: string;
   contactPhone?: string;
   seller?: {

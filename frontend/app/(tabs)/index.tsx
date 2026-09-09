@@ -30,11 +30,10 @@ import { getLiveSpotlightEvents, type SpotlightEvent } from "@/services/api/spot
 import { resolveContentImageSource } from "@/services/content-images";
 import { parseContentTarget } from "@/services/content-targets";
 import { Match } from "@/services/matches";
+import { CAROUSEL_INTERVAL_MS } from "@/constants/carousel";
 
 const screenHorizontalPadding = 40;
 const featuredMatchBackground = require("../../assets/home-match-bg.png");
-const matchSlideDurationMs = 7000;
-const newsSlideDurationMs = 4300;
 const homePrimaryBannerDesignWidth = 390;
 const homePrimaryBannerBaseHeight = 146;
 
@@ -241,8 +240,6 @@ export default function HomeScreen() {
 
   const heroItems: HeroItem[] = [...liveMatchItems, ...liveEventItems, ...remoteNewsItems];
 
-  const activeHeroItem = heroItems[activeHero];
-  const activeHeroDuration = activeHeroItem?.type === "match" || activeHeroItem?.type === "event" ? matchSlideDurationMs : newsSlideDurationMs;
 
   const handleQuickAccessPress = (key: string) => {
     if (key === "calendar") {
@@ -265,10 +262,10 @@ export default function HomeScreen() {
         heroCarouselRef.current?.scrollTo({ x: next * bannerWidth, animated: true });
         return next;
       });
-    }, activeHeroDuration);
+    }, CAROUSEL_INTERVAL_MS);
 
     return () => clearTimeout(timer);
-  }, [activeHero, activeHeroDuration, bannerWidth, heroItems.length]);
+  }, [activeHero, bannerWidth, heroItems.length]);
 
   useEffect(() => {
     if (activeHero < heroItems.length) return;
@@ -281,7 +278,7 @@ export default function HomeScreen() {
       return;
     }
 
-    const timer = setInterval(() => {
+    const timer = setTimeout(() => {
       setActiveAd((currentAd) => {
         const nextAd = (currentAd + 1) % ads.length;
 
@@ -292,10 +289,10 @@ export default function HomeScreen() {
 
         return nextAd;
       });
-    }, 3500);
+    }, CAROUSEL_INTERVAL_MS);
 
-    return () => clearInterval(timer);
-  }, [ads.length, bannerWidth]);
+    return () => clearTimeout(timer);
+  }, [activeAd, ads.length, bannerWidth]);
 
   const handleHeroMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = Math.round(event.nativeEvent.contentOffset.x / bannerWidth);

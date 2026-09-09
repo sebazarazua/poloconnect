@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { usePathname, useRouter } from "expo-router";
-import { PropsWithChildren, ReactNode, useRef } from "react";
+import { useFocusEffect, usePathname, useRouter } from "expo-router";
+import { PropsWithChildren, ReactNode, useCallback, useRef, useState } from "react";
 import {
   Animated,
   Image,
@@ -19,6 +19,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAppDrawer } from "@/components/AppDrawer";
 import { AppColors, useTheme, useThemeColors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
+import { getNotifications } from "@/services/api/notifications";
 import { resolveUploadedUrl } from "@/services/api/users";
 
 const topBarHeight = 68;
@@ -46,10 +47,43 @@ export function Screen({ children, eyebrow, title, subtitle, hideHeader, style, 
   const pathname = usePathname();
   const { openDrawer } = useAppDrawer();
   const isOnNotifications = pathname === "/notifications";
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const userId = user?.id;
   const topAvatarSource = resolveUploadedUrl(user?.avatarUrl);
   const topBarTranslateY = useRef(new Animated.Value(0)).current;
   const lastScrollY = useRef(0);
   const isTopBarVisible = useRef(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      if (isOnNotifications || !userId) {
+        setUnreadNotifications(0);
+        return () => {
+          active = false;
+        };
+      }
+
+      const refreshUnreadNotifications = () => {
+        void getNotifications({ limit: 1, read: "false" })
+          .then((response) => {
+            if (active) setUnreadNotifications(response.unreadCount);
+          })
+          .catch(() => {
+            if (active) setUnreadNotifications(0);
+          });
+      };
+
+      refreshUnreadNotifications();
+      const interval = setInterval(refreshUnreadNotifications, 30_000);
+
+      return () => {
+        active = false;
+        clearInterval(interval);
+      };
+    }, [isOnNotifications, userId])
+  );
 
   const setTopBarVisible = (visible: boolean) => {
     if (isTopBarVisible.current === visible) {
@@ -127,17 +161,21 @@ export function Screen({ children, eyebrow, title, subtitle, hideHeader, style, 
         </View>
 
         <Pressable
-          style={styles.notificationButton}
+          style={[styles.notificationButton, unreadNotifications > 0 && styles.notificationButtonUnread]}
           accessibilityLabel="Notificaciones"
           onPress={() => !isOnNotifications && router.push("/notifications")}
           disabled={isOnNotifications}
         >
           <Ionicons
-            name="notifications-outline"
+            name={unreadNotifications > 0 ? "notifications-sharp" : "notifications-outline"}
             size={23}
-            color={isOnNotifications ? colors.muted : colors.primaryDark}
+            color={unreadNotifications > 0 ? "#ffffff" : isOnNotifications ? colors.muted : colors.primaryDark}
           />
-          <View style={styles.notificationDot} />
+          {unreadNotifications > 0 ? (
+            <View style={styles.notificationBadge}>
+              <Text style={styles.notificationBadgeText}>{unreadNotifications > 9 ? "9+" : unreadNotifications}</Text>
+            </View>
+          ) : null}
         </Pressable>
       </Animated.View>
 
@@ -237,16 +275,28 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     alignItems: "center",
     justifyContent: "center"
   },
-  notificationDot: {
-    position: "absolute",
-    top: 9,
-    right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  notificationButtonUnread: {
     backgroundColor: colors.warning,
-    borderWidth: 1,
-    borderColor: colors.background
+    borderColor: colors.warning
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: -4,
+    right: -5,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.danger,
+    borderWidth: 2,
+    borderColor: colors.background,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4
+  },
+  notificationBadgeText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "900"
   },
   scroll: {
     flex: 1,

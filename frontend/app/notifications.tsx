@@ -1,11 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
-import { getNotifications, markAllNotificationsRead, markNotificationRead, type NotificationItem, type NotificationKind } from "@/services/api/notifications";
+import { getNotifications, markAllNotificationsRead, type NotificationItem, type NotificationKind } from "@/services/api/notifications";
 
 const kindMeta: Record<NotificationKind, { icon: keyof typeof Ionicons.glyphMap; color: string; bg: string; labelKey: `notifications.kind.${NotificationKind}` }> = {
   match: { icon: "radio-sharp", color: "#0a66c2", bg: "#d8ecff", labelKey: "notifications.kind.match" },
@@ -16,11 +16,6 @@ const kindMeta: Record<NotificationKind, { icon: keyof typeof Ionicons.glyphMap;
   community: { icon: "people-sharp", color: "#5b7693", bg: "#edf6ff", labelKey: "notifications.kind.community" }
 };
 
-const filterOptions = [
-  { key: "all", labelKey: "notifications.filter.all" },
-  { key: "unread", labelKey: "notifications.filter.unread" }
-] as const;
-
 export default function NotificationsScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
@@ -28,7 +23,6 @@ export default function NotificationsScreen() {
   const { t } = useLocale();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [activeFilter, setActiveFilter] = useState<(typeof filterOptions)[number]["key"]>("all");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -41,8 +35,12 @@ export default function NotificationsScreen() {
 
     try {
       const response = await getNotifications({ limit: 50 });
-      setItems(response.data);
-      setUnreadCount(response.unreadCount);
+      const readAt = new Date().toISOString();
+      if (response.unreadCount > 0) {
+        await markAllNotificationsRead().catch(() => undefined);
+      }
+      setItems(response.data.map((item) => ({ ...item, read: true, readAt: item.readAt ?? readAt })));
+      setUnreadCount(0);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -55,15 +53,7 @@ export default function NotificationsScreen() {
     }, [loadNotifications])
   );
 
-  const visibleItems = useMemo(() => (activeFilter === "unread" ? items.filter((item) => !item.read) : items), [activeFilter, items]);
-
   const handleItemPress = async (item: NotificationItem) => {
-    if (!item.read) {
-      setItems((currentItems) => currentItems.map((currentItem) => (currentItem.id === item.id ? { ...currentItem, read: true, readAt: new Date().toISOString() } : currentItem)));
-      setUnreadCount((currentCount) => Math.max(0, currentCount - 1));
-      await markNotificationRead(item.id);
-    }
-
     const roomId = typeof item.data.roomId === "string" ? item.data.roomId : null;
 
     if (item.kind === "message" && roomId) {
@@ -86,12 +76,6 @@ export default function NotificationsScreen() {
     }
   };
 
-  const handleMarkAllRead = async () => {
-    await markAllNotificationsRead();
-    setItems((currentItems) => currentItems.map((item) => ({ ...item, read: true, readAt: item.readAt ?? new Date().toISOString() })));
-    setUnreadCount(0);
-  };
-
   return (
     <Screen
       eyebrow={t("notifications.eyebrow")}
@@ -99,32 +83,13 @@ export default function NotificationsScreen() {
       subtitle={unreadCount > 0 ? t("notifications.unreadSubtitle", { count: unreadCount }) : t("notifications.allCaughtUp")}
       showBackButton
       onBackPress={() => router.back()}
-      headerRight={
-        unreadCount > 0 ? (
-          <Pressable style={styles.markAllButton} onPress={() => void handleMarkAllRead()}>
-            <Text style={styles.markAllButtonText}>{t("notifications.markAll")}</Text>
-          </Pressable>
-        ) : null
-      }
     >
-      <View style={styles.filterRow}>
-        {filterOptions.map((option) => (
-          <Pressable
-            key={option.key}
-            style={[styles.filterChip, activeFilter === option.key && styles.filterChipActive]}
-            onPress={() => setActiveFilter(option.key)}
-          >
-            <Text style={[styles.filterChipText, activeFilter === option.key && styles.filterChipTextActive]}>{t(option.labelKey)}</Text>
-          </Pressable>
-        ))}
-      </View>
-
       {loading ? (
         <View style={styles.loadingState}>
           <ActivityIndicator color={colors.primary} />
           <Text style={styles.loadingText}>{t("notifications.loading")}</Text>
         </View>
-      ) : visibleItems.length === 0 ? (
+      ) : items.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="notifications-off-outline" size={46} color={colors.muted} />
           <Text style={styles.emptyTitle}>{t("notifications.emptyTitle")}</Text>
@@ -132,7 +97,7 @@ export default function NotificationsScreen() {
         </View>
       ) : (
         <View style={styles.list}>
-          {visibleItems.map((item) => {
+          {items.map((item) => {
             const meta = kindMeta[item.kind];
 
             return (
@@ -167,46 +132,6 @@ export default function NotificationsScreen() {
 }
 
 const createStyles = (colors: AppColors) => StyleSheet.create({
-  markAllButton: {
-    minHeight: 38,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: colors.border
-  },
-  markAllButtonText: {
-    color: colors.primaryDark,
-    fontSize: 12,
-    fontWeight: "800"
-  },
-  filterRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 14
-  },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border
-  },
-  filterChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary
-  },
-  filterChipText: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: "700"
-  },
-  filterChipTextActive: {
-    color: "#ffffff"
-  },
   list: {
     gap: 10,
     paddingBottom: 8

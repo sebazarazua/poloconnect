@@ -30,3 +30,8 @@ export class ContactSellerDto {
 export class RejectProductDto {
   @IsOptional() @IsString() reason?: string;
 }
+
+export class DeleteProductDto {
+  @IsOptional() @IsString() reason?: string;
+  @IsOptional() @IsString() message?: string;
+}

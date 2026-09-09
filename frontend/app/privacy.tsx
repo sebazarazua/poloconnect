@@ -43,6 +43,11 @@ export default function PrivacyPage() {
           El contenido que publicás en mercado, comunidad, remates o módulos públicos puede mostrarse a otros usuarios
           de Polo Connect según la configuración y estado de cada flujo.
         </PublicParagraph>
+        <PublicParagraph>
+          Las publicaciones del mercado pueden quedar pendientes de pago, en revisión, aprobadas, publicadas, rechazadas,
+          eliminadas o sujetas a reembolso según corresponda. Polo Connect puede registrar motivos de moderación y
+          notificarte dentro de la app sobre cambios de estado, eliminaciones y reembolsos.
+        </PublicParagraph>
       </PublicSection>
 
       <PublicSection title="Eliminación de datos">

@@ -4,15 +4,33 @@ import { RequestUser } from "../common/decorators/current-user.decorator";
 import { MediaService } from "../common/media/media.service";
 import { page, PaginationDto } from "../common/dto/pagination.dto";
 import { PrismaService } from "../database/prisma.service";
-import { ContactSellerDto, ProductQueryDto, ProductUpsertDto, RejectProductDto } from "./dto/marketplace.dto";
+import { ContactSellerDto, DeleteProductDto, ProductQueryDto, ProductUpsertDto, RejectProductDto } from "./dto/marketplace.dto";
 import { MercadoPagoService } from "./mercadopago.service";
 import { ContentFilterService } from "../moderation/content-filter.service";
 import { ModerationService } from "../moderation/moderation.service";
 import { MarketplaceRefundsService, summarizeRefunds } from "./marketplace-refunds.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 const PUBLICATION_CURRENCY = "ARS";
 const MP_RETURN_DEEP_LINK = "polo-connect://market-publish-return";
 const DEFAULT_PENDING_PAYMENT_TTL_MINUTES = 60;
+
+type ProductNotification = {
+  id: string;
+  sellerId: string;
+  title: string;
+};
+
+type ProductNotificationEvent =
+  | "pending_payment"
+  | "pending_review"
+  | "active"
+  | "payment_failed"
+  | "deleted_no_refund"
+  | "deleted_refund_pending"
+  | "deleted_refunded"
+  | "deleted_refund_failed"
+  | "payment_refunded";
 
 @Injectable()
 export class MarketplaceService {
@@ -25,8 +43,70 @@ export class MarketplaceService {
     private readonly mercadoPago: MercadoPagoService,
     private readonly moderation: ModerationService,
     private readonly contentFilter: ContentFilterService,
-    private readonly refunds: MarketplaceRefundsService
+    private readonly refunds: MarketplaceRefundsService,
+    private readonly notifications?: NotificationsService
   ) {}
+
+  private async notifyProductStatus(product: ProductNotification, event: ProductNotificationEvent, note?: string | null) {
+    if (!this.notifications) return;
+
+    const listingName = product.title || "tu publicación";
+    const templates: Record<ProductNotificationEvent, { title: string; body: string }> = {
+      pending_payment: {
+        title: "Pago pendiente",
+        body: `Tu publicación "${listingName}" quedó pendiente hasta que se confirme el pago.`
+      },
+      pending_review: {
+        title: "Publicación en revisión",
+        body: `Tu publicación "${listingName}" está en revisión antes de publicarse.`
+      },
+      active: {
+        title: "Publicación aprobada",
+        body: `Tu publicación "${listingName}" fue aprobada y ya está publicada.`
+      },
+      payment_failed: {
+        title: "Publicación descartada",
+        body: `Tu publicación "${listingName}" se eliminó porque el pago no fue completado.`
+      },
+      deleted_no_refund: {
+        title: "Publicación eliminada",
+        body: `Tu publicación "${listingName}" fue eliminada. Esta eliminación no genera reembolso.${note ? ` Motivo: ${note}` : ""}`
+      },
+      deleted_refund_pending: {
+        title: "Publicación eliminada",
+        body: `Tu publicación "${listingName}" fue eliminada y el reembolso quedó en proceso.`
+      },
+      deleted_refunded: {
+        title: "Publicación eliminada y reembolsada",
+        body: `Tu publicación "${listingName}" fue eliminada y Mercado Pago confirmó el reembolso.`
+      },
+      deleted_refund_failed: {
+        title: "Reembolso en revisión",
+        body: `Tu publicación "${listingName}" fue eliminada y el reembolso se reintentará automáticamente.`
+      },
+      payment_refunded: {
+        title: "Reembolso confirmado",
+        body: `Mercado Pago confirmó el reembolso de la publicación "${listingName}".`
+      }
+    };
+
+    const template = templates[event];
+    await this.notifications.notifyUser(product.sellerId, {
+      kind: "market",
+      title: template.title,
+      body: template.body,
+      data: { kind: "market", productId: product.id, publicationStatus: event, route: "/market-my-posts" }
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Could not notify product ${product.id} status ${event}: ${message}`);
+    });
+  }
+
+  private refundNotificationEvent(refundStatus: "none" | "pending" | "failed" | "refunded"): ProductNotificationEvent {
+    if (refundStatus === "refunded") return "deleted_refunded";
+    if (refundStatus === "failed") return "deleted_refund_failed";
+    return "deleted_refund_pending";
+  }
 
   private async normalizeImageInputs(body: ProductUpsertDto) {
     const fromList = (body.imageUrls ?? [])
@@ -65,7 +145,7 @@ export class MarketplaceService {
         status: "pending_payment",
         createdAt: { lt: cutoff }
       },
-      select: { id: true }
+      select: { id: true, sellerId: true, title: true }
     });
 
     if (staleProducts.length === 0) return;
@@ -81,6 +161,8 @@ export class MarketplaceService {
         data: { deletedAt: new Date(), moderationNotes: "Pago no completado dentro del plazo.", version: { increment: 1 } }
       })
     ]);
+
+    await Promise.all(staleProducts.map((product) => this.notifyProductStatus(product, "payment_failed")));
   }
 
   async listProducts(userId: string, query: ProductQueryDto) {
@@ -155,6 +237,7 @@ export class MarketplaceService {
     });
 
     if (isAdmin) {
+      await this.notifyProductStatus(product, "active");
       return {
         product: this.toProductDto(product, true),
         payment: { required: false, provider: null, url: null, status: null }
@@ -189,6 +272,8 @@ export class MarketplaceService {
         where: { id: paymentRecord.id },
         data: { mpPreferenceId: preference.id }
       });
+
+      await this.notifyProductStatus(product, "pending_payment");
 
       return {
         product: this.toProductDto(product, true),
@@ -238,11 +323,24 @@ export class MarketplaceService {
     return this.toProductDto(product, true);
   }
 
-  async deleteProduct(user: RequestUser, id: string) {
+  async deleteProduct(user: RequestUser, id: string, body: DeleteProductDto = {}) {
     const current = await this.prisma.product.findUnique({ where: { id } });
     if (!current || current.deletedAt) throw new NotFoundException("Product not found.");
     if (current.sellerId !== user.id && !user.roles.includes("admin")) throw new ForbiddenException("Product ownership required.");
-    await this.prisma.product.update({ where: { id }, data: { deletedAt: new Date(), version: { increment: 1 } } });
+
+    const reason = body.reason?.trim();
+    const message = body.message?.trim();
+    const isAdminDeletion = user.roles.includes("admin");
+    const adminNote = isAdminDeletion && (reason || message)
+      ? [reason, message].filter(Boolean).join(" - ").slice(0, 1000)
+      : null;
+    const moderationNotes = adminNote ?? current.moderationNotes;
+
+    await this.prisma.product.update({
+      where: { id },
+      data: { deletedAt: new Date(), moderationNotes, version: { increment: 1 } }
+    });
+    await this.notifyProductStatus(current, "deleted_no_refund", adminNote);
     return { ok: true };
   }
 
@@ -322,16 +420,21 @@ export class MarketplaceService {
 
     if (record.status === "refunded" || record.refundedAt) return { ok: true };
     if (payment.status === "refunded") {
+      let refundedProduct: ProductNotification | null = null;
       await this.prisma.$transaction(async (tx) => {
         await tx.marketplacePayment.update({ where: { id: record.id }, data: {
           status: "refunded", mpPaymentId: payment.id, refundedAt: new Date(), refundLastError: null,
           refundNextAttemptAt: null, rawWebhookPayload: body ?? undefined
         } });
-        await tx.product.updateMany({
+        const updated = await tx.product.updateMany({
           where: { id: record.productId, status: { in: ["pending_payment", "pending_review", "active"] }, deletedAt: null },
           data: { status: "paused", version: { increment: 1 } }
         });
+        if (updated.count) {
+          refundedProduct = await tx.product.findUnique({ where: { id: record.productId }, select: { id: true, sellerId: true, title: true } });
+        }
       });
+      if (refundedProduct) await this.notifyProductStatus(refundedProduct, "payment_refunded");
       return { ok: true };
     }
 
@@ -353,6 +456,8 @@ export class MarketplaceService {
     if (record.status === "approved" && nextStatus !== "approved") return { ok: true };
     if (record.mpPaymentId === payment.id && record.status === nextStatus && nextStatus !== "approved") return { ok: true };
 
+    let statusNotification: { product: ProductNotification; event: ProductNotificationEvent } | null = null;
+
     await this.prisma.$transaction(async (tx) => {
       const changed = await tx.marketplacePayment.updateMany({
         where: { id: record.id, refundedAt: null, status: { not: "refunded" } },
@@ -366,20 +471,29 @@ export class MarketplaceService {
 
       if (nextStatus === "approved") {
         // Repeated approvals must not reactivate rejected, paused, sold or deleted listings.
-        await tx.product.updateMany({
+        const updated = await tx.product.updateMany({
           where: { id: record.productId, status: { in: ["pending_payment", "pending_review"] }, deletedAt: null },
           data: { status: "active", moderationNotes: null, version: { increment: 1 } }
         });
+        if (updated.count) {
+          const notificationProduct = await tx.product.findUnique({ where: { id: record.productId }, select: { id: true, sellerId: true, title: true } });
+          if (notificationProduct) statusNotification = { product: notificationProduct, event: "active" };
+        }
         await this.refunds.requestForProduct(record.productId, tx);
       } else if (nextStatus === "rejected" || nextStatus === "cancelled") {
-        await tx.product.updateMany({
+        const updated = await tx.product.updateMany({
           where: { id: record.productId, status: "pending_payment", deletedAt: null },
           data: { deletedAt: new Date(), moderationNotes: "Pago no completado.", version: { increment: 1 } }
         });
+        if (updated.count) {
+          const notificationProduct = await tx.product.findUnique({ where: { id: record.productId }, select: { id: true, sellerId: true, title: true } });
+          if (notificationProduct) statusNotification = { product: notificationProduct, event: "payment_failed" };
+        }
       }
     });
 
     if (nextStatus === "approved") await this.refunds.processProduct(record.productId);
+    if (statusNotification) await this.notifyProductStatus(statusNotification.product, statusNotification.event);
     return { ok: true };
   }
 
@@ -424,6 +538,7 @@ export class MarketplaceService {
       throw error;
     });
 
+    await this.notifyProductStatus(updated, "active");
     return this.toProductDto(updated, true);
   }
 
@@ -445,6 +560,10 @@ export class MarketplaceService {
     const updated = await this.prisma.product.findUniqueOrThrow({
       where: { id }, include: { images: { orderBy: { position: "asc" } }, favorites: true, seller: true, payments: true }
     });
+    const refundStatus = summarizeRefunds(updated.payments ?? []);
+    if (refundStatus !== "refunded") {
+      await this.notifyProductStatus(updated, this.refundNotificationEvent(refundStatus));
+    }
     return this.toProductDto(updated, true);
   }
 

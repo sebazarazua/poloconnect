@@ -284,10 +284,27 @@ export class ModerationService {
         const storageKeys = product.images.map((image) => image.storageKey ?? this.media.extractStorageKeyFromUrl(image.url)).filter((key): key is string => Boolean(key));
         const legacyPaths = product.images.map((image) => this.media.extractLegacyUploadPath(image.url)).filter((path): path is string => Boolean(path));
         await Promise.allSettled([this.media.deleteStorageKeys(storageKeys), this.media.deleteLegacyUploadPaths(legacyPaths)]);
+        void this.notifications.notifyUser(product.sellerId, {
+          kind: "market",
+          title: "Publicación eliminada",
+          body: `Tu publicación "${product.title}" fue eliminada por moderación. Esta eliminación no genera reembolso.`,
+          data: { kind: "market", productId: product.id, publicationStatus: "deleted_no_refund", route: "/market-my-posts" }
+        });
         return;
       }
+      const product = await this.prisma.product.findUnique({ where: { id: report.contentId }, select: { id: true, sellerId: true, title: true } });
       const result = await this.prisma.product.updateMany({ where: { id: report.contentId }, data: restore ? { deletedAt: null, status: "pending_review", moderationNotes: null } : { deletedAt: new Date(), status: "rejected", moderationNotes: "Contenido retirado por moderación.", version: { increment: 1 } } });
       if (!result.count) throw new NotFoundException("Publicación no encontrada.");
+      if (product) {
+        void this.notifications.notifyUser(product.sellerId, {
+          kind: "market",
+          title: restore ? "Publicación en revisión" : "Publicación eliminada",
+          body: restore
+            ? `Tu publicación "${product.title}" volvió a revisión.`
+            : `Tu publicación "${product.title}" fue retirada por moderación. Esta eliminación no genera reembolso.`,
+          data: { kind: "market", productId: product.id, publicationStatus: restore ? "pending_review" : "deleted_no_refund", route: "/market-my-posts" }
+        });
+      }
       return;
     }
     throw new BadRequestException("Este tipo de contenido todavía no admite ocultación automática.");

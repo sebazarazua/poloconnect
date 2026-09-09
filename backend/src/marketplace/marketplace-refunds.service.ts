@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/commo
 import { MarketplacePayment, Prisma } from "@prisma/client";
 import { PrismaService } from "../database/prisma.service";
 import { MercadoPagoService } from "./mercadopago.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 type RefundPayment = { status: string; refundRequestedAt?: Date | null; refundedAt?: Date | null; refundLastError?: string | null };
 
@@ -18,7 +19,11 @@ export class MarketplaceRefundsService implements OnModuleInit, OnModuleDestroy 
   private processing = false;
   private readonly inFlight = new Map<string, Promise<void>>();
 
-  constructor(private readonly prisma: PrismaService, private readonly mercadoPago: MercadoPagoService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mercadoPago: MercadoPagoService,
+    private readonly notifications?: NotificationsService
+  ) {}
 
   onModuleInit() {
     const run = () => void this.processDueRefunds().catch(() => this.logger.error("Could not process pending marketplace refunds."));
@@ -109,9 +114,20 @@ export class MarketplaceRefundsService implements OnModuleInit, OnModuleDestroy 
   }
 
   private async confirmRefund(id: string) {
-    await this.prisma.marketplacePayment.update({
+    const updated = await this.prisma.marketplacePayment.update({
       where: { id },
-      data: { status: "refunded", refundedAt: new Date(), refundLastError: null, refundNextAttemptAt: null }
+      data: { status: "refunded", refundedAt: new Date(), refundLastError: null, refundNextAttemptAt: null },
+      include: { product: { select: { id: true, sellerId: true, title: true } } }
+    });
+
+    await this.notifications?.notifyUser(updated.product.sellerId, {
+      kind: "market",
+      title: "Publicación eliminada y reembolsada",
+      body: `Mercado Pago confirmó el reembolso de la publicación "${updated.product.title}".`,
+      data: { kind: "market", productId: updated.product.id, publicationStatus: "deleted_refunded", route: "/market-my-posts" }
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Could not notify refund confirmation for marketplace payment ${id}: ${message}`);
     });
   }
 }

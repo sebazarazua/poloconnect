@@ -8,7 +8,7 @@ import { CsrfGuard } from "../common/guards/csrf.guard";
 import { BrandsService } from "../brands/brands.service";
 import { UpsertBrandDto, UpsertBrandProductDto } from "../brands/dto/brands.dto";
 import { MarketplaceService } from "../marketplace/marketplace.service";
-import { RejectProductDto } from "../marketplace/dto/marketplace.dto";
+import { DeleteProductDto, RejectProductDto } from "../marketplace/dto/marketplace.dto";
 import { AdminService } from "./admin.service";
 import { AdminContentQueryDto, PatchAdminContentDto, ReorderAdminContentDto, UpsertAdminContentDto } from "./dto/admin-content.dto";
 import { AdminCommunityBanDto, AdminCommunityMembershipDto, CreateCommunityRoomDto, UpdateCommunityRoomDto } from "./dto/admin-community.dto";
@@ -95,8 +95,8 @@ export class AdminController {
 
   @UseGuards(CsrfGuard)
   @Delete("marketplace/products/:id")
-  deleteMarketplaceProduct(@CurrentUser() user: RequestUser, @Param("id") id: string) {
-    return this.marketplace.deleteProduct(user, id);
+  deleteMarketplaceProduct(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() dto: DeleteProductDto) {
+    return this.marketplace.deleteProduct(user, id, dto);
   }
 
   @UseGuards(CsrfGuard)

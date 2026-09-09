@@ -448,8 +448,9 @@ export async function rejectAdminMarketplaceProduct(id: string, reason?: string)
   });
 }
 
-export async function deleteAdminMarketplaceProduct(id: string) {
+export async function deleteAdminMarketplaceProduct(id: string, payload?: { reason?: string; message?: string }) {
   return apiRequest<{ ok: boolean }>(`/admin/marketplace/products/${encodeURIComponent(id)}`, {
-    method: "DELETE"
+    method: "DELETE",
+    body: payload ? JSON.stringify(payload) : undefined
   });
 }

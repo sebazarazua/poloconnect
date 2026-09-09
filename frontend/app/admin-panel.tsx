@@ -1,7 +1,7 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
 import { Redirect, useRouter } from "expo-router";
 import { type ComponentProps, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AdminDateTimeField } from "@/components/AdminDateTimeField";
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
@@ -100,6 +100,16 @@ const matchStatusLabels: Record<"upcoming" | "live" | "finished" | "cancelled", 
   finished: "Finalizado",
   cancelled: "Cancelado"
 };
+
+const marketplaceDeleteReasons = [
+  { value: "Normas de publicación incumplidas", label: "Incumple normas de publicación" },
+  { value: "Contenido falso o engañoso", label: "Contenido falso o engañoso" },
+  { value: "Posible fraude o estafa", label: "Posible fraude o estafa" },
+  { value: "Producto o servicio no permitido", label: "Producto o servicio no permitido" },
+  { value: "Derechos de terceros o suplantación", label: "Derechos de terceros o suplantación" },
+  { value: "Spam o publicación duplicada", label: "Spam o publicación duplicada" },
+  { value: "Otro", label: "Otro" }
+] as const;
 
 function slugify(value: string) {
   return value
@@ -249,6 +259,9 @@ export default function AdminPanelScreen() {
   const [marketplaceProducts, setMarketplaceProducts] = useState<AdminMarketplaceProduct[]>([]);
   const [marketplaceStatusFilter, setMarketplaceStatusFilter] = useState<string>("pending_review");
   const [marketplaceBusyId, setMarketplaceBusyId] = useState<string | null>(null);
+  const [marketplaceDeleteTarget, setMarketplaceDeleteTarget] = useState<AdminMarketplaceProduct | null>(null);
+  const [marketplaceDeleteReason, setMarketplaceDeleteReason] = useState<(typeof marketplaceDeleteReasons)[number]["value"]>("Normas de publicación incumplidas");
+  const [marketplaceDeleteMessage, setMarketplaceDeleteMessage] = useState("");
 
   const [reports, setReports] = useState<ModerationReport[]>([]);
   const [reportStatusFilter, setReportStatusFilter] = useState<ReportStatus | "">("pending");
@@ -271,6 +284,46 @@ export default function AdminPanelScreen() {
   const loadMarketplaceProducts = async (status: string) => {
     const next = await listAdminMarketplaceProducts(status || undefined).catch(() => []);
     setMarketplaceProducts(next);
+  };
+
+  const openMarketplaceDeleteDialog = (product: AdminMarketplaceProduct) => {
+    setMarketplaceDeleteTarget(product);
+    setMarketplaceDeleteReason("Normas de publicación incumplidas");
+    setMarketplaceDeleteMessage("");
+  };
+
+  const closeMarketplaceDeleteDialog = () => {
+    if (marketplaceBusyId === marketplaceDeleteTarget?.id) return;
+    setMarketplaceDeleteTarget(null);
+    setMarketplaceDeleteReason("Normas de publicación incumplidas");
+    setMarketplaceDeleteMessage("");
+  };
+
+  const confirmMarketplaceDelete = async () => {
+    if (!marketplaceDeleteTarget) return;
+
+    const message = marketplaceDeleteMessage.trim();
+    if (marketplaceDeleteReason === "Otro" && !message) {
+      Alert.alert("Falta el motivo", "Escribí el motivo de eliminación cuando elegís Otros.");
+      return;
+    }
+
+    setMarketplaceBusyId(marketplaceDeleteTarget.id);
+    try {
+      await deleteAdminMarketplaceProduct(marketplaceDeleteTarget.id, {
+        reason: marketplaceDeleteReason,
+        message: message || undefined
+      });
+      await loadMarketplaceProducts(marketplaceStatusFilter);
+      setMarketplaceDeleteTarget(null);
+      setMarketplaceDeleteReason("Normas de publicación incumplidas");
+      setMarketplaceDeleteMessage("");
+      Alert.alert("Publicación eliminada", "La publicación fue eliminada sin reembolso y el usuario será notificado en la app.");
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "No se pudo eliminar la publicación.");
+    } finally {
+      setMarketplaceBusyId(null);
+    }
   };
 
   // Tournaments state
@@ -1949,17 +2002,7 @@ export default function AdminPanelScreen() {
                       <Pressable
                         style={styles.btnDanger}
                         disabled={marketplaceBusyId === product.id}
-                        onPress={async () => {
-                          setMarketplaceBusyId(product.id);
-                          try {
-                            await deleteAdminMarketplaceProduct(product.id);
-                            await loadMarketplaceProducts(marketplaceStatusFilter);
-                          } catch (err: any) {
-                            Alert.alert("Error", err?.message ?? "No se pudo eliminar la publicación.");
-                          } finally {
-                            setMarketplaceBusyId(null);
-                          }
-                        }}
+                        onPress={() => openMarketplaceDeleteDialog(product)}
                       >
                         <Ionicons name="trash-outline" size={16} color={colors.danger} />
                         <Text style={styles.btnDangerText}>Eliminar</Text>
@@ -2427,6 +2470,62 @@ export default function AdminPanelScreen() {
         )}
 
       </ScrollView>
+      <Modal visible={Boolean(marketplaceDeleteTarget)} transparent animationType="fade" onRequestClose={closeMarketplaceDeleteDialog}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>Eliminar publicación</Text>
+                <Text style={styles.modalSubtitle}>{marketplaceDeleteTarget?.name}</Text>
+              </View>
+              <Pressable accessibilityLabel="Cerrar" onPress={closeMarketplaceDeleteDialog} style={styles.modalCloseButton}>
+                <Ionicons name="close" size={20} color={colors.text} />
+              </Pressable>
+            </View>
+
+            <View style={styles.modalWarning}>
+              <Ionicons name="warning-outline" size={18} color={colors.danger} />
+              <Text style={styles.modalWarningText}>
+                Esta eliminación directa no genera reembolso. El usuario será notificado en la app con el motivo informado.
+              </Text>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.modalReasons} showsVerticalScrollIndicator={false}>
+              {marketplaceDeleteReasons.map((reason) => (
+                <Pressable
+                  key={reason.value}
+                  style={[styles.modalReasonOption, marketplaceDeleteReason === reason.value && styles.modalReasonOptionActive]}
+                  onPress={() => setMarketplaceDeleteReason(reason.value)}
+                >
+                  <View style={[styles.modalRadio, marketplaceDeleteReason === reason.value && styles.modalRadioActive]}>
+                    {marketplaceDeleteReason === reason.value ? <View style={styles.modalRadioDot} /> : null}
+                  </View>
+                  <Text style={styles.modalReasonText}>{reason.label}</Text>
+                </Pressable>
+              ))}
+              <TextInput
+                value={marketplaceDeleteMessage}
+                onChangeText={setMarketplaceDeleteMessage}
+                placeholder={marketplaceDeleteReason === "Otro" ? "Escribí el motivo de eliminación" : "Mensaje adicional para el usuario (opcional)"}
+                placeholderTextColor={colors.muted}
+                multiline
+                maxLength={1000}
+                style={styles.modalTextArea}
+              />
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <Pressable style={styles.btnSecondary} onPress={closeMarketplaceDeleteDialog} disabled={marketplaceBusyId === marketplaceDeleteTarget?.id}>
+                <Text style={styles.btnSecondaryText}>Cancelar</Text>
+              </Pressable>
+              <Pressable style={styles.btnDanger} onPress={() => { void confirmMarketplaceDelete(); }} disabled={marketplaceBusyId === marketplaceDeleteTarget?.id}>
+                <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                <Text style={styles.btnDangerText}>{marketplaceBusyId === marketplaceDeleteTarget?.id ? "Eliminando..." : "Eliminar sin reembolso"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -2529,6 +2628,25 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   assetChip: { borderRadius: 999, paddingHorizontal: 10, minHeight: 30, justifyContent: "center", backgroundColor: colors.primarySoft, borderWidth: 1, borderColor: colors.border },
   assetChipText: { color: colors.primaryDark, fontWeight: "800", fontSize: 11 },
   actionRow: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
+
+  // Modal
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.42)", alignItems: "center", justifyContent: "center", padding: 16 },
+  modalSheet: { width: "100%", maxWidth: 560, maxHeight: "88%", borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, padding: 16, gap: 12 },
+  modalHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
+  modalTitle: { color: colors.text, fontSize: 18, fontWeight: "900" },
+  modalSubtitle: { color: colors.muted, fontSize: 13, marginTop: 3 },
+  modalCloseButton: { width: 36, height: 36, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceStrong },
+  modalWarning: { flexDirection: "row", alignItems: "flex-start", gap: 8, borderRadius: 8, borderWidth: 1, borderColor: "#ffd0c9", backgroundColor: colors.dangerSoft, padding: 10 },
+  modalWarningText: { flex: 1, color: colors.danger, fontSize: 12.5, lineHeight: 18, fontWeight: "800" },
+  modalReasons: { gap: 8, paddingVertical: 2 },
+  modalReasonOption: { minHeight: 42, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12 },
+  modalReasonOptionActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  modalRadio: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: colors.muted, alignItems: "center", justifyContent: "center" },
+  modalRadioActive: { borderColor: colors.primary },
+  modalRadioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
+  modalReasonText: { flex: 1, color: colors.text, fontSize: 13, fontWeight: "800" },
+  modalTextArea: { minHeight: 92, textAlignVertical: "top", borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, color: colors.text, padding: 12, fontSize: 13 },
+  modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" },
 
   // Guided cards
   stepCard: { flexDirection: "row", alignItems: "flex-start", gap: 10, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, padding: 12 },

@@ -9,8 +9,9 @@ const rules = [
   ["people-outline", "Respeto entre personas", "No se permite acoso, amenazas, discriminación ni insultos."],
   ["chatbubbles-outline", "Contenido responsable", "No publiques spam, estafas, información engañosa ni contenido sexual o violento."],
   ["person-circle-outline", "Identidad auténtica", "No suplantes a otra persona ni uses el perfil para engañar a la comunidad."],
-  ["pricetag-outline", "Mercado seguro", "Las publicaciones deben ser claras y reales. Reportá cualquier señal de fraude."],
-  ["shield-checkmark-outline", "Moderación", "Podemos ocultar contenido, advertir, suspender o cancelar cuentas cuando corresponda." ]
+  ["pricetag-outline", "Mercado seguro", "Las publicaciones deben ser claras, reales y propias. No se permiten fraudes, duplicados, datos engañosos, productos prohibidos ni contenido que vulnere derechos de terceros."],
+  ["card-outline", "Pagos de publicaciones", "Si eliminás tu propia publicación, o si el equipo la elimina por incumplimiento o por una situación que lo amerite, el valor abonado por publicarla no será reembolsable. Cuando corresponda rechazar una publicación con devolución, la app informará el estado del reembolso."],
+  ["shield-checkmark-outline", "Moderación", "Podemos ocultar, revisar, rechazar o eliminar contenido, advertir, suspender o cancelar cuentas. Polo Connect se reserva el derecho de eliminar publicaciones y no reembolsar el valor de publicación cuando la situación lo justifique." ]
 ] as const;
 
 export default function CommunityGuidelinesScreen() {

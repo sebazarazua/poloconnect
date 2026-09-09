@@ -6,9 +6,10 @@ import { MercadoPagoService } from "./mercadopago.service";
 import { ProductsController } from "./products.controller";
 import { ModerationModule } from "../moderation/moderation.module";
 import { MarketplaceRefundsService } from "./marketplace-refunds.service";
+import { NotificationsModule } from "../notifications/notifications.module";
 
 @Module({
-  imports: [ModerationModule],
+  imports: [ModerationModule, NotificationsModule],
   controllers: [ProductsController, FavoritesController, MarketplacePaymentsController],
   providers: [MarketplaceService, MercadoPagoService, MarketplaceRefundsService],
   exports: [MarketplaceService]

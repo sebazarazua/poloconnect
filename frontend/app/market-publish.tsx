@@ -519,17 +519,27 @@ export default function MarketPublishScreen() {
           <Pressable
             style={[styles.deleteOwnButton, (isSubmitting || isDeleting) && styles.publishButtonDisabled]}
             disabled={isSubmitting || isDeleting || isUploadingImages}
-            onPress={async () => {
-              try {
-                setIsDeleting(true);
-                await deleteProduct(existingProduct.id);
-                router.back();
-              } catch (error) {
-                Alert.alert(t("marketPublish.errorTitle"), error instanceof Error ? error.message : t("marketPublish.errorFallback"));
-              } finally {
-                setIsDeleting(false);
+            onPress={() => {
+              Alert.alert(t("marketPublish.deleteConfirmTitle"), t("marketPublish.deleteConfirmText"), [
+                { text: t("common.cancel"), style: "cancel" },
+                {
+                  text: t("marketPublish.deleteConfirmAction"),
+                  style: "destructive",
+                  onPress: async () => {
+                    try {
+                      setIsDeleting(true);
+                      await deleteProduct(existingProduct.id);
+                      router.back();
+                    } catch (error) {
+                      Alert.alert(t("marketPublish.errorTitle"), error instanceof Error ? error.message : t("marketPublish.errorFallback"));
+                    } finally {
+                      setIsDeleting(false);
+                    }
+                  }
+                }
+              ]);
               }
-            }}
+            }
           >
             {isDeleting ? (
               <ActivityIndicator color={colors.danger} />

@@ -100,15 +100,24 @@ export default function MarketMyPostsScreen() {
                     <Pressable
                       style={[styles.actionButton, styles.deleteButton, isDeleting && styles.actionButtonDisabled]}
                       disabled={isDeleting}
-                      onPress={async () => {
-                        try {
-                          setDeletingProductId(product.id);
-                          await deleteProduct(product.id);
-                        } catch (error) {
-                          Alert.alert("No se pudo eliminar", error instanceof Error ? error.message : "Intentá nuevamente.");
-                        } finally {
-                          setDeletingProductId(null);
-                        }
+                      onPress={() => {
+                        Alert.alert(t("marketPublish.deleteConfirmTitle"), t("marketPublish.deleteConfirmText"), [
+                          { text: t("common.cancel"), style: "cancel" },
+                          {
+                            text: t("marketPublish.deleteConfirmAction"),
+                            style: "destructive",
+                            onPress: async () => {
+                              try {
+                                setDeletingProductId(product.id);
+                                await deleteProduct(product.id);
+                              } catch (error) {
+                                Alert.alert("No se pudo eliminar", error instanceof Error ? error.message : "Intentá nuevamente.");
+                              } finally {
+                                setDeletingProductId(null);
+                              }
+                            }
+                          }
+                        ]);
                       }}
                     >
                       {isDeleting ? (

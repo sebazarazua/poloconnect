@@ -52,9 +52,44 @@ export class CommunityGateway implements OnGatewayConnection {
   @SubscribeMessage("leave_room")
   leave(@ConnectedSocket() client: Socket, @MessageBody() body: { roomId: string }) {
     if (body?.roomId) {
+      if (client.data.visibleRoomId === body.roomId) {
+        delete client.data.visibleRoomId;
+      }
       client.leave(this.roomChannel(body.roomId));
     }
     return { roomId: body?.roomId ?? null, ok: true };
+  }
+
+  @SubscribeMessage("set_room_visibility")
+  async setRoomVisibility(@ConnectedSocket() client: Socket, @MessageBody() body: { roomId: string; visible: boolean }) {
+    if (!body?.roomId || typeof body.visible !== "boolean") {
+      return { roomId: body?.roomId ?? null, ok: false };
+    }
+
+    if (!body.visible) {
+      if (client.data.visibleRoomId === body.roomId) {
+        delete client.data.visibleRoomId;
+      }
+      return { roomId: body.roomId, ok: true };
+    }
+
+    const userId = await this.authenticate(client);
+    if (!userId || !client.rooms.has(this.roomChannel(body.roomId)) || !(await this.canJoinRoom(userId, body.roomId))) {
+      return { roomId: body.roomId, ok: false };
+    }
+
+    client.data.visibleRoomId = body.roomId;
+    return { roomId: body.roomId, ok: true };
+  }
+
+  async getActiveRoomViewerUserIds(roomId: string) {
+    const sockets = await this.server.in(this.roomChannel(roomId)).fetchSockets();
+    return new Set(
+      sockets
+        .filter((socket) => socket.data.visibleRoomId === roomId)
+        .map((socket) => socket.data.userId)
+        .filter((userId): userId is string => typeof userId === "string")
+    );
   }
 
   async emitMessage(roomId: string, message: Record<string, unknown>) {

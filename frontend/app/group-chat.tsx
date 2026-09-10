@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -26,6 +26,7 @@ import {
   listMessages,
   listMessagesAfter,
   sendMessage,
+  setChatRoomVisibility,
   subscribeToRoomMessages
 } from "@/services/api/community";
 import { resolveUploadedUrl } from "@/services/api/users";
@@ -196,6 +197,8 @@ export default function GroupChatScreen() {
   const messagesRef = useRef<Message[]>([]);
   const activeRoomIdRef = useRef<string | undefined>(undefined);
   const mountedRef = useRef(true);
+  const isFocusedRef = useRef(false);
+  const isAppActiveRef = useRef(AppState.currentState === "active");
   const accessAlertShownRef = useRef(false);
   const [inputText, setInputText] = useState("");
   const [composerHeight, setComposerHeight] = useState(42);
@@ -235,6 +238,20 @@ export default function GroupChatScreen() {
     }
   }, [chatId, normalizeMessage, updateMessages]);
 
+  useFocusEffect(useCallback(() => {
+    isFocusedRef.current = true;
+    if (isAppActiveRef.current && chatId) {
+      setChatRoomVisibility(chatId, true);
+    }
+
+    return () => {
+      isFocusedRef.current = false;
+      if (chatId) {
+        setChatRoomVisibility(chatId, false);
+      }
+    };
+  }, [chatId]));
+
   const scrollToBottom = (animated: boolean) => {
     requestAnimationFrame(() => {
       scrollRef.current?.scrollToEnd({ animated });
@@ -273,6 +290,9 @@ export default function GroupChatScreen() {
       const normalizedIncoming = normalizeMessage(incomingMessage);
       updateMessages((current) => mergeMessages(current, [normalizedIncoming]));
     }, () => {
+      if (isFocusedRef.current && isAppActiveRef.current) {
+        setChatRoomVisibility(chatId, true);
+      }
       void synchronizeMessages().catch(() => undefined);
     });
 
@@ -284,7 +304,11 @@ export default function GroupChatScreen() {
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
+      isAppActiveRef.current = nextState === "active";
       if (nextState !== "active") {
+        if (chatId) {
+          setChatRoomVisibility(chatId, false);
+        }
         keyboardTimersRef.current.forEach(clearTimeout);
         keyboardTimersRef.current = [];
         setIsKeyboardVisible(false);
@@ -293,6 +317,9 @@ export default function GroupChatScreen() {
       }
 
       const wasSocketConnected = ensureCommunitySocketConnected();
+      if (isFocusedRef.current && chatId) {
+        setChatRoomVisibility(chatId, true);
+      }
       if (wasSocketConnected) {
         void synchronizeMessages().catch(() => undefined);
       }
@@ -300,7 +327,7 @@ export default function GroupChatScreen() {
     });
 
     return () => subscription.remove();
-  }, [synchronizeMessages]);
+  }, [chatId, synchronizeMessages]);
 
   useEffect(() => {
     if (!chatId || !roomsLoaded || chat || accessAlertShownRef.current) {

@@ -35,7 +35,10 @@ function setup() {
     $transaction: jest.fn(async (callback: (tx: typeof transaction) => unknown) => callback(transaction))
   };
   const notifications = { notifyRoomMembers: jest.fn(async () => []) };
-  const gateway = { emitMessage: jest.fn(async () => undefined) };
+  const gateway = {
+    emitMessage: jest.fn(async () => undefined),
+    getActiveRoomViewerUserIds: jest.fn(async () => new Set<string>())
+  };
   const moderation = { filterBlockedUserIds: jest.fn(async () => new Set<string>()) };
   const contentFilter = { assertAllowed: jest.fn() };
   const service = new CommunityService(prisma, notifications as any, gateway as any, moderation as any, contentFilter as any);
@@ -60,7 +63,21 @@ describe("CommunityService chat flow", () => {
       title: "Torneo La Plata",
       body: "Juan Pérez: ¿A qué hora comienza?",
       data: { roomId: room.id, messageId: "message-1", clientMessageId: "local-123" }
-    });
+    }, { skipNotificationUserIds: new Set() });
+  });
+
+  it("suppresses the notification only for members actively viewing this room", async () => {
+    const harness = setup();
+    harness.gateway.getActiveRoomViewerUserIds.mockResolvedValue(new Set(["viewer-1"]));
+
+    await harness.service.sendMessage(user.id, room.id, "Mensaje", "local-visible");
+
+    expect(harness.notifications.notifyRoomMembers).toHaveBeenCalledWith(
+      room.id,
+      user.id,
+      expect.any(Object),
+      { skipNotificationUserIds: new Set(["viewer-1"]) }
+    );
   });
 
   it("retries a serialization race before assigning the room sequence number", async () => {

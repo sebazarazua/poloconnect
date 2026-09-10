@@ -114,12 +114,13 @@ export class CommunityService {
     const realtimeMessageDto = { ...this.toRealtimeMessageDto(message), clientMessageId };
 
     const senderName = `${message.user.firstName} ${message.user.lastName}`.trim() || "Nuevo mensaje";
+    const activeRoomViewerIds = await this.gateway.getActiveRoomViewerUserIds(roomId).catch(() => new Set<string>());
     void this.notifications.notifyRoomMembers(roomId, userId, {
       kind: "message",
       title: room.title,
       body: `${senderName}: ${sanitized}`,
       data: { roomId, messageId: message.id, clientMessageId }
-    }).catch(() => undefined);
+    }, { skipNotificationUserIds: activeRoomViewerIds }).catch(() => undefined);
 
     await this.gateway.emitMessage(roomId, realtimeMessageDto as Record<string, unknown>);
     return messageDto;

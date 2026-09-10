@@ -53,6 +53,25 @@ describe("NotificationsService room delivery", () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it("does not create an in-app notification or queue a push for an active room viewer", async () => {
+    const prisma: any = {
+      chatMembership: { findMany: jest.fn(async () => [{ userId: "viewer-1", notificationsMuted: false }]) },
+      userBlock: { findMany: jest.fn(async () => []) },
+      $transaction: jest.fn()
+    };
+    const settings = { getMe: jest.fn() };
+    const service = new NotificationsService(prisma, settings as any);
+
+    await service.notifyRoomMembers("room-1", "sender-1", {
+      kind: "message",
+      title: "Comunidad",
+      body: "Usuario: Mensaje"
+    }, { skipNotificationUserIds: new Set(["viewer-1"]) });
+
+    expect(settings.getMe).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it("uses one settings read and queues push immediately for an enabled recipient", async () => {
     const notification = {
       id: "notification-1",

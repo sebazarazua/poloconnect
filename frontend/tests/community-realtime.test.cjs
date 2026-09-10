@@ -91,3 +91,19 @@ test("sending uses the optimistic message id as the server correlation id", asyn
   assert.equal(requests[0].init.method, "POST");
   assert.deepEqual(JSON.parse(requests[0].init.body), { text: "Hola", clientMessageId: "local-123" });
 });
+
+test("room visibility is sent only through the existing connected socket", () => {
+  const harness = socketHarness();
+  const api = loadCommunityApi(harness.socket);
+
+  api.ensureCommunitySocketConnected();
+  api.setChatRoomVisibility("room-1", true);
+  assert.equal(harness.emissions.at(-1).event, "set_room_visibility");
+  assert.equal(harness.emissions.at(-1).payload.roomId, "room-1");
+  assert.equal(harness.emissions.at(-1).payload.visible, true);
+
+  harness.socket.connected = false;
+  const count = harness.emissions.length;
+  api.setChatRoomVisibility("room-1", false);
+  assert.equal(harness.emissions.length, count);
+});

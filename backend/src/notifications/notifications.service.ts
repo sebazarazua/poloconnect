@@ -155,7 +155,12 @@ export class NotificationsService {
     return notifications.map((notification) => this.toNotificationDto(notification));
   }
 
-  async notifyRoomMembers(roomId: string, senderId: string, payload: { kind: NotificationKind; title: string; body: string; data?: Prisma.InputJsonValue }) {
+  async notifyRoomMembers(
+    roomId: string,
+    senderId: string,
+    payload: { kind: NotificationKind; title: string; body: string; data?: Prisma.InputJsonValue },
+    options: { skipNotificationUserIds?: ReadonlySet<string> } = {}
+  ) {
     const memberships = await this.prisma.chatMembership.findMany({
       where: { roomId, leftAt: null, userId: { not: senderId } },
       select: { userId: true, notificationsMuted: true }
@@ -173,7 +178,9 @@ export class NotificationsService {
         })
       : [];
     const blockedRecipientIds = new Set(blocks.map((block) => block.blockerUserId === senderId ? block.blockedUserId : block.blockerUserId));
-    const eligibleRecipientIds = recipientIds.filter((userId) => !blockedRecipientIds.has(userId));
+    const eligibleRecipientIds = recipientIds.filter(
+      (userId) => !blockedRecipientIds.has(userId) && !options.skipNotificationUserIds?.has(userId)
+    );
     const mutedRecipientIds = new Set(
       memberships
         .filter((membership) => membership.notificationsMuted && !blockedRecipientIds.has(membership.userId))

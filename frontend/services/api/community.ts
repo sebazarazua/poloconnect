@@ -212,6 +212,11 @@ export async function sendMessage(roomId: string, text: string, clientMessageId:
   });
 }
 
+export function setChatRoomVisibility(roomId: string, visible: boolean) {
+  if (!communitySocket?.connected) return;
+  communitySocket.emit("set_room_visibility", { roomId, visible });
+}
+
 export function subscribeToRoomMessages(
   roomId: string,
   onMessage: (message: ChatMessage) => void,

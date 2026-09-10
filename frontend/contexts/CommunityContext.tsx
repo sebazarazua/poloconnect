@@ -11,11 +11,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { AppState } from "react-native";
 import {
   disconnectCommunitySocket,
+  ensureCommunitySocketConnected,
   joinChatRoom,
   leaveChatRoom,
   listChatRooms,
-  refreshCommunitySocketAuth,
   subscribeToCommunityEvents,
+  updateChatRoomNotifications,
   type CommunityRealtimeEvent,
   type CommunityRealtimeEventName
 } from "@/services/api/community";
@@ -37,6 +38,7 @@ export interface ChatItem {
   icon: ChatIconName;
   tone: string;
   wasRecommended: boolean;
+  notificationsMuted: boolean;
   recommendedLabel: string;
 }
 
@@ -46,6 +48,7 @@ interface CommunityContextValue {
   roomsLoaded: boolean;
   joinChat: (id: string) => void;
   leaveChat: (id: string) => void;
+  setChatNotificationsMuted: (id: string, muted: boolean) => Promise<void>;
 }
 
 const CommunityContext = createContext<CommunityContextValue | null>(null);
@@ -69,8 +72,8 @@ export function CommunityProvider({ children }: PropsWithChildren) {
       setJoinedChats(rooms.joined);
       setRecommendedChats(rooms.recommended);
     } catch {
-      setJoinedChats([]);
-      setRecommendedChats([]);
+      // Keep the last confirmed memberships on transient network failures.
+      // Access removals still arrive through realtime events or a later successful refresh.
     } finally {
       setRoomsLoaded(true);
     }
@@ -123,7 +126,7 @@ export function CommunityProvider({ children }: PropsWithChildren) {
     });
     const appStateSubscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active") {
-        refreshCommunitySocketAuth();
+        ensureCommunitySocketConnected();
         void refreshRooms();
       }
     });
@@ -159,9 +162,24 @@ export function CommunityProvider({ children }: PropsWithChildren) {
     });
   }, [refreshRooms]);
 
+  const setChatNotificationsMuted = useCallback(async (id: string, muted: boolean) => {
+    const previousValue = joinedChats.find((chat) => chat.id === id)?.notificationsMuted ?? false;
+    setJoinedChats((current) => current.map((chat) => chat.id === id ? { ...chat, notificationsMuted: muted } : chat));
+
+    try {
+      await updateChatRoomNotifications(id, muted);
+    } catch (error) {
+      setJoinedChats((current) => current.map((chat) => {
+        if (chat.id !== id || chat.notificationsMuted !== muted) return chat;
+        return { ...chat, notificationsMuted: previousValue };
+      }));
+      throw error;
+    }
+  }, [joinedChats]);
+
   const value = useMemo(
-    () => ({ joinedChats, recommendedChats, roomsLoaded, joinChat, leaveChat }),
-    [joinedChats, recommendedChats, roomsLoaded, joinChat, leaveChat]
+    () => ({ joinedChats, recommendedChats, roomsLoaded, joinChat, leaveChat, setChatNotificationsMuted }),
+    [joinedChats, recommendedChats, roomsLoaded, joinChat, leaveChat, setChatNotificationsMuted]
   );
 
   return (

@@ -37,16 +37,16 @@ export class CommunityGateway implements OnGatewayConnection {
   @SubscribeMessage("join_room")
   async join(@ConnectedSocket() client: Socket, @MessageBody() body: { roomId: string }) {
     if (!body?.roomId) {
-      return { event: "joined_room", roomId: null, ok: false };
+      return { roomId: null, ok: false };
     }
 
     const userId = await this.authenticate(client);
     if (!userId || !(await this.canJoinRoom(userId, body.roomId))) {
-      return { event: "joined_room", roomId: body.roomId, ok: false };
+      return { roomId: body.roomId, ok: false };
     }
 
     client.join(this.roomChannel(body.roomId));
-    return { event: "joined_room", roomId: body.roomId, ok: true };
+    return { roomId: body.roomId, ok: true };
   }
 
   @SubscribeMessage("leave_room")
@@ -54,7 +54,7 @@ export class CommunityGateway implements OnGatewayConnection {
     if (body?.roomId) {
       client.leave(this.roomChannel(body.roomId));
     }
-    return { event: "left_room", roomId: body?.roomId ?? null };
+    return { roomId: body?.roomId ?? null, ok: true };
   }
 
   async emitMessage(roomId: string, message: Record<string, unknown>) {

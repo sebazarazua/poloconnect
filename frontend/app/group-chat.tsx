@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
+  AppState,
   Keyboard,
   KeyboardAvoidingView,
   KeyboardEvent,
@@ -20,8 +21,13 @@ import { AppColors, useThemeColors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useCommunity } from "@/contexts/CommunityContext";
-import type { ChatIconName } from "@/contexts/CommunityContext";
-import { listMessages, sendMessage, subscribeToRoomMessages } from "@/services/api/community";
+import {
+  ensureCommunitySocketConnected,
+  listMessages,
+  listMessagesAfter,
+  sendMessage,
+  subscribeToRoomMessages
+} from "@/services/api/community";
 import { resolveUploadedUrl } from "@/services/api/users";
 import { ReportModal, type ReportTarget } from "@/components/ReportModal";
 import { blockUser } from "@/services/api/moderation";
@@ -36,6 +42,8 @@ interface Message {
   text: string;
   time: string;
   createdAt?: string;
+  messageNumber?: string;
+  clientMessageId?: string;
   isMe: boolean;
 }
 
@@ -81,6 +89,37 @@ function getInitials(name: string): string {
   const parts = name.split(" ");
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return name.slice(0, 2).toUpperCase();
+}
+
+function mergeMessages(current: Message[], incoming: Message[]) {
+  const byId = new Map(current.map((message) => [message.id, message]));
+
+  for (const message of incoming) {
+    if (message.clientMessageId && message.clientMessageId !== message.id) {
+      byId.delete(message.clientMessageId);
+    }
+    byId.set(message.id, message);
+  }
+
+  return [...byId.values()].sort((left, right) => {
+    const leftNumber = Number(left.messageNumber);
+    const rightNumber = Number(right.messageNumber);
+    if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber !== rightNumber) {
+      return leftNumber - rightNumber;
+    }
+
+    const leftTime = left.createdAt ? Date.parse(left.createdAt) : Number.MAX_SAFE_INTEGER;
+    const rightTime = right.createdAt ? Date.parse(right.createdAt) : Number.MAX_SAFE_INTEGER;
+    return leftTime - rightTime;
+  });
+}
+
+function getLatestMessageNumber(messages: Message[]) {
+  return messages.reduce<string | null>((latest, message) => {
+    if (!message.messageNumber) return latest;
+    if (!latest || BigInt(message.messageNumber) > BigInt(latest)) return message.messageNumber;
+    return latest;
+  }, null);
 }
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
@@ -151,9 +190,12 @@ export default function GroupChatScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useLocale();
   const { user } = useAuth();
-  const { joinedChats, leaveChat, roomsLoaded } = useCommunity();
+  const { joinedChats, leaveChat, roomsLoaded, setChatNotificationsMuted } = useCommunity();
   const scrollRef = useRef<ScrollView>(null);
   const keyboardTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const messagesRef = useRef<Message[]>([]);
+  const activeRoomIdRef = useRef<string | undefined>(undefined);
+  const mountedRef = useRef(true);
   const accessAlertShownRef = useRef(false);
   const [inputText, setInputText] = useState("");
   const [composerHeight, setComposerHeight] = useState(42);
@@ -163,30 +205,35 @@ export default function GroupChatScreen() {
 
   const chat = joinedChats.find(c => c.id === chatId);
 
-  const normalizeMessage = (message: IncomingMessage): Message => {
+  const normalizeMessage = useCallback((message: IncomingMessage): Message => {
     const isMe = user?.id ? message.userId === user.id : Boolean(message.isMe);
     return {
       ...message,
       isMe,
       userName: isMe ? t("chat.me") : message.userName
     };
-  };
+  }, [t, user?.id]);
 
-  const dedupeById = (items: Message[]) => {
-    const seen = new Set<string>();
-    const deduped: Message[] = [];
+  const updateMessages = useCallback((updater: (current: Message[]) => Message[]) => {
+    setMessages((current) => {
+      const next = updater(current);
+      messagesRef.current = next;
+      return next;
+    });
+  }, []);
 
-    for (const item of items) {
-      if (seen.has(item.id)) {
-        continue;
-      }
+  const synchronizeMessages = useCallback(async () => {
+    if (!chatId) return;
 
-      seen.add(item.id);
-      deduped.push(item);
+    const latestMessageNumber = getLatestMessageNumber(messagesRef.current);
+    const fetchedMessages = latestMessageNumber
+      ? await listMessagesAfter(chatId, latestMessageNumber)
+      : await listMessages(chatId);
+
+    if (mountedRef.current) {
+      updateMessages((current) => mergeMessages(current, fetchedMessages.map(normalizeMessage)));
     }
-
-    return deduped;
-  };
+  }, [chatId, normalizeMessage, updateMessages]);
 
   const scrollToBottom = (animated: boolean) => {
     requestAnimationFrame(() => {
@@ -208,41 +255,52 @@ export default function GroupChatScreen() {
     ];
   };
 
-  // Scroll to bottom on mount
   useEffect(() => {
     if (!chatId) return;
 
-    let mounted = true;
+    if (activeRoomIdRef.current !== chatId) {
+      activeRoomIdRef.current = chatId;
+      messagesRef.current = [];
+      setMessages([]);
+      setInputText("");
+      accessAlertShownRef.current = false;
+    }
 
-    void listMessages(chatId)
-      .then((initialMessages) => {
-        if (mounted) {
-          setMessages(dedupeById(initialMessages.map(normalizeMessage)));
-        }
-      })
-      .catch(() => {
-        if (mounted) {
-          setMessages([]);
-        }
-      });
+    mountedRef.current = true;
+    void synchronizeMessages().catch(() => undefined);
 
     const unsubscribe = subscribeToRoomMessages(chatId, (incomingMessage) => {
-      setMessages((previousMessages) => {
-        const normalizedIncoming = normalizeMessage(incomingMessage);
-
-        if (previousMessages.some((message) => message.id === normalizedIncoming.id)) {
-          return previousMessages;
-        }
-
-        return [...previousMessages, normalizedIncoming];
-      });
+      const normalizedIncoming = normalizeMessage(incomingMessage);
+      updateMessages((current) => mergeMessages(current, [normalizedIncoming]));
+    }, () => {
+      void synchronizeMessages().catch(() => undefined);
     });
 
     return () => {
-      mounted = false;
+      mountedRef.current = false;
       unsubscribe();
     };
-  }, [chatId, t, user?.id]);
+  }, [chatId, normalizeMessage, synchronizeMessages, updateMessages]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState !== "active") {
+        keyboardTimersRef.current.forEach(clearTimeout);
+        keyboardTimersRef.current = [];
+        setIsKeyboardVisible(false);
+        Keyboard.dismiss();
+        return;
+      }
+
+      const wasSocketConnected = ensureCommunitySocketConnected();
+      if (wasSocketConnected) {
+        void synchronizeMessages().catch(() => undefined);
+      }
+      requestAnimationFrame(() => scrollToBottom(false));
+    });
+
+    return () => subscription.remove();
+  }, [synchronizeMessages]);
 
   useEffect(() => {
     if (!chatId || !roomsLoaded || chat || accessAlertShownRef.current) {
@@ -303,38 +361,33 @@ export default function GroupChatScreen() {
     }
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const clientMessageId = `local-${Date.now()}`;
     const optimisticMessage = {
-      id: `local-${Date.now()}`,
+      id: clientMessageId,
       userId: user?.id ?? "me",
       userName: t("chat.me"),
       text,
       time,
+      createdAt: now.toISOString(),
+      clientMessageId,
       isMe: true
     };
-    setMessages(prev => [
-      ...prev,
-      optimisticMessage
-    ]);
+    updateMessages((current) => mergeMessages(current, [optimisticMessage]));
     setInputText("");
-    void sendMessage(chatId, text)
+    void sendMessage(chatId, text, optimisticMessage.id)
       .then((createdMessage) => {
         const normalizedCreated = normalizeMessage(createdMessage);
 
-        setMessages((previousMessages) => {
-          const withoutOptimistic = previousMessages.map((message) => message.id === optimisticMessage.id ? normalizedCreated : message);
-          const alreadyExists = withoutOptimistic.some((message) => message.id === normalizedCreated.id);
-          const merged = alreadyExists ? withoutOptimistic : [...withoutOptimistic, normalizedCreated];
-          return dedupeById(merged);
-        });
+        updateMessages((current) => mergeMessages(current, [normalizedCreated]));
       })
       .catch((error) => {
-        setMessages((previousMessages) => previousMessages.filter((message) => message.id !== optimisticMessage.id));
+        updateMessages((current) => current.filter((message) => message.id !== optimisticMessage.id));
         Alert.alert(t("profile.errorTitle"), error instanceof Error ? error.message : t("chat.sendError"));
       });
     setTimeout(() => scrollToBottom(true), 60);
   }
 
-  function handleAvatarPress() {
+  function confirmLeaveChat() {
     Alert.alert(
       chat?.title ?? t("chat.leaveTitle"),
       t("chat.leaveQuestion"),
@@ -350,6 +403,25 @@ export default function GroupChatScreen() {
         }
       ]
     );
+  }
+
+  function handleAvatarPress() {
+    if (!chat) return;
+
+    Alert.alert(chat.title, chat.notificationsMuted ? t("chat.notificationsMuted") : chat.members, [
+      { text: t("chat.leaveCancel"), style: "cancel" },
+      {
+        text: chat.notificationsMuted ? t("chat.unmute") : t("chat.mute"),
+        onPress: () => {
+          void setChatNotificationsMuted(chat.id, !chat.notificationsMuted)
+            .catch((error) => Alert.alert(
+              t("profile.errorTitle"),
+              error instanceof Error ? error.message : t("chat.muteError")
+            ));
+        }
+      },
+      { text: t("chat.leaveConfirm"), style: "destructive", onPress: confirmLeaveChat }
+    ]);
   }
 
   function handleMessageModeration(message: Message) {
@@ -408,7 +480,7 @@ export default function GroupChatScreen() {
           style={[styles.headerAvatar, { backgroundColor: chat?.tone ?? colors.primarySoft }]}
         >
           <Ionicons
-            name={(chat?.icon ?? "chatbubbles-outline") as ChatIconName}
+            name={chat?.notificationsMuted ? "notifications-off-outline" : chat?.icon ?? "chatbubbles-outline"}
             size={22}
             color={colors.primaryDark}
           />
@@ -418,7 +490,7 @@ export default function GroupChatScreen() {
       {/* Messages + Input */}
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior="height"
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={0}
       >
         <ScrollView

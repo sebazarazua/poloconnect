@@ -3,7 +3,7 @@ import { NotificationKind, Prisma } from "@prisma/client";
 import { page } from "../common/dto/pagination.dto";
 import { PrismaService } from "../database/prisma.service";
 import { NotificationsQueryDto, PushTokenDto, PushTokenUnregisterDto } from "./dto/notifications.dto";
-import { NotificationPreferences, SettingsService } from "../settings/settings.service";
+import { NotificationPreferences, ResolvedUserSettings, SettingsService } from "../settings/settings.service";
 
 const PUSH_KIND_BY_NOTIFICATION: Partial<Record<NotificationKind, keyof NotificationPreferences["push"]>> = {
   message: "messages",
@@ -89,8 +89,8 @@ export class NotificationsService {
   }
 
   async notifyUser(userId: string, payload: { kind: NotificationKind; title: string; body: string; data?: Prisma.InputJsonValue; expiresAt?: Date | null }) {
-    const appEnabled = await this.isAppNotificationEnabled(userId, payload.kind);
-    if (!appEnabled) {
+    const settings = await this.settings.getMe(userId);
+    if (!this.isAppNotificationEnabledInSettings(settings, payload.kind)) {
       return null;
     }
 
@@ -105,16 +105,21 @@ export class NotificationsService {
       }
     });
 
-    void this.maybeSendPush(userId, notification.kind, notification.title, notification.body, payload.data);
+    void this.maybeSendPush(userId, notification.kind, notification.title, notification.body, payload.data, settings);
     return this.toNotificationDto(notification);
   }
 
-  async notifyUsers(userIds: string[], payload: { kind: NotificationKind; title: string; body: string; data?: Prisma.InputJsonValue; expiresAt?: Date | null }) {
+  async notifyUsers(
+    userIds: string[],
+    payload: { kind: NotificationKind; title: string; body: string; data?: Prisma.InputJsonValue; expiresAt?: Date | null },
+    options: { skipPushUserIds?: ReadonlySet<string> } = {}
+  ) {
     const uniqueIds = [...new Set(userIds.filter(Boolean))];
     if (uniqueIds.length === 0) return [];
 
-    const appEnabledFlags = await Promise.all(uniqueIds.map((userId) => this.isAppNotificationEnabled(userId, payload.kind)));
-    const eligibleIds = uniqueIds.filter((_, index) => appEnabledFlags[index]);
+    const resolvedSettings = await Promise.all(uniqueIds.map(async (userId) => ({ userId, settings: await this.settings.getMe(userId) })));
+    const eligibleSettings = resolvedSettings.filter(({ settings }) => this.isAppNotificationEnabledInSettings(settings, payload.kind));
+    const eligibleIds = eligibleSettings.map(({ userId }) => userId);
     if (eligibleIds.length === 0) return [];
 
     const notifications = await this.prisma.$transaction(
@@ -132,12 +137,29 @@ export class NotificationsService {
       )
     );
 
-    await Promise.all(notifications.map((notification) => this.maybeSendPush(notification.userId, notification.kind, notification.title, notification.body, payload.data)));
+    const settingsByUserId = new Map(eligibleSettings.map(({ userId, settings }) => [userId, settings]));
+    await Promise.all(notifications.map((notification) => {
+      if (options.skipPushUserIds?.has(notification.userId)) {
+        return undefined;
+      }
+
+      return this.maybeSendPush(
+        notification.userId,
+        notification.kind,
+        notification.title,
+        notification.body,
+        payload.data,
+        settingsByUserId.get(notification.userId)
+      );
+    }));
     return notifications.map((notification) => this.toNotificationDto(notification));
   }
 
   async notifyRoomMembers(roomId: string, senderId: string, payload: { kind: NotificationKind; title: string; body: string; data?: Prisma.InputJsonValue }) {
-    const memberships = await this.prisma.chatMembership.findMany({ where: { roomId, leftAt: null, userId: { not: senderId } }, select: { userId: true } });
+    const memberships = await this.prisma.chatMembership.findMany({
+      where: { roomId, leftAt: null, userId: { not: senderId } },
+      select: { userId: true, notificationsMuted: true }
+    });
     const recipientIds = memberships.map((membership) => membership.userId);
     const blocks = recipientIds.length
       ? await this.prisma.userBlock.findMany({
@@ -151,7 +173,13 @@ export class NotificationsService {
         })
       : [];
     const blockedRecipientIds = new Set(blocks.map((block) => block.blockerUserId === senderId ? block.blockedUserId : block.blockerUserId));
-    return this.notifyUsers(recipientIds.filter((userId) => !blockedRecipientIds.has(userId)), payload);
+    const eligibleRecipientIds = recipientIds.filter((userId) => !blockedRecipientIds.has(userId));
+    const mutedRecipientIds = new Set(
+      memberships
+        .filter((membership) => membership.notificationsMuted && !blockedRecipientIds.has(membership.userId))
+        .map((membership) => membership.userId)
+    );
+    return this.notifyUsers(eligibleRecipientIds, payload, { skipPushUserIds: mutedRecipientIds });
   }
 
   async sendTestPush(userId: string) {
@@ -188,11 +216,18 @@ export class NotificationsService {
     };
   }
 
-  private async maybeSendPush(userId: string, kind: NotificationKind, title: string, body: string, data?: Prisma.InputJsonValue) {
+  private async maybeSendPush(
+    userId: string,
+    kind: NotificationKind,
+    title: string,
+    body: string,
+    data?: Prisma.InputJsonValue,
+    resolvedSettings?: ResolvedUserSettings
+  ) {
     const pushPreferenceKey = PUSH_KIND_BY_NOTIFICATION[kind];
     if (!pushPreferenceKey) return;
 
-    const settings = await this.settings.getMe(userId);
+    const settings = resolvedSettings ?? await this.settings.getMe(userId);
     if (!settings.pushEnabled || !settings.notificationPreferences.push[pushPreferenceKey]) return;
 
     await this.sendPushToUserTokens(userId, title, body, { ...(typeof data === "object" && data ? (data as Record<string, unknown>) : {}), kind });
@@ -344,10 +379,12 @@ export class NotificationsService {
   }
 
   async isAppNotificationEnabled(userId: string, kind: NotificationKind) {
-    const appPreferenceKey = APP_KIND_BY_NOTIFICATION[kind];
-    if (!appPreferenceKey) return false;
-
     const settings = await this.settings.getMe(userId);
-    return settings.notificationPreferences.app[appPreferenceKey];
+    return this.isAppNotificationEnabledInSettings(settings, kind);
+  }
+
+  private isAppNotificationEnabledInSettings(settings: ResolvedUserSettings, kind: NotificationKind) {
+    const appPreferenceKey = APP_KIND_BY_NOTIFICATION[kind];
+    return appPreferenceKey ? settings.notificationPreferences.app[appPreferenceKey] : false;
   }
 }

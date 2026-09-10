@@ -10,12 +10,19 @@ export type ChatMessage = {
   text: string;
   time: string;
   createdAt?: string;
+  messageNumber?: string;
+  clientMessageId?: string;
   isMe?: boolean;
 };
 
 type IncomingSocketMessage = {
   roomId: string;
   message: ChatMessage;
+};
+
+type JoinRoomAck = {
+  roomId: string | null;
+  ok: boolean;
 };
 
 const communityEventNames = [
@@ -62,6 +69,16 @@ export function refreshCommunitySocketAuth() {
   }
 }
 
+export function ensureCommunitySocketConnected() {
+  const socket = getCommunitySocket();
+  const wasConnected = socket.connected;
+  refreshCommunitySocketAuth();
+  if (!socket.connected) {
+    socket.connect();
+  }
+  return wasConnected;
+}
+
 export function disconnectCommunitySocket() {
   if (!communitySocket) return;
   communitySocket.disconnect();
@@ -106,6 +123,7 @@ function normalizeChatItem(value: unknown): ChatItem | null {
     icon: chatIcons.includes(icon as ChatItem["icon"]) ? (icon as ChatItem["icon"]) : "shield-outline",
     tone: asString(value.tone, "#1f3b73"),
     wasRecommended: typeof value.wasRecommended === "boolean" ? value.wasRecommended : false,
+    notificationsMuted: value.notificationsMuted === true,
     recommendedLabel: asString(value.recommendedLabel, asString(value.members, "0"))
   };
 }
@@ -151,19 +169,54 @@ export async function leaveChatRoom(roomId: string) {
   await apiRequest<{ ok: boolean }>(`/chat-rooms/${encodeURIComponent(roomId)}/leave`, { method: "POST" });
 }
 
-export async function listMessages(roomId: string) {
-  const response = await apiRequest<Page<ChatMessage>>(`/chat-rooms/${encodeURIComponent(roomId)}/messages?limit=50`);
-  return Array.isArray(response.data) ? response.data : [];
-}
-
-export async function sendMessage(roomId: string, text: string) {
-  return apiRequest<ChatMessage>(`/chat-rooms/${encodeURIComponent(roomId)}/messages`, {
-    method: "POST",
-    body: JSON.stringify({ text, clientMessageId: `local-${Date.now()}` })
+export async function updateChatRoomNotifications(roomId: string, notificationsMuted: boolean) {
+  return apiRequest<{ ok: boolean; notificationsMuted: boolean }>(`/chat-rooms/${encodeURIComponent(roomId)}/notifications`, {
+    method: "PATCH",
+    body: JSON.stringify({ notificationsMuted })
   });
 }
 
-export function subscribeToRoomMessages(roomId: string, onMessage: (message: ChatMessage) => void) {
+async function getMessagePage(roomId: string, query: { limit: number; after?: string }) {
+  const params = new URLSearchParams({ limit: String(query.limit) });
+  if (query.after) params.set("after", query.after);
+  return apiRequest<Page<ChatMessage>>(`/chat-rooms/${encodeURIComponent(roomId)}/messages?${params.toString()}`);
+}
+
+export async function listMessages(roomId: string) {
+  const response = await getMessagePage(roomId, { limit: 50 });
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function listMessagesAfter(roomId: string, after: string) {
+  const messages: ChatMessage[] = [];
+  let cursor = after;
+
+  while (true) {
+    const response = await getMessagePage(roomId, { limit: 100, after: cursor });
+    messages.push(...(Array.isArray(response.data) ? response.data : []));
+
+    if (!response.page.hasMore || !response.page.nextCursor || response.page.nextCursor === cursor) {
+      break;
+    }
+
+    cursor = response.page.nextCursor;
+  }
+
+  return messages;
+}
+
+export async function sendMessage(roomId: string, text: string, clientMessageId: string) {
+  return apiRequest<ChatMessage>(`/chat-rooms/${encodeURIComponent(roomId)}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ text, clientMessageId })
+  });
+}
+
+export function subscribeToRoomMessages(
+  roomId: string,
+  onMessage: (message: ChatMessage) => void,
+  onJoined: () => void
+) {
   const socket = getCommunitySocket();
   refreshCommunitySocketAuth();
 
@@ -175,12 +228,29 @@ export function subscribeToRoomMessages(roomId: string, onMessage: (message: Cha
     onMessage(payload.message);
   };
 
-  socket.emit("join_room", { roomId });
   socket.on("message_received", handler);
+
+  const joinRoom = () => {
+    socket.emit("join_room", { roomId }, (response: JoinRoomAck) => {
+      if (response?.ok && response.roomId === roomId) {
+        onJoined();
+      }
+    });
+  };
+
+  socket.on("connect", joinRoom);
+  if (socket.connected) {
+    joinRoom();
+  } else {
+    socket.connect();
+  }
 
   return () => {
     socket.off("message_received", handler);
-    socket.emit("leave_room", { roomId });
+    socket.off("connect", joinRoom);
+    if (socket.connected) {
+      socket.emit("leave_room", { roomId });
+    }
   };
 }
 

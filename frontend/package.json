@@ -12,7 +12,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test:uploads": "node --test tests/product-image-upload.test.cjs"
+    "test:uploads": "node --test tests/product-image-upload.test.cjs",
+    "test:community": "node --test tests/community-realtime.test.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",

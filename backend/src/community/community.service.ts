@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { page } from "../common/dto/pagination.dto";
 import { PrismaService } from "../database/prisma.service";
 import { MessageQueryDto } from "./dto/community.dto";
@@ -32,7 +33,10 @@ export class CommunityService {
     const memberships = await this.prisma.chatMembership.findMany({ where: { userId, leftAt: null, roomId: { notIn: bannedRoomIds }, room: { deletedAt: null } }, include: { room: { include: { memberships: { where: { leftAt: null } }, messages: { orderBy: { messageNumber: "desc" }, take: 1 } } } } });
     const joinedIds = memberships.map((entry) => entry.roomId);
     const recommended = await this.prisma.chatRoom.findMany({ where: { deletedAt: null, isPublic: true, id: { notIn: [...joinedIds, ...bannedRoomIds] } }, include: { memberships: { where: { leftAt: null } } }, take: 20 });
-    return { joined: memberships.map((entry) => this.toRoomDto(entry.room, 0, false)), recommended: recommended.map((room) => this.toRoomDto(room, 0, true)) };
+    return {
+      joined: memberships.map((entry) => this.toRoomDto(entry.room, 0, false, entry.notificationsMuted)),
+      recommended: recommended.map((room) => this.toRoomDto(room, 0, true, false))
+    };
   }
 
   async joinRoom(userId: string, roomId: string) {
@@ -49,19 +53,54 @@ export class CommunityService {
     return { ok: true };
   }
 
+  async updateRoomNotifications(userId: string, roomId: string, notificationsMuted: boolean) {
+    await this.ensureRoom(roomId);
+    await this.ensureNoActiveBan(userId, roomId);
+    const updated = await this.prisma.chatMembership.updateMany({
+      where: { roomId, userId, leftAt: null },
+      data: { notificationsMuted }
+    });
+
+    if (updated.count === 0) {
+      throw new ForbiddenException("Join the room before updating notifications.");
+    }
+
+    return { ok: true, notificationsMuted };
+  }
+
   async listMessages(userId: string, roomId: string, query: MessageQueryDto) {
     await this.ensureRoom(roomId);
     await this.ensureNoActiveBan(userId, roomId);
     await this.ensureMembership(userId, roomId);
     const limit = Number(query.limit ?? 50);
+    const isIncremental = Boolean(query.after);
     const messages = await this.prisma.chatMessage.findMany({
-      where: { roomId, deletedAt: null },
+      where: {
+        roomId,
+        deletedAt: null,
+        messageNumber: query.after ? { gt: BigInt(query.after) } : undefined
+      },
       include: { user: true },
-      orderBy: { messageNumber: "desc" },
+      orderBy: { messageNumber: isIncremental ? "asc" : "desc" },
       take: limit + 1
     });
     const blockedUserIds = await this.moderation.filterBlockedUserIds(userId, messages.map((message) => message.userId));
-    return page(messages.filter((message) => !blockedUserIds.has(message.userId)).reverse().map((message) => this.toMessageDto(message, userId)), limit);
+    const visibleMessages = messages.filter((message) => !blockedUserIds.has(message.userId));
+
+    if (isIncremental) {
+      const hasMore = messages.length > limit;
+      const items = visibleMessages.slice(0, limit);
+      return {
+        data: items.map((message) => this.toMessageDto(message, userId)),
+        page: {
+          limit,
+          nextCursor: hasMore ? messages[Math.min(limit, messages.length) - 1]?.messageNumber.toString() ?? null : null,
+          hasMore
+        }
+      };
+    }
+
+    return page(visibleMessages.reverse().map((message) => this.toMessageDto(message, userId)), limit);
   }
 
   async sendMessage(userId: string, roomId: string, text: string, clientMessageId?: string) {
@@ -69,22 +108,50 @@ export class CommunityService {
     await this.ensureMembership(userId, roomId);
     const room = await this.ensureRoom(roomId);
     this.contentFilter.assertAllowed(text);
-    const last = await this.prisma.chatMessage.findFirst({ where: { roomId }, orderBy: { messageNumber: "desc" } });
-    const messageNumber = BigInt(Number(last?.messageNumber ?? 0) + 1);
     const sanitized = text.trim().replace(/[<>]/g, "");
-    const message = await this.prisma.chatMessage.create({ data: { roomId, userId, messageNumber, body: text.trim(), bodySanitized: sanitized }, include: { user: true } });
+    const message = await this.createOrderedMessage(roomId, userId, text.trim(), sanitized);
     const messageDto = { ...this.toMessageDto(message, userId), clientMessageId };
-    const realtimeMessageDto = this.toRealtimeMessageDto(message);
+    const realtimeMessageDto = { ...this.toRealtimeMessageDto(message), clientMessageId };
 
-    await this.gateway.emitMessage(roomId, realtimeMessageDto as Record<string, unknown>);
-
+    const senderName = `${message.user.firstName} ${message.user.lastName}`.trim() || "Nuevo mensaje";
     void this.notifications.notifyRoomMembers(roomId, userId, {
       kind: "message",
       title: room.title,
-      body: `${message.user.firstName} ${message.user.lastName}`.trim() || "Nuevo mensaje",
+      body: `${senderName}: ${sanitized}`,
       data: { roomId, messageId: message.id, clientMessageId }
-    });
+    }).catch(() => undefined);
+
+    await this.gateway.emitMessage(roomId, realtimeMessageDto as Record<string, unknown>);
     return messageDto;
+  }
+
+  private async createOrderedMessage(roomId: string, userId: string, body: string, bodySanitized: string) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(async (transaction) => {
+          const last = await transaction.chatMessage.findFirst({
+            where: { roomId },
+            orderBy: { messageNumber: "desc" },
+            select: { messageNumber: true }
+          });
+          const messageNumber = (last?.messageNumber ?? BigInt(0)) + BigInt(1);
+
+          return transaction.chatMessage.create({
+            data: { roomId, userId, messageNumber, body, bodySanitized },
+            include: { user: true }
+          });
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      } catch (error) {
+        const code = typeof error === "object" && error !== null && "code" in error
+          ? String((error as { code?: unknown }).code)
+          : null;
+        if (attempt === 2 || (code !== "P2002" && code !== "P2034")) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error("Could not assign a message sequence number.");
   }
 
   private async ensureRoom(roomId: string) {
@@ -113,7 +180,7 @@ export class CommunityService {
     }
   }
 
-  private toRoomDto(room: any, unread = 0, wasRecommended = false) {
+  private toRoomDto(room: any, unread = 0, wasRecommended = false, notificationsMuted = false) {
     const memberCount = room.memberships?.length ?? 0;
     return {
       id: room.id,
@@ -125,6 +192,7 @@ export class CommunityService {
       icon: room.icon ?? "chatbubbles-outline",
       tone: room.tone ?? "#d8ecff",
       wasRecommended,
+      notificationsMuted,
       recommendedLabel: wasRecommended ? "Disponible ahora" : ""
     };
   }

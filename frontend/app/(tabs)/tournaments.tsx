@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Card, SectionTitle } from "@/components/Card";
 import { Screen } from "@/components/Screen";
@@ -39,19 +39,39 @@ function cacheKey(calendarDate: { year: number; month: number }) {
   return `${calendarDate.year}-${padDatePart(calendarDate.month + 1)}`;
 }
 
+function getCurrentCalendarDate() {
+  const now = new Date();
+  return { month: now.getMonth(), year: now.getFullYear() };
+}
+
+function getAdjacentCalendarDate(currentDate: { year: number; month: number }, direction: -1 | 1) {
+  const nextMonth = currentDate.month + direction;
+
+  if (nextMonth < 0) {
+    return { month: 11, year: currentDate.year - 1 };
+  }
+
+  if (nextMonth > 11) {
+    return { month: 0, year: currentDate.year + 1 };
+  }
+
+  return { month: nextMonth, year: currentDate.year };
+}
+
 export default function TournamentsScreen() {
   const colors = useThemeColors();
   const styles = createStyles(colors);
   const router = useRouter();
   const { locale, t } = useLocale();
-  const [calendarDate, setCalendarDate] = useState(() => {
-    const now = new Date();
-    return { month: now.getMonth(), year: now.getFullYear() };
-  });
+  const initialCalendarDate = useRef(getCurrentCalendarDate()).current;
+  const initialCachedTournaments = useRef(tournamentMonthCache.get(cacheKey(initialCalendarDate))).current;
+  const initialTournamentMonthKey = cacheKey(initialCalendarDate);
+  const [calendarDate, setCalendarDate] = useState(initialCalendarDate);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [tournaments, setTournaments] = useState<Tournament[]>([]);
-  const [loadingTournaments, setLoadingTournaments] = useState(false);
-  const [tournamentsError, setTournamentsError] = useState(false);
+  const [tournaments, setTournaments] = useState<Tournament[]>(initialCachedTournaments?.items ?? []);
+  const [loadingTournaments, setLoadingTournaments] = useState(!initialCachedTournaments);
+  const [resolvedTournamentMonthKey, setResolvedTournamentMonthKey] = useState<string | null>(initialCachedTournaments ? initialTournamentMonthKey : null);
+  const [tournamentErrorMonthKey, setTournamentErrorMonthKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +81,9 @@ export default function TournamentsScreen() {
 
     if (cached) {
       setTournaments(cached.items);
-      setTournamentsError(false);
+      setResolvedTournamentMonthKey(key);
+      setTournamentErrorMonthKey(null);
+      setLoadingTournaments(false);
     }
 
     if (hasFreshCache) {
@@ -76,12 +98,14 @@ export default function TournamentsScreen() {
         tournamentMonthCache.set(key, { items, fetchedAt: Date.now() });
         if (!cancelled) {
           setTournaments(items);
-          setTournamentsError(false);
+          setResolvedTournamentMonthKey(key);
+          setTournamentErrorMonthKey(null);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setTournamentsError(true);
+          setResolvedTournamentMonthKey(key);
+          setTournamentErrorMonthKey(key);
           if (!cached) setTournaments([]);
         }
       })
@@ -102,6 +126,11 @@ export default function TournamentsScreen() {
     }),
     [calendarDate, tournaments]
   );
+  const currentTournamentMonthKey = cacheKey(calendarDate);
+  const hasCachedCurrentMonth = tournamentMonthCache.has(currentTournamentMonthKey);
+  const isCurrentMonthResolved = resolvedTournamentMonthKey === currentTournamentMonthKey;
+  const showTournamentsLoading = !hasCachedCurrentMonth && (loadingTournaments || !isCurrentMonthResolved);
+  const tournamentsError = tournamentErrorMonthKey === currentTournamentMonthKey;
 
   const markedDays = useMemo(
     () => new Set(monthTournaments.map((tournament) => Number(getTournamentStartDateKey(tournament).slice(8, 10)))),
@@ -120,20 +149,20 @@ export default function TournamentsScreen() {
   }, [calendarDate]);
 
   const changeMonth = (direction: -1 | 1) => {
+    const nextCalendarDate = getAdjacentCalendarDate(calendarDate, direction);
+    const nextMonthKey = cacheKey(nextCalendarDate);
+    const cachedNextMonth = tournamentMonthCache.get(nextMonthKey);
+
     setSelectedDay(null);
-    setCalendarDate((currentDate) => {
-      const nextMonth = currentDate.month + direction;
 
-      if (nextMonth < 0) {
-        return { month: 11, year: currentDate.year - 1 };
-      }
+    if (cachedNextMonth) {
+      setTournaments(cachedNextMonth.items);
+      setResolvedTournamentMonthKey(nextMonthKey);
+      setTournamentErrorMonthKey(null);
+      setLoadingTournaments(false);
+    }
 
-      if (nextMonth > 11) {
-        return { month: 0, year: currentDate.year + 1 };
-      }
-
-      return { month: nextMonth, year: currentDate.year };
-    });
+    setCalendarDate(nextCalendarDate);
   };
 
   const tournamentOccursOnSelectedDay = (tournament: Tournament) => {
@@ -214,7 +243,7 @@ export default function TournamentsScreen() {
       </Card>
 
       <SectionTitle title={t("tournaments.upcoming")} />
-      {loadingTournaments ? (
+      {showTournamentsLoading ? (
         <Card style={styles.emptyCard}>
           <Text style={styles.emptyText}>{t("common.loading")}</Text>
         </Card>
@@ -254,7 +283,7 @@ export default function TournamentsScreen() {
           </View>
         </Card>
       ))}
-      {!loadingTournaments && monthTournaments.length === 0 ? (
+      {!showTournamentsLoading && !tournamentsError && isCurrentMonthResolved && monthTournaments.length === 0 ? (
         <Card style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>{t("tournaments.emptyTitle")}</Text>
           <Text style={styles.emptyText}>{t("tournaments.emptyText")}</Text>

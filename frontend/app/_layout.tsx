@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { LocaleProvider, useLocale } from "@/contexts/LocaleContext";
 import { MarketProvider } from "@/contexts/MarketContext";
 import { CommunityProvider } from "@/contexts/CommunityContext";
+import { NotificationsProvider } from "@/contexts/NotificationsContext";
 import { ThemeProvider, useTheme } from "@/constants/theme";
 import { getMySettings } from "@/services/api/settings";
 import { isApiUrlConfigured } from "@/services/api/client";
@@ -32,11 +33,13 @@ export default function RootLayout() {
             <LocaleProvider>
               <MarketProvider>
                 <CommunityProvider>
-                  <ThemedStatusBar />
-                  <UserPreferencesHydrator />
-                  <PushTokenRegistrar />
-                  <PushNotificationNavigator />
-                  <RootNavigator allowWebDev={allowWebDev} />
+                  <NotificationsProvider>
+                    <ThemedStatusBar />
+                    <UserPreferencesHydrator />
+                    <PushTokenRegistrar />
+                    <PushNotificationNavigator />
+                    <RootNavigator allowWebDev={allowWebDev} />
+                  </NotificationsProvider>
                 </CommunityProvider>
               </MarketProvider>
             </LocaleProvider>

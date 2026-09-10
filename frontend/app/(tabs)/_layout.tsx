@@ -71,7 +71,15 @@ export default function TabLayout() {
         })}
       >
         <Tabs.Screen name="index" options={{ title: t("tabs.home") }} />
-        <Tabs.Screen name="tournaments" options={{ title: t("tabs.tournaments") }} />
+        <Tabs.Screen
+          name="tournaments"
+          options={{
+            title: t("tabs.tournaments"),
+            // Start the existing month fetch while Inicio is visible so the
+            // calendar's first visible render can use the same cache.
+            lazy: false
+          }}
+        />
         <Tabs.Screen name="live" options={{ title: t("tabs.live") }} />
         <Tabs.Screen name="market" options={{ title: t("tabs.market") }} />
         <Tabs.Screen name="community" options={{ title: t("tabs.community") }} />

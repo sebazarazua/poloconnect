@@ -5,7 +5,8 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 import { Screen } from "@/components/Screen";
 import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
-import { getNotifications, markAllNotificationsRead, type NotificationItem, type NotificationKind } from "@/services/api/notifications";
+import { useNotifications } from "@/contexts/NotificationsContext";
+import { getNotifications, type NotificationItem, type NotificationKind } from "@/services/api/notifications";
 
 const kindMeta: Record<NotificationKind, { icon: keyof typeof Ionicons.glyphMap; color: string; bg: string; labelKey: `notifications.kind.${NotificationKind}` }> = {
   match: { icon: "radio-sharp", color: "#0a66c2", bg: "#d8ecff", labelKey: "notifications.kind.match" },
@@ -21,8 +22,8 @@ export default function NotificationsScreen() {
   const styles = createStyles(colors);
   const router = useRouter();
   const { t } = useLocale();
+  const { markAllAsRead, setServerUnreadCount } = useNotifications();
   const [items, setItems] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -36,16 +37,16 @@ export default function NotificationsScreen() {
     try {
       const response = await getNotifications({ limit: 50 });
       const readAt = new Date().toISOString();
+      setServerUnreadCount(response.unreadCount);
       if (response.unreadCount > 0) {
-        await markAllNotificationsRead().catch(() => undefined);
+        void markAllAsRead();
       }
       setItems(response.data.map((item) => ({ ...item, read: true, readAt: item.readAt ?? readAt })));
-      setUnreadCount(0);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [markAllAsRead, setServerUnreadCount]);
 
   useFocusEffect(
     useCallback(() => {
@@ -80,7 +81,7 @@ export default function NotificationsScreen() {
     <Screen
       eyebrow={t("notifications.eyebrow")}
       title={t("notifications.title")}
-      subtitle={unreadCount > 0 ? t("notifications.unreadSubtitle", { count: unreadCount }) : t("notifications.allCaughtUp")}
+      subtitle={t("notifications.allCaughtUp")}
       showBackButton
       onBackPress={() => router.back()}
     >

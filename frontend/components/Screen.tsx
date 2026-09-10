@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, usePathname, useRouter } from "expo-router";
-import { PropsWithChildren, ReactNode, useCallback, useRef, useState } from "react";
+import { PropsWithChildren, ReactNode, useCallback, useRef } from "react";
 import {
   Animated,
   Image,
@@ -19,7 +19,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAppDrawer } from "@/components/AppDrawer";
 import { AppColors, useTheme, useThemeColors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
-import { getNotifications } from "@/services/api/notifications";
+import { useNotifications } from "@/contexts/NotificationsContext";
 import { resolveUploadedUrl } from "@/services/api/users";
 
 const topBarHeight = 68;
@@ -47,8 +47,9 @@ export function Screen({ children, eyebrow, title, subtitle, hideHeader, style, 
   const pathname = usePathname();
   const { openDrawer } = useAppDrawer();
   const isOnNotifications = pathname === "/notifications";
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const { unreadCount, refreshUnreadCount, markAllAsRead } = useNotifications();
   const userId = user?.id;
+  const unreadNotifications = isOnNotifications ? 0 : unreadCount;
   const topAvatarSource = resolveUploadedUrl(user?.avatarUrl);
   const topBarTranslateY = useRef(new Animated.Value(0)).current;
   const lastScrollY = useRef(0);
@@ -56,33 +57,21 @@ export function Screen({ children, eyebrow, title, subtitle, hideHeader, style, 
 
   useFocusEffect(
     useCallback(() => {
-      let active = true;
-
       if (isOnNotifications || !userId) {
-        setUnreadNotifications(0);
-        return () => {
-          active = false;
-        };
+        return;
       }
 
       const refreshUnreadNotifications = () => {
-        void getNotifications({ limit: 1, read: "false" })
-          .then((response) => {
-            if (active) setUnreadNotifications(response.unreadCount);
-          })
-          .catch(() => {
-            if (active) setUnreadNotifications(0);
-          });
+        void refreshUnreadCount();
       };
 
       refreshUnreadNotifications();
       const interval = setInterval(refreshUnreadNotifications, 30_000);
 
       return () => {
-        active = false;
         clearInterval(interval);
       };
-    }, [isOnNotifications, userId])
+    }, [isOnNotifications, refreshUnreadCount, userId])
   );
 
   const setTopBarVisible = (visible: boolean) => {
@@ -163,7 +152,11 @@ export function Screen({ children, eyebrow, title, subtitle, hideHeader, style, 
         <Pressable
           style={[styles.notificationButton, unreadNotifications > 0 && styles.notificationButtonUnread]}
           accessibilityLabel="Notificaciones"
-          onPress={() => !isOnNotifications && router.push("/notifications")}
+          onPress={() => {
+            if (isOnNotifications) return;
+            if (unreadNotifications > 0) void markAllAsRead();
+            router.push("/notifications");
+          }}
           disabled={isOnNotifications}
         >
           <Ionicons

@@ -15,7 +15,8 @@ function setup(status = "pending_payment") {
     priceCents: 12345, currency: "USD", images: body.imageUrls.map((url) => ({ url })), favorites: [],
     seller: { id: owner.id, firstName: "Test", lastName: "Seller" }
   };
-  const record: any = { id: "record", productId: product.id, amountCents: 10000, currency: "ARS", status: "pending", mpPaymentId: null,
+  const record: any = { id: "record", productId: product.id, sellerId: owner.id, amountCents: 10000, currency: "ARS", status: "pending", mpPaymentId: null,
+    mpPreferenceId: "preference",
     refundRequestedAt: null, refundedAt: null, refundNextAttemptAt: null, refundLastError: null };
   product.payments = [record];
   const payment = { id: "mp-payment", externalReference: record.id, status: "approved", transactionAmount: 100, currencyId: "ARS" };
@@ -35,7 +36,12 @@ function setup(status = "pending_payment") {
       }),
       updateMany: jest.fn(async ({ where, data }) => {
         const statusMatches = typeof where.status === "string" ? where.status === product.status : where.status.in.includes(product.status);
-        if (!statusMatches || (where.deletedAt === null && product.deletedAt)) return { count: 0 };
+        const deletedAtMatches = where.deletedAt === null
+          ? !product.deletedAt
+          : where.deletedAt?.not === null
+            ? Boolean(product.deletedAt)
+            : true;
+        if (!statusMatches || !deletedAtMatches || (where.moderationNotes && where.moderationNotes !== product.moderationNotes)) return { count: 0 };
         const { version, ...fields } = data;
         Object.assign(product, fields);
         if (version) product.version += version.increment;
@@ -57,8 +63,10 @@ function setup(status = "pending_payment") {
       })
     }
   };
-  prisma.$transaction = jest.fn(async (callback) => callback(prisma));
+  prisma.$transaction = jest.fn(async (callback) => Array.isArray(callback) ? Promise.all(callback) : callback(prisma));
   const mercadoPago = { verifyWebhookSignature: jest.fn(() => true), getPayment: jest.fn(async () => payment),
+    findPaymentsByExternalReference: jest.fn(async () => []),
+    getPreference: jest.fn(async () => ({ id: "preference", initPoint: "https://mercadopago.test/checkout", externalReference: record.id })),
     refundPayment: jest.fn(async () => ({ id: "refund-1", status: "approved", amount: 100 })) };
   const refunds = new MarketplaceRefundsService(prisma, mercadoPago as any);
   const media = { ensureStoredMediaUrl: jest.fn(async (_scope, url) => url), extractStorageKeyFromUrl: jest.fn((url) => url.replace("/media/", "")) };
@@ -99,6 +107,15 @@ describe("Marketplace publication lifecycle", () => {
     await h.webhook();
     expect(h.product.status).toBe("pending_payment");
     expect(h.product.deletedAt).not.toBeNull();
+  });
+
+  it("restores a listing when an approval races the pending-payment expiry cleanup", async () => {
+    const h = setup();
+    h.product.deletedAt = new Date();
+    h.product.moderationNotes = "Pago no completado dentro del plazo.";
+    await h.webhook();
+    expect(h.product.status).toBe("active");
+    expect(h.product.deletedAt).toBeNull();
   });
 
   it.each([
@@ -167,7 +184,81 @@ describe("Marketplace publication lifecycle", () => {
     const h = setup();
     const result = await h.service.listProducts(owner.id, { sellerId: owner.id, limit: 20 });
     expect(result.data[0].publicationStatus).toBe("pending_payment");
+    expect(result.data[0].payment).toEqual(expect.objectContaining({ status: "pending", canResume: true }));
     expect(h.prisma.product.findMany.mock.calls[1][0].where.status).toBeUndefined();
+  });
+
+  it("reconciles a slow approved payment before expiring its pending listing", async () => {
+    const h = setup();
+    h.prisma.product.findMany.mockResolvedValueOnce([{
+      id: h.product.id,
+      sellerId: h.product.sellerId,
+      title: h.product.title,
+      payments: [h.record]
+    }]);
+    h.mercadoPago.findPaymentsByExternalReference.mockResolvedValueOnce([h.payment]);
+
+    await h.service.listProducts(owner.id, { sellerId: owner.id, limit: 20 });
+    expect(h.product.status).toBe("active");
+    expect(h.product.deletedAt).toBeNull();
+  });
+
+  it("resumes the existing preference without creating another listing or payment record", async () => {
+    const h = setup();
+    const result = await h.service.resumeProductPayment(owner, h.product.id);
+
+    expect(h.mercadoPago.findPaymentsByExternalReference).toHaveBeenCalledWith(h.record.id);
+    expect(h.mercadoPago.getPreference).toHaveBeenCalledWith(h.record.mpPreferenceId);
+    expect(result.payment).toEqual(expect.objectContaining({ status: "pending", canResume: true, url: "https://mercadopago.test/checkout" }));
+    expect(h.prisma.product.update).not.toHaveBeenCalled();
+    expect(h.prisma.marketplacePayment.update).not.toHaveBeenCalled();
+  });
+
+  it("synchronizes an approved Mercado Pago payment before returning a checkout URL", async () => {
+    const h = setup();
+    h.mercadoPago.findPaymentsByExternalReference.mockResolvedValueOnce([h.payment]);
+    const result = await h.service.resumeProductPayment(owner, h.product.id);
+
+    expect(result.payment.status).toBe("approved");
+    expect(result.payment.url).toBeNull();
+    expect(result.product.publicationStatus).toBe("active");
+    expect(h.mercadoPago.getPreference).not.toHaveBeenCalled();
+  });
+
+  it("does not reopen Checkout when Mercado Pago is already processing a payment", async () => {
+    const h = setup();
+    h.payment.status = "in_process";
+    h.mercadoPago.findPaymentsByExternalReference.mockResolvedValueOnce([h.payment]);
+    const result = await h.service.resumeProductPayment(owner, h.product.id);
+
+    expect(result.payment).toEqual(expect.objectContaining({ status: "pending", canResume: false, url: null }));
+    expect(h.record.mpPaymentId).toBe(h.payment.id);
+    expect(h.mercadoPago.getPreference).not.toHaveBeenCalled();
+  });
+
+  it("verifies a payment id from the return URL server-to-server", async () => {
+    const h = setup();
+    const result = await h.service.syncProductPayment(owner, h.product.id, h.payment.id);
+
+    expect(h.mercadoPago.getPayment).toHaveBeenCalledWith(h.payment.id);
+    expect(result.payment.status).toBe("approved");
+    expect(result.product.publicationStatus).toBe("active");
+  });
+
+  it("recovers the product from Mercado Pago when an older deep link has no product id", async () => {
+    const h = setup();
+    const result = await h.service.syncReturnedProductPayment(owner, h.payment.id);
+
+    expect(h.mercadoPago.getPayment).toHaveBeenCalledWith(h.payment.id);
+    expect(result.product.id).toBe(h.product.id);
+    expect(result.payment.status).toBe("approved");
+  });
+
+  it("rejects a return payment that belongs to another external reference", async () => {
+    const h = setup();
+    h.payment.externalReference = "another-record";
+    await expect(h.service.syncProductPayment(owner, h.product.id, h.payment.id)).rejects.toThrow("no corresponde");
+    expect(h.product.status).toBe("pending_payment");
   });
 
   it("allows moderation to reject an automatically published listing", async () => {

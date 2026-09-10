@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsArray, IsIn, IsNumber, IsOptional, IsString, Min, ValidateIf } from "class-validator";
+import { IsArray, IsIn, IsNumber, IsOptional, IsString, MaxLength, Min, ValidateIf } from "class-validator";
 import { PaginationDto } from "../../common/dto/pagination.dto";
 
 export class ProductQueryDto extends PaginationDto {
@@ -29,6 +29,10 @@ export class ContactSellerDto {
 
 export class RejectProductDto {
   @IsOptional() @IsString() reason?: string;
+}
+
+export class PaymentSyncDto {
+  @IsOptional() @IsString() @MaxLength(100) paymentId?: string;
 }
 
 export class DeleteProductDto {

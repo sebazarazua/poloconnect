@@ -137,16 +137,43 @@ export class MarketplaceService {
     return new Date(reference.getTime() + this.getPendingPaymentTtlMinutes() * 60 * 1000);
   }
 
+  private getPaymentReturnUrl(productId: string) {
+    return `${MP_RETURN_DEEP_LINK}?productId=${encodeURIComponent(productId)}`;
+  }
+
   private async discardStalePendingPaymentProducts() {
     const cutoff = new Date(Date.now() - this.getPendingPaymentTtlMinutes() * 60 * 1000);
-    const staleProducts = await this.prisma.product.findMany({
+    const staleCandidates = await this.prisma.product.findMany({
       where: {
         deletedAt: null,
         status: "pending_payment",
         createdAt: { lt: cutoff }
       },
-      select: { id: true, sellerId: true, title: true }
+      select: {
+        id: true,
+        sellerId: true,
+        title: true,
+        payments: { where: { status: "pending" }, orderBy: { createdAt: "desc" }, take: 1 }
+      }
     });
+
+    const staleProducts: ProductNotification[] = [];
+    for (const product of staleCandidates) {
+      const payment = product.payments[0];
+      if (!payment) {
+        staleProducts.push(product);
+        continue;
+      }
+
+      try {
+        // Do not discard a slow payment just because its webhook arrived late.
+        const providerHasPayment = await this.syncPaymentRecord(payment);
+        if (!providerHasPayment) staleProducts.push(product);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`Could not reconcile stale payment for product ${product.id}: ${message}`);
+      }
+    }
 
     if (staleProducts.length === 0) return;
 
@@ -180,7 +207,12 @@ export class MarketplaceService {
     if (query.cursor) where.id = { lt: query.cursor };
     const products = await this.prisma.product.findMany({
       where,
-      include: { images: { orderBy: { position: "asc" } }, favorites: { where: { userId } }, seller: true, payments: query.sellerId === userId },
+      include: {
+        images: { orderBy: { position: "asc" } },
+        favorites: { where: { userId } },
+        seller: true,
+        payments: query.sellerId === userId ? { orderBy: { createdAt: "desc" } } : false
+      },
       orderBy: { createdAt: "desc" },
       take: limit + 1
     });
@@ -264,7 +296,7 @@ export class MarketplaceService {
         title: `Publicación Polo Connect: ${product.title}`.slice(0, 250),
         amountCents,
         currency: PUBLICATION_CURRENCY,
-        returnUrl: MP_RETURN_DEEP_LINK,
+        returnUrl: this.getPaymentReturnUrl(product.id),
         expiresAt
       });
 
@@ -406,7 +438,11 @@ export class MarketplaceService {
 
     // Source of truth is always Mercado Pago's own API, never the webhook payload itself.
     const payment = await this.mercadoPago.getPayment(dataId);
+    await this.applyMercadoPagoPayment(payment, body);
+    return { ok: true };
+  }
 
+  private async applyMercadoPagoPayment(payment: Awaited<ReturnType<MercadoPagoService["getPayment"]>>, body?: any) {
     if (!payment.externalReference) {
       this.logger.warn(`Mercado Pago payment ${payment.id} has no external_reference; ignoring.`);
       return { ok: true };
@@ -471,10 +507,22 @@ export class MarketplaceService {
 
       if (nextStatus === "approved") {
         // Repeated approvals must not reactivate rejected, paused, sold or deleted listings.
-        const updated = await tx.product.updateMany({
+        let updated = await tx.product.updateMany({
           where: { id: record.productId, status: { in: ["pending_payment", "pending_review"] }, deletedAt: null },
           data: { status: "active", moderationNotes: null, version: { increment: 1 } }
         });
+        if (!updated.count) {
+          // A provider confirmation can race the local TTL cleanup. Only restore rows deleted by that cleanup.
+          updated = await tx.product.updateMany({
+            where: {
+              id: record.productId,
+              status: "pending_payment",
+              deletedAt: { not: null },
+              moderationNotes: "Pago no completado dentro del plazo."
+            },
+            data: { status: "active", deletedAt: null, moderationNotes: null, version: { increment: 1 } }
+          });
+        }
         if (updated.count) {
           const notificationProduct = await tx.product.findUnique({ where: { id: record.productId }, select: { id: true, sellerId: true, title: true } });
           if (notificationProduct) statusNotification = { product: notificationProduct, event: "active" };
@@ -495,6 +543,101 @@ export class MarketplaceService {
     if (nextStatus === "approved") await this.refunds.processProduct(record.productId);
     if (statusNotification) await this.notifyProductStatus(statusNotification.product, statusNotification.event);
     return { ok: true };
+  }
+
+  private async syncPaymentRecord(record: any, paymentId?: string) {
+    const payments = paymentId
+      ? [await this.mercadoPago.getPayment(paymentId)]
+      : await this.mercadoPago.findPaymentsByExternalReference(record.id);
+    const matchingPayments = payments.filter((payment) => payment.externalReference === record.id);
+
+    if (paymentId && matchingPayments.length === 0) {
+      throw new BadRequestException("El pago de Mercado Pago no corresponde a esta publicación.");
+    }
+
+    const payment = matchingPayments.find((candidate) => candidate.status === "refunded")
+      ?? matchingPayments.find((candidate) => candidate.status === "approved")
+      ?? matchingPayments[0];
+
+    if (payment) await this.applyMercadoPagoPayment(payment);
+    return Boolean(payment);
+  }
+
+  private async getOwnedProductWithPayments(user: RequestUser, id: string) {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include: {
+        images: { orderBy: { position: "asc" } },
+        favorites: { where: { userId: user.id } },
+        seller: true,
+        payments: { orderBy: { createdAt: "desc" } }
+      }
+    });
+    if (!product || product.sellerId !== user.id) throw new NotFoundException("Product not found.");
+    return product;
+  }
+
+  private toProductPaymentResult(product: any, url: string | null = null) {
+    const payment = product.payments?.[0];
+    const canResume = Boolean(
+      payment
+      && !product.deletedAt
+      && product.status === "pending_payment"
+      && payment.status === "pending"
+      && payment.mpPreferenceId
+      && !payment.mpPaymentId
+    );
+
+    return {
+      product: this.toProductDto(product, true),
+      payment: {
+        required: Boolean(payment),
+        provider: payment ? "mercado_pago" as const : null,
+        status: payment?.status ?? null,
+        canResume,
+        url: canResume ? url : null
+      }
+    };
+  }
+
+  async syncProductPayment(user: RequestUser, id: string, paymentId?: string) {
+    const current = await this.getOwnedProductWithPayments(user, id);
+    const payment = current.payments[0];
+    if (!payment) return this.toProductPaymentResult(current);
+
+    if (payment.status === "pending") await this.syncPaymentRecord(payment, paymentId?.trim() || undefined);
+    const updated = await this.getOwnedProductWithPayments(user, id);
+    return this.toProductPaymentResult(updated);
+  }
+
+  async syncReturnedProductPayment(user: RequestUser, paymentId: string) {
+    const normalizedPaymentId = paymentId.trim();
+    if (!normalizedPaymentId) throw new BadRequestException("Falta el identificador del pago.");
+    const payment = await this.mercadoPago.getPayment(normalizedPaymentId);
+    if (!payment.externalReference) throw new BadRequestException("El pago no tiene una referencia de publicación válida.");
+
+    const record = await this.prisma.marketplacePayment.findUnique({ where: { id: payment.externalReference } });
+    if (!record || record.sellerId !== user.id) throw new NotFoundException("Product not found.");
+
+    if (record.status === "pending") await this.applyMercadoPagoPayment(payment);
+    const product = await this.getOwnedProductWithPayments(user, record.productId);
+    return this.toProductPaymentResult(product);
+  }
+
+  async resumeProductPayment(user: RequestUser, id: string) {
+    await this.syncProductPayment(user, id);
+    const product = await this.getOwnedProductWithPayments(user, id);
+    const payment = product.payments[0];
+    const state = this.toProductPaymentResult(product);
+
+    if (!state.payment.canResume || !payment?.mpPreferenceId) return state;
+
+    const preference = await this.mercadoPago.getPreference(payment.mpPreferenceId);
+    if (preference.externalReference !== payment.id) {
+      throw new BadRequestException("La preferencia de Mercado Pago no corresponde a esta publicación.");
+    }
+
+    return this.toProductPaymentResult(product, preference.initPoint);
   }
 
   async listProductsForAdmin(status?: string) {
@@ -569,6 +712,7 @@ export class MarketplaceService {
 
   private toProductDto(product: any, includeSeller = false) {
     const image = product.images?.[0]?.url ?? "";
+    const payment = product.payments?.[0];
     return {
       id: product.id,
       ownerId: product.sellerId,
@@ -582,6 +726,18 @@ export class MarketplaceService {
       status: product.condition,
       publicationStatus: product.status,
       refundStatus: summarizeRefunds(product.payments ?? []),
+      payment: payment ? {
+        required: true,
+        provider: "mercado_pago" as const,
+        status: payment.status,
+        canResume: Boolean(
+          !product.deletedAt
+          && product.status === "pending_payment"
+          && payment.status === "pending"
+          && payment.mpPreferenceId
+          && !payment.mpPaymentId
+        )
+      } : undefined,
       description: product.description,
       isFavorite: (product.favorites?.length ?? 0) > 0,
       createdAt: product.createdAt,

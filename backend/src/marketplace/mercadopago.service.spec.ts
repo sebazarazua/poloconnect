@@ -30,4 +30,26 @@ describe("Mercado Pago full refunds", () => {
     jest.spyOn(global, "fetch").mockResolvedValue(new Response(JSON.stringify({ id: 42, payment_id: 999, status: "approved", amount: 100 })));
     await expect(service.refundPayment("123", "key")).rejects.toThrow("inválida");
   });
+
+  it("searches payment attempts by the server external reference", async () => {
+    const request = jest.spyOn(global, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      results: [{ id: 123, status: "approved", external_reference: "record", transaction_amount: 100, currency_id: "ARS" }]
+    })));
+
+    await expect(service.findPaymentsByExternalReference("record")).resolves.toEqual([{
+      id: "123", status: "approved", externalReference: "record", transactionAmount: 100, currencyId: "ARS"
+    }]);
+    expect(request.mock.calls[0][0]).toContain("/v1/payments/search?");
+    expect(request.mock.calls[0][0]).toContain("external_reference=record");
+  });
+
+  it("reloads the stored Checkout Pro preference", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      id: "pref-1", init_point: "https://mercadopago.test/checkout", external_reference: "record"
+    })));
+
+    await expect(service.getPreference("pref-1")).resolves.toEqual({
+      id: "pref-1", initPoint: "https://mercadopago.test/checkout", externalReference: "record"
+    });
+  });
 });

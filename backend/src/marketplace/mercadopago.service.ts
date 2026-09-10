@@ -5,6 +5,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 export type MpPreference = {
   id: string;
   initPoint: string;
+  externalReference?: string | null;
 };
 
 export type MpPaymentInfo = {
@@ -131,6 +132,72 @@ export class MercadoPagoService {
       externalReference: data.external_reference ?? null,
       transactionAmount: typeof data.transaction_amount === "number" ? data.transaction_amount : null,
       currencyId: data.currency_id ?? null
+    };
+  }
+
+  /** Finds every recent payment attempt associated with one server-generated reference. */
+  async findPaymentsByExternalReference(externalReference: string): Promise<MpPaymentInfo[]> {
+    const accessToken = this.getAccessToken();
+    if (!accessToken) {
+      throw new BadRequestException("Mercado Pago is not configured.");
+    }
+
+    const query = new URLSearchParams({
+      external_reference: externalReference,
+      sort: "date_created",
+      criteria: "desc",
+      limit: "20"
+    });
+    const response = await fetch(`${MP_API_BASE}/v1/payments/search?${query.toString()}`, {
+      signal: AbortSignal.timeout(15_000),
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+      this.logger.error(`Payment search failed (${response.status}): ${errorBody}`);
+      throw new BadRequestException("No se pudo verificar el pago.");
+    }
+
+    const data = await response.json();
+    const results = Array.isArray(data?.results) ? data.results : [];
+    return results.map((payment: any) => ({
+      id: String(payment.id),
+      status: String(payment.status ?? ""),
+      externalReference: payment.external_reference ?? null,
+      transactionAmount: typeof payment.transaction_amount === "number" ? payment.transaction_amount : null,
+      currencyId: payment.currency_id ?? null
+    }));
+  }
+
+  /** Reloads an existing Checkout Pro preference instead of creating another payment intent. */
+  async getPreference(preferenceId: string): Promise<MpPreference> {
+    const accessToken = this.getAccessToken();
+    if (!accessToken) {
+      throw new BadRequestException("Mercado Pago is not configured.");
+    }
+
+    const response = await fetch(`${MP_API_BASE}/checkout/preferences/${encodeURIComponent(preferenceId)}`, {
+      signal: AbortSignal.timeout(15_000),
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+      this.logger.error(`Preference lookup failed (${response.status}): ${errorBody}`);
+      throw new BadRequestException("No se pudo retomar el pago de la publicación.");
+    }
+
+    const data = await response.json();
+    const initPoint = data.init_point ?? data.sandbox_init_point;
+    if (!data.id || !initPoint) {
+      throw new BadRequestException("No se pudo retomar el pago de la publicación.");
+    }
+
+    return {
+      id: String(data.id),
+      initPoint: String(initPoint),
+      externalReference: data.external_reference ?? null
     };
   }
 

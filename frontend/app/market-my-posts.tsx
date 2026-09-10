@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/components/Screen";
@@ -7,6 +8,8 @@ import { AppColors, useThemeColors } from "@/constants/theme";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useMarket } from "@/contexts/MarketContext";
 import { resolveUploadedUrl } from "@/services/api/users";
+import { resumeProductPayment } from "@/services/api/market";
+import { marketPaymentReturnRoute } from "@/services/marketplace-payment";
 
 const publicationStatusKeys = {
   pending_payment: "myPosts.status.pending_payment",
@@ -24,6 +27,7 @@ export default function MarketMyPostsScreen() {
   const { t } = useLocale();
   const { myProducts, deleteProduct, refreshMarket } = useMarket();
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+  const [payingProductId, setPayingProductId] = useState<string | null>(null);
   const hasPendingPayment = myProducts.some((product) => product.publicationStatus === "pending_payment" || product.refundStatus === "pending" || product.refundStatus === "failed");
 
   useFocusEffect(
@@ -68,6 +72,8 @@ export default function MarketMyPostsScreen() {
               ? publicationStatusKeys[product.publicationStatus as keyof typeof publicationStatusKeys]
               : null;
             const isDeleting = deletingProductId === product.id;
+            const isPaying = payingProductId === product.id;
+            const canPay = product.payment?.required === true && product.payment.status === "pending" && product.payment.canResume === true;
 
             return (
               <View key={product.id} style={styles.card}>
@@ -88,6 +94,53 @@ export default function MarketMyPostsScreen() {
                   ) : null}
 
                   <View style={styles.actions}>
+                    {canPay ? (
+                      <Pressable
+                        style={[styles.actionButton, styles.payButton, (isDeleting || isPaying) && styles.actionButtonDisabled]}
+                        disabled={isDeleting || isPaying}
+                        onPress={async () => {
+                          try {
+                            setPayingProductId(product.id);
+                            const result = await resumeProductPayment(product.id);
+                            await refreshMarket();
+
+                            if (result.payment.status === "approved" && result.product.publicationStatus === "active") {
+                              Alert.alert(t("marketPublish.paymentConfirmed"));
+                              return;
+                            }
+                            if (result.payment.status === "pending" && !result.payment.canResume) {
+                              router.replace(marketPaymentReturnRoute(product.id));
+                              return;
+                            }
+                            if (!result.payment.canResume || !result.payment.url) {
+                              throw new Error(t("myPosts.paymentUnavailable"));
+                            }
+
+                            const browserResult = await WebBrowser.openAuthSessionAsync(
+                              result.payment.url,
+                              "polo-connect://market-publish-return"
+                            );
+                            router.replace(marketPaymentReturnRoute(
+                              product.id,
+                              browserResult.type === "success" ? browserResult.url : undefined
+                            ));
+                          } catch (error) {
+                            await refreshMarket().catch(() => undefined);
+                            Alert.alert(t("myPosts.paymentError"), error instanceof Error ? error.message : t("marketPublish.errorFallback"));
+                          } finally {
+                            setPayingProductId(null);
+                          }
+                        }}
+                      >
+                        {isPaying ? (
+                          <ActivityIndicator color="#ffffff" />
+                        ) : (
+                          <Ionicons name="cash-outline" size={16} color="#ffffff" />
+                        )}
+                        <Text style={[styles.actionText, styles.payText]}>{t("myPosts.pay")}</Text>
+                      </Pressable>
+                    ) : null}
+
                     {product.publicationStatus !== "rejected" ? <Pressable
                       style={[styles.actionButton, styles.editButton]}
                       disabled={isDeleting}
@@ -213,6 +266,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderWidth: 1,
     borderColor: "#cfe2f5"
   },
+  payButton: {
+    backgroundColor: colors.primaryDark,
+    borderWidth: 1,
+    borderColor: colors.primaryDark
+  },
   deleteButton: {
     backgroundColor: colors.dangerSoft,
     borderWidth: 1,
@@ -225,6 +283,9 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   },
   deleteText: {
     color: colors.danger
+  },
+  payText: {
+    color: "#ffffff"
   },
   emptyState: {
     alignItems: "center",

@@ -21,6 +21,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLocale } from "@/contexts/LocaleContext";
 import { fetchProduct, uploadProductImage } from "@/services/api/market";
 import { type Product, type ProductStatus, type MarketCategory } from "@/services/market";
+import { marketPaymentReturnRoute } from "@/services/marketplace-payment";
 import { useMarket } from "@/contexts/MarketContext";
 
 const productStates: ProductStatus[] = ["Nuevo", "Usado", "Reacondicionado"];
@@ -492,9 +493,12 @@ export default function MarketPublishScreen() {
               if (result.payment.required && result.payment.url) {
                 // Opens Mercado Pago in-app and resolves when it redirects back to our deep link.
                 // This is UX only: the real payment confirmation always comes from the backend webhook.
-                await WebBrowser.openAuthSessionAsync(result.payment.url, "polo-connect://market-publish-return");
+                const browserResult = await WebBrowser.openAuthSessionAsync(result.payment.url, "polo-connect://market-publish-return");
                 void refreshMarket().catch(() => undefined);
-                router.replace("/market-publish-return");
+                router.replace(marketPaymentReturnRoute(
+                  result.product.id,
+                  browserResult.type === "success" ? browserResult.url : undefined
+                ));
                 return;
               }
 

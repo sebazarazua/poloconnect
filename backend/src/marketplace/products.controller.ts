@@ -3,7 +3,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { Throttle } from "@nestjs/throttler";
 import { memoryStorage } from "multer";
 import { CurrentUser, RequestUser } from "../common/decorators/current-user.decorator";
-import { ContactSellerDto, ProductQueryDto, ProductUpsertDto } from "./dto/marketplace.dto";
+import { ContactSellerDto, PaymentSyncDto, ProductQueryDto, ProductUpsertDto } from "./dto/marketplace.dto";
 import { MarketplaceService } from "./marketplace.service";
 import { MediaService } from "../common/media/media.service";
 
@@ -51,6 +51,18 @@ export class ProductsController {
   @Post()
   create(@CurrentUser() user: RequestUser, @Body() body: ProductUpsertDto) {
     return this.marketplace.createProduct(user, body);
+  }
+
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @Post(":id/payment/sync")
+  syncPayment(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() body: PaymentSyncDto) {
+    return this.marketplace.syncProductPayment(user, id, body.paymentId);
+  }
+
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @Post(":id/payment/resume")
+  resumePayment(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.marketplace.resumeProductPayment(user, id);
   }
 
   @Put(":id")

@@ -20,7 +20,8 @@ export type ProductPublicationResult = {
     required: boolean;
     provider: "mercado_pago" | null;
     url: string | null;
-    status?: "pending" | "approved" | "rejected" | null;
+    status: "pending" | "approved" | "rejected" | "cancelled" | "refunded" | null;
+    canResume?: boolean;
   };
 };
 
@@ -246,6 +247,24 @@ export async function uploadProductImage(image: { uri: string; fileName?: string
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function syncProductPayment(productId?: string, paymentId?: string) {
+  if (!productId && !paymentId) throw new Error("No se pudo identificar el pago a verificar.");
+  const path = productId
+    ? `/products/${encodeURIComponent(productId)}/payment/sync`
+    : "/marketplace/payments/sync";
+  return apiRequest<ProductPublicationResult>(path, {
+    method: "POST",
+    body: JSON.stringify(paymentId ? { paymentId } : {})
+  });
+}
+
+export async function resumeProductPayment(productId: string) {
+  return apiRequest<ProductPublicationResult>(`/products/${encodeURIComponent(productId)}/payment/resume`, {
+    method: "POST",
+    body: JSON.stringify({})
+  });
 }
 
 export async function deleteProduct(id: string) {

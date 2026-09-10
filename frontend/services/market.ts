@@ -14,6 +14,12 @@ export type Product = {
   status: ProductStatus;
   publicationStatus?: string;
   refundStatus?: "none" | "pending" | "failed" | "refunded";
+  payment?: {
+    required: boolean;
+    provider: "mercado_pago" | null;
+    status: "pending" | "approved" | "rejected" | "cancelled" | "refunded" | null;
+    canResume: boolean;
+  };
   description: string;
   contactPhone?: string;
   seller?: {

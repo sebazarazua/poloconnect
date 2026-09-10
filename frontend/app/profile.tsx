@@ -69,7 +69,8 @@ export default function ProfileScreen() {
       const nextUser = await uploadMyAvatar({
         uri: asset.uri,
         fileName: asset.fileName || `avatar.${extension}`,
-        mimeType: asset.mimeType || `image/${extension === "jpg" ? "jpeg" : extension}`
+        mimeType: asset.mimeType || `image/${extension === "jpg" ? "jpeg" : extension}`,
+        file: asset.file
       });
       updateUser(nextUser);
       Alert.alert(t("profile.photoUpdatedTitle"), t("profile.photoUpdatedText"));
@@ -116,6 +117,8 @@ export default function ProfileScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
+      preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+      shouldDownloadFromNetwork: true,
       quality: 0.85
     });
 

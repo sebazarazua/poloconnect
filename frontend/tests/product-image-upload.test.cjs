@@ -75,6 +75,42 @@ function harness(options = {}) {
   return { upload: api.uploadProductImage, fetchProduct: api.fetchProduct, updateProduct: api.updateProduct, requests };
 }
 
+function avatarHarness(options = {}) {
+  const requests = [];
+  class NativeFile {
+    constructor(uri) {
+      this.uri = uri;
+      this.name = uri.split("/").pop();
+      this.type = "image/png";
+      this.exists = options.exists ?? true;
+      this.size = options.size ?? png.length;
+    }
+    async bytes() { return new Uint8Array(png); }
+  }
+  const api = loadTs("services/api/users.ts", {
+    "expo-file-system": { File: NativeFile },
+    "react-native": { Platform: { OS: options.os ?? "ios" } },
+    "@/services/api/client": {
+      async apiRequest(route, init) {
+        assert.equal(route, "/users/me/avatar");
+        const multipart = await convertFormDataAsync(init.body);
+        const decoded = await new Response(multipart.body, {
+          headers: { "content-type": `multipart/form-data; boundary=${multipart.boundary}` }
+        }).formData();
+        requests.push({ route, init, file: decoded.get("file") });
+        if (options.error) throw options.error;
+        return { id: "user", firstName: "Test", lastName: "User", username: "test" };
+      },
+      resolveApiMediaUrl: (url) => url
+    }
+  }, {
+    FormData: options.os === "web" ? FormData : RNFormData,
+    fetch: options.fetch ?? (() => { throw new Error("Unexpected fetch"); }),
+    ...options.globals
+  });
+  return { upload: api.uploadMyAvatar, requests };
+}
+
 test("regression: Expo rejects the old URI-only file part before making a request", async () => {
   const form = new RNFormData();
   form.append("file", { uri: "file:///camera/photo.png", name: "photo.png", type: "image/png" });
@@ -92,6 +128,22 @@ for (const os of ["ios", "android"]) {
       assert.equal(route, "/products/upload");
       assert.equal(init.method, "POST");
       assert.equal(file.name, "photo.png");
+      assert.equal(file.type, "image/png");
+      assert.deepEqual(Buffer.from(await file.arrayBuffer()), png);
+    });
+  }
+}
+
+for (const os of ["ios", "android"]) {
+  for (const source of ["camera", "gallery"]) {
+    test(`avatar ${os} ${source}: multipart contains the actual image bytes`, async () => {
+      const h = avatarHarness({ os });
+      await h.upload({ uri: `file:///cache/${source}/avatar.png`, fileName: "original.heic", mimeType: "image/heic" });
+      assert.equal(h.requests.length, 1);
+      const { file, route, init } = h.requests[0];
+      assert.equal(route, "/users/me/avatar");
+      assert.equal(init.method, "POST");
+      assert.equal(file.name, "avatar.png");
       assert.equal(file.type, "image/png");
       assert.deepEqual(Buffer.from(await file.arrayBuffer()), png);
     });

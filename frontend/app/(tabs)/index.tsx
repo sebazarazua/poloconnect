@@ -78,10 +78,6 @@ export default function HomeScreen() {
   const [liveMatches, setLiveMatches] = useState<Match[]>([]);
   const [liveSpotlightEvents, setLiveSpotlightEvents] = useState<SpotlightEvent[]>([]);
 
-  useEffect(() => {
-    console.info("startup/home-mounted");
-  }, []);
-
   const openTargetUrl = async (targetUrl?: string) => {
     const target = parseContentTarget(targetUrl);
 
@@ -578,45 +574,53 @@ export default function HomeScreen() {
 
       <SectionTitle title={t("home.quickAccess")} />
       <View style={styles.quickGrid}>
-        {quickAccessItems.map(({ key, label, icon }) => (
-          <Pressable
-            key={key}
-            style={({ pressed }) => [
-              styles.quickItem,
-              pressed && styles.quickItemPressed
-            ]}
-            onPress={() => handleQuickAccessPress(key)}
-          >
-            <View style={styles.quickGoldBar} />
-            <View style={styles.quickRow}>
-              <View style={[
-                styles.quickIconWrap,
-                colors.background !== "#ffffff" && styles.quickIconWrapDark
-              ]}>
-                <Ionicons
-                  name={icon as keyof typeof Ionicons.glyphMap}
-                  size={30}
-                  color={colors.background !== "#ffffff" ? "#0a3d7a" : "#E8C97A"}
-                />
+        {quickAccessItems.map(({ key, label, icon }) => {
+          const words = label.trim().split(/\s+/).filter(Boolean);
+
+          return (
+            <Pressable
+              key={key}
+              style={({ pressed }) => [
+                styles.quickItem,
+                pressed && styles.quickItemPressed
+              ]}
+              onPress={() => handleQuickAccessPress(key)}
+            >
+              <View style={styles.quickGoldBar} />
+              <View style={styles.quickRow}>
+                <View style={[
+                  styles.quickIconWrap,
+                  colors.background !== "#ffffff" && styles.quickIconWrapDark
+                ]}>
+                  <Ionicons
+                    name={icon as keyof typeof Ionicons.glyphMap}
+                    size={30}
+                    color={colors.background !== "#ffffff" ? "#0a3d7a" : "#E8C97A"}
+                  />
+                </View>
+                <View style={styles.quickTextWords}>
+                  {words.map((word, index) => (
+                    <Text
+                      key={`${key}-${index}`}
+                      style={styles.quickTextWord}
+                      numberOfLines={1}
+                      ellipsizeMode="clip"
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                      allowFontScaling={false}
+                      maxFontSizeMultiplier={1}
+                      android_hyphenationFrequency="none"
+                      lineBreakStrategyIOS="standard"
+                    >
+                      {word}
+                    </Text>
+                  ))}
+                </View>
               </View>
-              <Text
-                style={styles.quickText}
-                numberOfLines={2}
-                ellipsizeMode="tail"
-                adjustsFontSizeToFit
-                minimumFontScale={0.75}
-                allowFontScaling={false}
-                maxFontSizeMultiplier={1}
-                textBreakStrategy="highQuality"
-                android_hyphenationFrequency="none"
-                lineBreakStrategyIOS="standard"
-              >
-                {label}
-              </Text>
-            </View>
-            <View style={styles.quickGoldDot} />
-          </Pressable>
-        ))}
+              <View style={styles.quickGoldDot} />
+            </Pressable>
+          );
+        })}
       </View>
       <AdCarousel images={compactAds} targetUrls={compactAdTargetUrls} height={90} />
     </Screen>
@@ -795,7 +799,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   quickRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12
+    gap: 12,
+    minWidth: 0
   },
   quickIconWrap: {
     width: 46,
@@ -819,12 +824,21 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 }
   },
-  quickText: {
+  quickTextWords: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignContent: "center",
+    columnGap: 4
+  },
+  quickTextWord: {
     color: colors.text,
     fontSize: 15,
     lineHeight: 19,
     fontWeight: "800",
-    flex: 1
+    flexShrink: 0,
+    maxWidth: "100%"
   },
   quickGoldDot: {
     position: "absolute",

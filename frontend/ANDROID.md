@@ -8,7 +8,7 @@ Android requiere una build propia para probar Google Sign-In y push remotas. El 
 - Package Android: `com.poloconnect.app`, versionCode local `2`.
 - Ya existe una build `preview` Android terminada del 8 de septiembre. Esa APK corresponde al Google OAuth anterior con AuthSession: puede volver a probarse después de habilitar su Custom URI scheme en Google, sin consumir otra build. Para probar el SDK nativo y los demás cambios posteriores sí hace falta una APK nueva.
 - Hay keystore Android en EAS. La consulta de credenciales del perfil `preview` muestra **FCM V1: None assigned yet** y ninguna credencial de envío a Google Play.
-- No hay `frontend/google-services.json` local ni variable EAS `GOOGLE_SERVICES_JSON`. La lista de variables del proyecto contiene solamente `EXPO_PUBLIC_API_URL` en producción. Los perfiles preview/production también definen API y los IDs públicos de Google en `eas.json`.
+- El JSON Firebase nuevo está integrado en `frontend/google-services.json` (ignorado por Git) y como variable EAS de archivo `GOOGLE_SERVICES_JSON`, sensitive, únicamente en preview. Se verificaron package, cliente Android nuevo, SHA-1 y cliente Web tanto localmente como en la variable remota. Los perfiles preview/production conservan sus IDs públicos de Google en `eas.json`.
 - El endpoint HTTPS `/api/v1/health` del backend Railway respondió `status: ok`.
 - TypeScript, 67 pruebas backend, 19 pruebas de runtime Android, 3 pruebas de chat y 19 pruebas de uploads pasaron. Exportaciones Android, iOS y web y build backend pasaron.
 - La comparación contra la configuración anterior (manteniendo el buildNumber `14` del usuario y excluyendo las dependencias recién añadidas de la referencia) confirmó igualdad de todos los resultados nativos iOS introspectables: Info.plist, entitlements, splash storyboard, Expo.plist y propiedades Podfile. También se verificó que ninguna versión de paquete preexistente cambió en el lockfile.
@@ -27,10 +27,10 @@ El archivo local está ignorado por Git. Para suministrarlo a EAS, desde `fronte
 
 ```powershell
 npx eas-cli@latest login
-npx eas-cli@latest env:set --name GOOGLE_SERVICES_JSON --type file --value ./google-services.json --visibility sensitive --environment development --environment preview --environment production
+npx eas-cli@latest env:set --name GOOGLE_SERVICES_JSON --type file --value ./google-services.json --visibility sensitive --environment preview
 ```
 
-La variable no usa prefijo `EXPO_PUBLIC`: sirve para la configuración nativa durante la build. Compartirla entre entornos no instala Firebase ni cambia APNs en iOS. [Configuración FCM de Expo](https://docs.expo.dev/push-notifications/fcm-credentials/).
+La variable no usa prefijo `EXPO_PUBLIC`: sirve para la configuración nativa durante la build. El perfil preview selecciona explícitamente `environment: preview`; no se modificaron variables EAS de production/development. [Variables de archivo EAS](https://docs.expo.dev/eas/environment-variables/).
 
 ### 2. Clave FCM V1 en EAS
 
@@ -103,11 +103,15 @@ Opcionalmente, si ya descargaste el keystore mediante EAS, `keytool -list -v -ke
 
 #### Código actual y token hacia el backend
 
+El archivo nuevo contiene el cliente Android `394359246264-hfegectv4odjt7opi6crv8l03ablgpq0.apps.googleusercontent.com`, client_type 1, package `com.poloconnect.app` y certificate_hash `c960f1d73bfc89d7d6ddf45881fe78415953ed1b`; también contiene el cliente Web `394359246264-qsdibq97s91qf5rt6q5gn75dtoarct22.apps.googleusercontent.com`, client_type 3. El SDK no recibe un Android client ID explícito: Google identifica la app por package y certificado. Se conservó `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` con el valor histórico, utilizado sólo por la request AuthSession que Android no abre; no se reemplazó el Web ID ni se agregó el scheme del cliente Android nuevo.
+
+La integración pasó typecheck, 41 pruebas frontend, 67 backend y expo config introspect. Un prebuild Android aislado, sin instalar dependencias ni compilar, copió exactamente el JSON nuevo a android/app e incorporó Google Services 4.4.4 al Gradle del proyecto y su plugin al Gradle de la app. Se eliminó esa carpeta temporal; queda una sola copia del JSON en el proyecto. Los cinco resultados nativos iOS introspectables permanecieron idénticos antes/después. No se ejecutó EAS Build ni se alteró backend, Apple o email/password.
+
 El login Android actual usa `@react-native-google-signin/google-signin`, comprueba Google Play Services y devuelve el mismo `accessToken` que consume `/auth/login/google`. `GoogleSignin.configure` usa `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`; el SDK identifica Android por package/certificado, sin parámetro `androidClientId` ni el redirect personalizado. Los clientes Android y Web deben estar en el mismo proyecto Google. Activar el scheme resuelve el rechazo del flujo anterior y no modifica el flujo nativo actual. [Setup Android del SDK](https://react-native-google-signin.github.io/docs/setting-up/android).
 
 Ambos flujos envían `{ accessToken }` a `POST /auth/login/google`; el backend consulta Google userinfo y devuelve su sesión habitual (JWT/refresh/CSRF). No se cambió ese contrato ni la persistencia de sesión. El flujo iOS AuthSession code + PKCE, cliente iOS, Apple, email/password y configuración de producción permanecen intactos en esta revisión.
 
-Preview genera una APK standalone y production un AAB con autoIncrement. Comparten API e IDs Google en `eas.json`, pero una instalación desde Play puede llevar otro certificado. En EAS no se encontraron variables adicionales del entorno preview que sobrescriban esos IDs. La build Android actual además exige `google-services.json` mediante `app.config.js` por la configuración FCM ya existente: comprobá ese archivo/variable antes de una futura build; no es la causa del error OAuth de la APK auditada.
+Preview genera una APK standalone y production un AAB con autoIncrement. Comparten API e IDs Google en `eas.json`, pero una instalación desde Play puede llevar otro certificado. El archivo nuevo ya satisface la comprobación Android de `app.config.js`; la variable EAS preview selecciona ese mismo archivo durante la build y no sobrescribe los IDs `EXPO_PUBLIC`.
 
 En `frontend/.env`, para Metro con una development build podés usar los valores públicos ya existentes del perfil preview:
 
@@ -127,7 +131,7 @@ cd frontend
 npm ci --legacy-peer-deps
 ```
 
-Reutilizá los perfiles existentes; no se modificó `eas.json`.
+Reutilizá los perfiles existentes; el único ajuste en `eas.json` fue explicitar `environment: preview` en el perfil preview para usar la variable de archivo nueva.
 
 | Uso | Perfil | Resultado | Metro |
 | --- | --- | --- | --- |

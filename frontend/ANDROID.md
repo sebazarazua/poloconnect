@@ -6,14 +6,14 @@ Android requiere una build propia para probar Google Sign-In y push remotas. El 
 
 - Proyecto EAS: `ef0b3a5b-ba32-49fc-91ca-c28215e7ebf6`.
 - Package Android: `com.poloconnect.app`, versionCode local `2`.
-- Ya existe una build `preview` Android terminada del 8 de septiembre. Esa APK corresponde a código anterior; se necesita una nueva para probar estos cambios.
+- Ya existe una build `preview` Android terminada del 8 de septiembre. Esa APK corresponde al Google OAuth anterior con AuthSession: puede volver a probarse después de habilitar su Custom URI scheme en Google, sin consumir otra build. Para probar el SDK nativo y los demás cambios posteriores sí hace falta una APK nueva.
 - Hay keystore Android en EAS. La consulta de credenciales del perfil `preview` muestra **FCM V1: None assigned yet** y ninguna credencial de envío a Google Play.
 - No hay `frontend/google-services.json` local ni variable EAS `GOOGLE_SERVICES_JSON`. La lista de variables del proyecto contiene solamente `EXPO_PUBLIC_API_URL` en producción. Los perfiles preview/production también definen API y los IDs públicos de Google en `eas.json`.
 - El endpoint HTTPS `/api/v1/health` del backend Railway respondió `status: ok`.
 - TypeScript, 67 pruebas backend, 19 pruebas de runtime Android, 3 pruebas de chat y 19 pruebas de uploads pasaron. Exportaciones Android, iOS y web y build backend pasaron.
 - La comparación contra la configuración anterior (manteniendo el buildNumber `14` del usuario y excluyendo las dependencias recién añadidas de la referencia) confirmó igualdad de todos los resultados nativos iOS introspectables: Info.plist, entitlements, splash storyboard, Expo.plist y propiedades Podfile. También se verificó que ninguna versión de paquete preexistente cambió en el lockfile.
 - `expo-doctor`: 20/21 verificaciones pasan. Quedan diferencias preexistentes de versiones patch en 16 paquetes Expo. Se conservaron las versiones existentes del lockfile para evitar cambiar el entorno de iOS. La introspección también informa la advertencia preexistente sobre `expo-system-ui` para `userInterfaceStyle` Android.
-- No se ejecutó una compilación Gradle nueva ni una prueba en teléfono. Esta máquina no tiene `adb` disponible; faltan además las credenciales FCM. Las exportaciones verifican los bundles, no reemplazan una compilación nativa ni prueban entrega de push.
+- No se ejecutó una compilación Gradle nueva ni una prueba en teléfono. ADB está instalado en el SDK Android pero no hay teléfono/emulador conectado; faltan además las credenciales FCM. Las exportaciones verifican los bundles, no reemplazan una compilación nativa ni prueban entrega de push.
 
 ## Configuración externa necesaria
 
@@ -46,15 +46,68 @@ Seleccioná `preview` → `Google Service Account` → gestionar la clave para *
 
 ### 3. Google OAuth Android
 
-El login Android usa `@react-native-google-signin/google-signin`, comprueba Google Play Services y devuelve el mismo `accessToken` que consume `/auth/login/google`. El flujo AuthSession + PKCE de iOS se conserva. Google ya no admite los esquemas personalizados del flujo OAuth de navegador para Android. [Google OAuth](https://developers.google.com/identity/protocols/oauth2/native-app), [guía Expo](https://docs.expo.dev/guides/google-authentication/).
+#### Diagnóstico del error Custom URI scheme
 
-En Google Cloud Console verificá un cliente OAuth de tipo **Android** con:
+El mensaje `Error 400: invalid_request — Custom URI scheme is not enabled for your Android client` indica que Google rechazó el redirect personalizado del cliente Android antes de emitir el código/token. La primera corrección es **A: habilitar la opción externa del cliente existente**. No requiere cambiar la librería, el redirect ni el backend para subsanar ese rechazo. La afirmación anterior de esta guía de que Google no admitía esos esquemas era demasiado categórica: están deshabilitados por defecto, pero Google documenta cómo habilitarlos en Advanced Settings. [Restricción y opción oficial de Google](https://developers.googleblog.com/improving-user-safety-in-oauth-flows-through-new-oauth-custom-uri-scheme-restrictions/), [descripción de la opción](https://support.google.com/googleapi/answer/6158849?hl=en).
 
-- Package: `com.poloconnect.app`.
-- SHA-1 del keystore EAS consultado para preview: `C9:60:F1:D7:3B:FC:89:D7:D6:DD:F4:58:81:FE:78:41:59:53:ED:1B`.
-- Para una build local debug, verificá también su certificado debug. Para Google Play, agregá un cliente Android con el SHA-1 de **App signing key certificate** de Play Console, que puede diferir del certificado de subida/EAS.
+Hay dos versiones distintas verificadas en esta revisión:
 
-Los clientes Android y el cliente **Web** deben corresponder al mismo proyecto Google Cloud. `GoogleSignin.configure` usa `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`; el SDK identifica la app Android por package/certificado, no por un parámetro `androidClientId`. Los IDs Android de los perfiles EAS se conservan por compatibilidad. Verificá la pantalla de consentimiento y los usuarios de prueba si el proyecto OAuth sigue en testing. [Setup Android del SDK](https://react-native-google-signin.github.io/docs/setting-up/android).
+| Versión | Flujo Android | Evidencia |
+| --- | --- | --- |
+| Última APK preview terminada, build `4b1404e5-cd90-4a6a-b02f-a2ec31b2820d`, 8/09/2026, commit `b1dd62af` | AuthSession, autorización code + PKCE, redirect personalizado | Metadatos EAS; bundle APK contiene el client ID Android y `:/oauthredirect`, y no contiene `RNGoogleSignin`; manifiesto registra el scheme correcto |
+| Rama actual, commit `c86b1db` | SDK Google nativo | `handleGoogleLogin` entra en la rama Android, obtiene accessToken y retorna antes de `promptGoogle` |
+
+El hook AuthSession sigue construyendo una request Android en el código actual, pero no abre el navegador automáticamente. El error reportado corresponde al flujo de navegador; sin un dispositivo conectado no se puede identificar qué artefacto está instalado. La última APK preview disponible contiene precisamente ese flujo. No se hizo otra migración ni se revirtió la ya incorporada en `c86b1db` durante este diagnóstico.
+
+#### Cambio manual en Google Cloud Console
+
+1. Seleccioná el proyecto que contiene los IDs OAuth cuyo prefijo es `394359246264`. Entrá a **Google Auth Platform → Clients**; en la interfaz anterior, **APIs & Services → Credentials → OAuth 2.0 Client IDs**. [Ruta actual oficial](https://support.google.com/cloud/answer/15549257).
+2. Abrí el cliente de tipo **Android** con ID exacto `394359246264-di5ov5m0scidob7doa9ikq15p6p8ei2t.apps.googleusercontent.com`, configurado en `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` de preview y production. No abras el cliente Web ni el iOS para este ajuste.
+3. Confirmá package **`com.poloconnect.app`** y SHA-1 del certificado indicado abajo. Expandí **Advanced settings → Custom URI scheme**, activá **Enable custom URI scheme** y guardá. Si no aparece esa sección, confirmá primero el tipo e ID del cliente que figura en los detalles del error; no reemplaces este ajuste por un redirect Web ni por otro scheme en código.
+4. Reutilizá el cliente existente si package y certificado coinciden. No hace falta crear otra credencial por tener el scheme deshabilitado. Si otra distribución usa una firma diferente, registrá otro cliente Android para ese package/SHA-1; conservá la credencial de preview. Google Play puede usar un **App signing key certificate** distinto de la clave de subida/EAS; verificá su SHA-1 en Play Console para la app distribuida por Play.
+5. Volvé a probar **la misma APK preview** después de guardar la configuración. Compará `client_id` y `redirect_uri` de los detalles OAuth si aún hay un rechazo. No hace falta una build para activar esta opción de Google. No se accedió a tu Google Cloud Console ni se modificó ninguna credencial externamente durante esta revisión.
+
+Redirect del flujo AuthSession revisado:
+
+```text
+com.googleusercontent.apps.394359246264-di5ov5m0scidob7doa9ikq15p6p8ei2t:/oauthredirect
+```
+
+El scheme anterior a `:` ya está registrado en `app.json` y en el manifiesto de la APK auditada. `polo-connect` también está registrado, pero no es el redirect de este OAuth. No hace falta agregar este redirect al cliente Web.
+
+#### Certificado EAS y certificado real de la APK
+
+Las consultas de credenciales EAS `preview` y `production` mostraron la misma configuración por defecto **Build Credentials krlxfM660A**, keystore JKS, alias `d7fd76a2c1cca4da92cb6b6167a3cda8`. `apksigner verify --print-certs` confirmó que la APK preview descargada está firmada por ese mismo certificado:
+
+```text
+SHA-1:   C9:60:F1:D7:3B:FC:89:D7:D6:DD:F4:58:81:FE:78:41:59:53:ED:1B
+SHA-256: 2B:A6:2F:01:7E:2D:89:6E:D5:AA:82:C1:84:3E:2F:5D:A5:99:4D:46:31:5A:F1:54:67:6F:7D:2C:72:8D:D8:7B
+```
+
+El cliente OAuth Android requiere **SHA-1**, no un campo SHA-256. SHA-256 se incluye para contrastar el certificado; no habilita el Custom URI scheme ni reemplaza SHA-1. [Requisitos oficiales del cliente Android](https://support.google.com/cloud/answer/15549257).
+
+Para consultar fingerprints sin descargar ni regenerar el keystore, desde `frontend`:
+
+```powershell
+npx eas-cli@latest credentials --platform android
+# Seleccionar preview; leer SHA1 Fingerprint y SHA256 Fingerprint; salir con Ctrl+C.
+```
+
+Para comprobar exactamente el certificado de cualquier APK existente en esta PC:
+
+```powershell
+& "$env:LOCALAPPDATA\Android\Sdk\build-tools\36.0.0\apksigner.bat" verify --print-certs "C:\ruta\PoloConnect.apk"
+```
+
+Opcionalmente, si ya descargaste el keystore mediante EAS, `keytool -list -v -keystore "C:\ruta\keystore.jks" -alias d7fd76a2c1cca4da92cb6b6167a3cda8` muestra ambos fingerprints; ingresá la contraseña en el prompt, sin ponerla en código ni argumentos guardados. No uses el certificado `androiddebugkey` de Android Studio para una APK firmada con el keystore EAS.
+
+#### Código actual y token hacia el backend
+
+El login Android actual usa `@react-native-google-signin/google-signin`, comprueba Google Play Services y devuelve el mismo `accessToken` que consume `/auth/login/google`. `GoogleSignin.configure` usa `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`; el SDK identifica Android por package/certificado, sin parámetro `androidClientId` ni el redirect personalizado. Los clientes Android y Web deben estar en el mismo proyecto Google. Activar el scheme resuelve el rechazo del flujo anterior y no modifica el flujo nativo actual. [Setup Android del SDK](https://react-native-google-signin.github.io/docs/setting-up/android).
+
+Ambos flujos envían `{ accessToken }` a `POST /auth/login/google`; el backend consulta Google userinfo y devuelve su sesión habitual (JWT/refresh/CSRF). No se cambió ese contrato ni la persistencia de sesión. El flujo iOS AuthSession code + PKCE, cliente iOS, Apple, email/password y configuración de producción permanecen intactos en esta revisión.
+
+Preview genera una APK standalone y production un AAB con autoIncrement. Comparten API e IDs Google en `eas.json`, pero una instalación desde Play puede llevar otro certificado. En EAS no se encontraron variables adicionales del entorno preview que sobrescriban esos IDs. La build Android actual además exige `google-services.json` mediante `app.config.js` por la configuración FCM ya existente: comprobá ese archivo/variable antes de una futura build; no es la causa del error OAuth de la APK auditada.
 
 En `frontend/.env`, para Metro con una development build podés usar los valores públicos ya existentes del perfil preview:
 
@@ -114,6 +167,61 @@ Si más adelante instalás Android Studio/SDK, podés hacer una build local Andr
 
 ## Flujo y aislamiento por plataforma
 
+### Teclado del chat Android
+
+`group-chat` es una pantalla del Stack raíz, fuera de los tabs. Su árbol es SafeAreaView → header + contenedor flex → lista flex + barra de mensajes. Android conserva `softwareKeyboardLayoutMode: resize` (`adjustResize` en el manifiesto nativo).
+
+En Android el KeyboardAvoidingView queda deshabilitado y sin behavior `height`: el sistema nativo ajusta el espacio disponible y la lista flex ocupa lo que queda después de la barra. Esto evita que una altura JS basada en el frame inicial compita con el resize nativo. No se agregaron posiciones ni alturas de teclado fijas. La barra respeta `insets.bottom` con el teclado cerrado y mantiene su padding interno habitual con el teclado abierto. Los listeners Android `keyboardDidShow`/`keyboardDidHide` actualizan ese estado y se eliminan al desmontar. El `onLayout` de la lista acompaña el resize y el crecimiento del input multilínea.
+
+La rama iOS conserva `behavior: padding`, offset `0`, los listeners `keyboardWillShow`/`keyboardDidShow`/`keyboardWillHide`, el cálculo de safe area y los estilos anteriores. No se modificaron el envío optimista, la recepción/reconexión por socket ni las reglas de visibilidad del chat.
+
+### “Cannot connect to Expo CLI”
+
+El texto proviene de `expo/src/async-require/hmrUtils.native.ts`: el cliente HMR muestra el error cuando no puede establecer la conexión con el servidor de desarrollo. Puede aparecer en una development build o Expo Go si Metro se detuvo, el teléfono cambió de red, quedó seleccionada una dirección anterior o falló la conexión LAN/túnel/USB. Es un fallo de conectividad del entorno de desarrollo, no un aviso que deba aparecer durante una sesión conectada correctamente. Desactivar Fast Refresh no convierte una development build en una APK autónoma.
+
+Los perfiles actuales están bien diferenciados: `development` tiene `developmentClient: true`; preview y production no lo tienen ni fuerzan un comando Gradle debug. El plugin Android aplica la configuración oficial del dev client y no establece un servidor HMR ni una URL de Metro fija. No se alteraron estos perfiles ni el plugin para ocultar el mensaje. Una APK nueva construida con **preview** incorpora un bundle release y funciona sin Metro; ese runtime no debe conectar HMR. Si el warning aparece allí, comprobá que instalaste/abriste la APK preview y no una development build anterior.
+
+Para LAN, desde `frontend`:
+
+```powershell
+npm run start:dev-client -- --lan
+```
+
+Mantené Metro abierto, usá la misma red Wi-Fi y abrí el enlace/QR actual con la development build. Comprobá el endpoint de Metro:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8081/status
+```
+
+Debe devolver `packager-status:running`. Desde el navegador del teléfono probá `http://IP_DE_LA_PC:8081/status`; si la PC responde y el teléfono no, revisá acceso LAN, aislamiento Wi-Fi/VPN y la regla del firewall para Node/puerto 8081. Este endpoint no verifica por sí solo la conexión WebSocket de HMR.
+
+Como alternativa de red:
+
+```powershell
+npm run start:dev-client -- --tunnel
+```
+
+Abrí el nuevo enlace del túnel. Para USB, con Android SDK Platform Tools y depuración USB autorizada:
+
+```powershell
+adb devices
+adb reverse tcp:8081 tcp:8081
+npm run start:dev-client -- --localhost
+```
+
+Abrí `http://127.0.0.1:8081` desde el launcher de la development build. El reverse es para Metro; si también usás un backend local, configurá su conectividad por separado. Si `adb` no está en PATH, en esta PC está instalado en la ruta estándar del SDK:
+
+```powershell
+$taskAdb = Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe'
+& $taskAdb devices
+& $taskAdb reverse tcp:8081 tcp:8081
+npm run start:dev-client -- --localhost
+```
+
+En esta revisión Metro respondió desde la PC y ADB no encontró ningún teléfono/emulador conectado, así que no se puede atribuir el caso concreto a LAN, túnel o USB sin la URL/error completo de la advertencia. Si ya hay un Metro ejecutándose, usá esa terminal o detenelo con Ctrl+C antes de iniciar otra instancia en el mismo puerto. [Uso de development builds](https://docs.expo.dev/develop/development-builds/use-development-builds/), [Expo CLI / conectividad](https://docs.expo.dev/more/expo-cli/).
+
+### Flujos que se conservan
+
 - Push se registra después de autenticar al usuario. Se crea el canal Android `default` antes del permiso y el backend conserva platform `android`, habilitado y último uso en el upsert del Expo Token. Sólo los mensajes enviados a tokens Android incorporan `channelId: "default"`.
 - Los errores de canal, permisos, FCM/Expo o API se registran por etapa, sin imprimir tokens. Push no participa en la hidratación de sesión ni bloquea el splash de arranque.
 - En Android se reintenta al volver al foreground y al rotar el token FCM. El listener pasa el token nativo recibido al obtener el Expo Token para evitar recursión. Se eliminan los listeners al desmontar y se cancela/ordena el registro antes de desregistrar al cerrar sesión.
@@ -124,6 +232,15 @@ Si más adelante instalás Android Studio/SDK, podés hacer una build local Andr
 - SecureStore, tokens de sesión/refresh, APIs, sockets, navegación protegida, uploads, marketplace y pagos conservan sus flujos compartidos. Se revisaron los commits recientes de chat, notificaciones, teclado y pagos y no se revirtieron sus cambios. El deep link de Mercado Pago `polo-connect://market-publish-return` continúa registrado en Android e iOS. CSRF y CORS ya contemplan peticiones nativas con Bearer y sin Origin; no necesitan un bypass Android.
 
 ## Prueba en teléfono pendiente
+
+Para comprobar la corrección del teclado del chat en la nueva versión:
+
+1. Con teclado cerrado, verificá que input y enviar queden por encima de la navegación del sistema, tanto con gestos como con tres botones.
+2. Abrí el teclado: toda la barra debe quedar sobre él, sin quedar tapada; la lista debe reducir su espacio y mantener visible el último mensaje.
+3. Escribí varias líneas hasta alcanzar el alto máximo existente del input; el botón debe seguir visible y el input debe poder desplazar su texto.
+4. Enviá el mensaje con el teclado abierto y recibí otro desde una segunda cuenta; verificá el envío optimista, la recepción en tiempo real y ausencia de duplicados.
+5. Abrí/cerrá el teclado repetidamente, cambiá su alto/tipo y comprobá que la lista recupere su espacio al cerrar.
+6. Repetí en pantallas Android pequeñas y grandes, con distintos teclados. No hay teléfono conectado para ejecutar esta prueba física durante la revisión.
 
 No se puede certificar paridad funcional completa con exportaciones y tests unitarios. Después de instalar la nueva APK y desplegar el pequeño cambio de backend, verificá:
 

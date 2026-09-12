@@ -348,6 +348,22 @@ export default function GroupChatScreen() {
   }, [messages.length]);
 
   useEffect(() => {
+    if (Platform.OS === "android") {
+      const didShowSub = Keyboard.addListener("keyboardDidShow", () => {
+        setIsKeyboardVisible(true);
+        scrollToBottom(false);
+      });
+      const didHideSub = Keyboard.addListener("keyboardDidHide", () => {
+        setIsKeyboardVisible(false);
+        scrollToBottom(false);
+      });
+
+      return () => {
+        didShowSub.remove();
+        didHideSub.remove();
+      };
+    }
+
     if (Platform.OS !== "ios") {
       return () => undefined;
     }
@@ -483,7 +499,9 @@ export default function GroupChatScreen() {
     return messages[index - 1].userId !== messages[index].userId;
   }
 
-  const inputBottomPadding = Platform.OS === "ios" && !isKeyboardVisible ? Math.max(insets.bottom, 8) : 8;
+  const inputBottomPadding = Platform.OS === "android"
+    ? (isKeyboardVisible ? 8 : Math.max(insets.bottom, 8))
+    : (Platform.OS === "ios" && !isKeyboardVisible ? Math.max(insets.bottom, 8) : 8);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -517,7 +535,10 @@ export default function GroupChatScreen() {
       {/* Messages + Input */}
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        // Android's adjustResize owns the available height. A second height
+        // adjustment here freezes the initial frame and competes with resizing.
+        behavior={Platform.OS === "ios" ? "padding" : Platform.OS === "android" ? undefined : "height"}
+        enabled={Platform.OS !== "android"}
         keyboardVerticalOffset={0}
       >
         <ScrollView
@@ -525,6 +546,7 @@ export default function GroupChatScreen() {
           style={styles.messagesList}
           contentContainerStyle={styles.messagesContent}
           onContentSizeChange={() => scrollToBottom(false)}
+          onLayout={Platform.OS === "android" ? () => scrollToBottom(false) : undefined}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           onScrollBeginDrag={Keyboard.dismiss}

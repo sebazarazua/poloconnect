@@ -6,6 +6,7 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  LayoutChangeEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
@@ -35,9 +36,11 @@ type ScreenProps = PropsWithChildren<{
   onBackPress?: () => void;
   headerRight?: ReactNode;
   scrollViewRef?: any;
+  androidKeyboardAware?: boolean;
+  onScrollViewLayout?: (event: LayoutChangeEvent) => void;
 }>;
 
-export function Screen({ children, eyebrow, title, subtitle, hideHeader, style, showBackButton, onBackPress, headerRight, scrollViewRef }: ScreenProps) {
+export function Screen({ children, eyebrow, title, subtitle, hideHeader, style, showBackButton, onBackPress, headerRight, scrollViewRef, androidKeyboardAware = false, onScrollViewLayout }: ScreenProps) {
   const colors = useThemeColors();
   const { mode } = useTheme();
   const styles = createStyles(colors);
@@ -54,6 +57,7 @@ export function Screen({ children, eyebrow, title, subtitle, hideHeader, style, 
   const topBarTranslateY = useRef(new Animated.Value(0)).current;
   const lastScrollY = useRef(0);
   const isTopBarVisible = useRef(true);
+  const preserveAndroidKeyboard = Platform.OS === "android" && androidKeyboardAware;
 
   useFocusEffect(
     useCallback(() => {
@@ -174,7 +178,7 @@ export function Screen({ children, eyebrow, title, subtitle, hideHeader, style, 
 
       <KeyboardAvoidingView
         style={styles.keyboardArea}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" || preserveAndroidKeyboard ? "padding" : "height"}
         keyboardVerticalOffset={0}
       >
         <Animated.ScrollView
@@ -187,8 +191,9 @@ export function Screen({ children, eyebrow, title, subtitle, hideHeader, style, 
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-          onScrollBeginDrag={Keyboard.dismiss}
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : preserveAndroidKeyboard ? "none" : "on-drag"}
+          onScrollBeginDrag={preserveAndroidKeyboard ? undefined : Keyboard.dismiss}
+          onLayout={onScrollViewLayout}
           onScroll={handleScroll}
           scrollEventThrottle={16}
         >

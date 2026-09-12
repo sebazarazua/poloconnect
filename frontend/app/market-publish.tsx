@@ -2,12 +2,13 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
   Keyboard,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -77,7 +78,23 @@ export default function MarketPublishScreen() {
   const nameInputRef = useRef<TextInput>(null);
   const priceInputRef = useRef<TextInput>(null);
   const descriptionInputRef = useRef<TextInput>(null);
-  const screenScrollRef = useRef<any>(null);
+  const screenScrollRef = useRef<ScrollView>(null);
+
+  const revealAndroidDescription = useCallback(() => {
+    if (Platform.OS !== "android" || !Keyboard.isVisible()) return;
+    requestAnimationFrame(() => {
+      const input = descriptionInputRef.current;
+      if (!Keyboard.isVisible() || !input?.isFocused()) return;
+      // Measure this input against the real keyboard, not the form's end.
+      screenScrollRef.current?.scrollResponderScrollNativeHandleToKeyboard(input, 12, true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const shown = Keyboard.addListener("keyboardDidShow", revealAndroidDescription);
+    return () => shown.remove();
+  }, [revealAndroidDescription]);
 
   useEffect(() => {
     if (!id) {
@@ -257,6 +274,8 @@ export default function MarketPublishScreen() {
       showBackButton
       onBackPress={() => router.back()}
       scrollViewRef={screenScrollRef}
+      androidKeyboardAware
+      onScrollViewLayout={Platform.OS === "android" ? revealAndroidDescription : undefined}
     >
       <View style={styles.paymentBanner}>
         <View style={styles.paymentIconWrap}>
@@ -416,6 +435,10 @@ export default function MarketPublishScreen() {
             multiline
             textAlignVertical="top"
             onFocus={() => {
+              if (Platform.OS === "android") {
+                revealAndroidDescription();
+                return;
+              }
               setTimeout(() => {
                 screenScrollRef.current?.scrollToEnd({ animated: true });
               }, 120);

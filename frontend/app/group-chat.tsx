@@ -535,10 +535,9 @@ export default function GroupChatScreen() {
       {/* Messages + Input */}
       <KeyboardAvoidingView
         style={styles.flex}
-        // Android's adjustResize owns the available height. A second height
-        // adjustment here freezes the initial frame and competes with resizing.
-        behavior={Platform.OS === "ios" ? "padding" : Platform.OS === "android" ? undefined : "height"}
-        enabled={Platform.OS !== "android"}
+        // Padding uses the current frame/keyboard overlap, so native resize
+        // and edge-to-edge layouts do not require a cached explicit height.
+        behavior={Platform.OS === "ios" || Platform.OS === "android" ? "padding" : "height"}
         keyboardVerticalOffset={0}
       >
         <ScrollView
@@ -577,6 +576,12 @@ export default function GroupChatScreen() {
             onFocus={() => {
               if (Platform.OS === "ios") {
                 scrollToBottom(false);
+                return;
+              }
+
+              if (Platform.OS === "android") {
+                // keyboardDidShow and the list's onLayout scroll after resizing.
+                if (Keyboard.isVisible()) scrollToBottom(false);
                 return;
               }
 

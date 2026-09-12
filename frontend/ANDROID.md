@@ -175,9 +175,15 @@ Si más adelante instalás Android Studio/SDK, podés hacer una build local Andr
 
 `group-chat` es una pantalla del Stack raíz, fuera de los tabs. Su árbol es SafeAreaView → header + contenedor flex → lista flex + barra de mensajes. Android conserva `softwareKeyboardLayoutMode: resize` (`adjustResize` en el manifiesto nativo).
 
-En Android el KeyboardAvoidingView queda deshabilitado y sin behavior `height`: el sistema nativo ajusta el espacio disponible y la lista flex ocupa lo que queda después de la barra. Esto evita que una altura JS basada en el frame inicial compita con el resize nativo. No se agregaron posiciones ni alturas de teclado fijas. La barra respeta `insets.bottom` con el teclado cerrado y mantiene su padding interno habitual con el teclado abierto. Los listeners Android `keyboardDidShow`/`keyboardDidHide` actualizan ese estado y se eliminan al desmontar. El `onLayout` de la lista acompaña el resize y el crecimiento del input multilínea.
+En Android el KeyboardAvoidingView usa `padding`: React Native calcula la superposición entre el frame actual y la posición real del teclado. El ajuste anterior, deshabilitarlo y depender exclusivamente de adjustResize, no cubría el caso mostrado en las capturas donde el teclado se superpone al contenido. Padding conserva el flex y se recalcula cuando cambia el frame; si el sistema ya redimensionó hasta el teclado, la superposición adicional es cero. No se agregó padding fijo de teclado ni una altura basada en el frame inicial. La barra respeta `insets.bottom` con teclado cerrado y mantiene su padding interno habitual al abrirlo. Los listeners Android `keyboardDidShow`/`keyboardDidHide` y `onLayout` mantienen abajo los últimos mensajes después del resize; se eliminó el temporizador Android de scroll al enfocar. Los listeners se eliminan al desmontar.
 
 La rama iOS conserva `behavior: padding`, offset `0`, los listeners `keyboardWillShow`/`keyboardDidShow`/`keyboardWillHide`, el cálculo de safe area y los estilos anteriores. No se modificaron el envío optimista, la recepción/reconexión por socket ni las reglas de visibilidad del chat.
+
+### Descripción de publicar producto Android
+
+El onFocus anterior hacía scrollToEnd del formulario tras 120 ms, dejando la descripción fuera de vista y mostrando teléfono/publicar. Android ahora espera keyboardDidShow o un nuevo layout y usa scrollResponderScrollNativeHandleToKeyboard para medir y mostrar únicamente la descripción enfocada, con un margen de 12 puntos. Se comprueba foco y teclado antes de ejecutar el desplazamiento; se limpia el listener al desmontar. El TextInput controlado conserva su identidad y estado al escribir.
+
+Screen tiene una opción androidKeyboardAware, activada únicamente en market-publish: selecciona padding y evita descartar el teclado al arrastrar. Las demás pantallas conservan el comportamiento anterior. iOS conserva su KAV, dismissal y el handler de foco original. Las seis regresiones de tests/android-keyboard.test.cjs verifican aislamiento, foco, apertura/cierre/resize, cálculo de superposición de la versión RN instalada y equivalencia iOS con el código anterior. Sigue pendiente probar teclado Samsung/Gboard, input multilínea y navegación por gestos/tres botones en teléfono; ADB no detectó un dispositivo conectado.
 
 ### “Cannot connect to Expo CLI”
 

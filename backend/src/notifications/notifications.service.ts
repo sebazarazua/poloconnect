@@ -249,6 +249,7 @@ export class NotificationsService {
       message: {
         to: pushToken.token,
         sound: "default",
+        ...(pushToken.platform === "android" ? { channelId: "default" } : {}),
         title,
         body,
         data: typeof data === "object" && data ? (data as Record<string, unknown>) : {}

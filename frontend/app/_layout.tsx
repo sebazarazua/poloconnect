@@ -119,6 +119,20 @@ function PushTokenRegistrar() {
       return;
     }
 
+    if (Platform.OS === "android") {
+      let cancelled = false;
+      let cleanup: (() => void) | undefined;
+      void import("@/services/push-notifications")
+        .then((module) => {
+          if (!cancelled) cleanup = module.startAndroidPushTokenRegistration();
+        })
+        .catch(() => console.warn("startup/android push initialization failed"));
+      return () => {
+        cancelled = true;
+        cleanup?.();
+      };
+    }
+
     void import("@/services/push-notifications")
       .then((module) => module.registerDevicePushToken())
       .then((token) => {

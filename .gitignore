@@ -24,3 +24,7 @@ frontend/dist/
 frontend/.env
 frontend/.env.*
 !frontend/.env.example
+
+# Android Firebase app config is supplied locally or as an EAS file variable.
+frontend/google-services.json
+frontend/credentials/

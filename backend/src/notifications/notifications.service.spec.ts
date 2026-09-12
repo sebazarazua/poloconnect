@@ -1,5 +1,48 @@
 import { NotificationsService } from "./notifications.service";
 
+describe("NotificationsService platform push delivery", () => {
+  it("sends Android on its configured channel and preserves the existing iOS payload", async () => {
+    const prisma: any = {
+      pushToken: {
+        findMany: jest.fn(async () => [
+          { platform: "android", token: "ExponentPushToken[android]" },
+          { platform: "ios", token: "ExponentPushToken[ios]" }
+        ])
+      }
+    };
+    const service = new NotificationsService(prisma, {} as any);
+    const send = jest.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [] })
+    } as Response);
+    try {
+      await (service as any).sendPushToUserTokens("user-1", "Comunidad", "Mensaje", { roomId: "room-1" });
+      const messages = JSON.parse(String(send.mock.calls[0][1]?.body));
+      expect(messages[0].channelId).toBe("default");
+      expect(messages[1]).toEqual({
+        to: "ExponentPushToken[ios]",
+        sound: "default",
+        title: "Comunidad",
+        body: "Mensaje",
+        data: { roomId: "room-1" }
+      });
+    } finally {
+      send.mockRestore();
+    }
+  });
+
+  it("stores and reassigns Expo tokens with their Android platform", async () => {
+    const prisma: any = { pushToken: { upsert: jest.fn(async () => ({})) } };
+    const service = new NotificationsService(prisma, {} as any);
+    await service.savePushToken("user-1", { token: "ExponentPushToken[android]", platform: "android" });
+    expect(prisma.pushToken.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { token: "ExponentPushToken[android]" },
+      update: expect.objectContaining({ userId: "user-1", platform: "android", enabled: true }),
+      create: expect.objectContaining({ userId: "user-1", platform: "android" })
+    }));
+  });
+});
+
 describe("NotificationsService room delivery", () => {
   it("selects active memberships other than the sender together with their mute state", async () => {
     const prisma: any = {

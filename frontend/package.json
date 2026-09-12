@@ -7,21 +7,25 @@
     "start": "expo start --port 8081",
     "start:tunnel": "expo start --tunnel --port 8081",
     "start:lan": "expo start --lan --port 8081",
+    "start:dev-client": "expo start --dev-client --port 8081",
     "build": "expo export -p web",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test:uploads": "node --test tests/product-image-upload.test.cjs",
-    "test:community": "node --test tests/community-realtime.test.cjs"
+    "test:community": "node --test tests/community-realtime.test.cjs",
+    "test:android": "node --test tests/android-runtime.test.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
+    "@react-native-google-signin/google-signin": "^16.1.5",
     "expo": "~57.0.21",
     "expo-apple-authentication": "~57.0.1",
     "expo-auth-session": "~57.0.11",
     "expo-constants": "~57.0.17",
     "expo-crypto": "~57.0.2",
+    "expo-dev-client": "~57.0.18",
     "expo-device": "~57.0.1",
     "expo-file-system": "~57.0.6",
     "expo-font": "~57.0.3",
@@ -51,6 +55,22 @@
     "react-native-worklets": "0.10.1",
     "react-native-youtube-iframe": "^2.4.1",
     "socket.io-client": "^4.8.3"
+  },
+  "expo": {
+    "autolinking": {
+      "ios": {
+        "exclude": [
+          "@react-native-google-signin/google-signin",
+          "expo-dev-client",
+          "expo-dev-launcher",
+          "expo-dev-menu",
+          "expo-dev-menu-interface",
+          "expo-manifests",
+          "expo-json-utils",
+          "expo-updates-interface"
+        ]
+      }
+    }
   },
   "devDependencies": {
     "@types/react": "~19.2.4",

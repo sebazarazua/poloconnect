@@ -23,7 +23,7 @@ import { getLoginErrorMessage, getOAuthErrorMessage } from "@/utils/authErrors";
 
 WebBrowser.maybeCompleteAuthSession();
 
-// Google's "iOS"/"Android" OAuth client types only accept the reversed client-id
+// Google's iOS OAuth client type accepts the reversed client-id
 // scheme as redirect URI (they don't expose a configurable "authorized redirect URIs" field).
 function getGoogleNativeRedirectUri(clientId?: string) {
   if (!clientId) return undefined;
@@ -59,9 +59,11 @@ export default function LoginScreen() {
     default: googleWebClientId
   });
   const googleEffectiveClientId = isExpoGo ? googleWebClientId : googleClientIdForPlatform;
-  const hasGoogleConfig = Boolean(googleEffectiveClientId);
+  const hasGoogleConfig = Platform.OS === "android" ? !isExpoGo && Boolean(googleWebClientId) : Boolean(googleEffectiveClientId);
 
-  // Google's iOS/Android OAuth client types only accept Authorization Code + PKCE and
+  // Keep the existing iOS Authorization Code + PKCE flow. Android uses the
+  // native Google SDK in handleGoogleLogin instead of browser redirects.
+  // Google's iOS client accepts Authorization Code + PKCE and
   // redirect to the reversed client-id scheme; response_type=token is rejected with
   // "Error 400: unsupported_response_type" on those client types (confirmed on TestFlight).
   const isNativeStandalone = Platform.OS !== "web" && !isExpoGo;
@@ -86,6 +88,7 @@ export default function LoginScreen() {
   });
 
   useEffect(() => {
+    if (Platform.OS !== "ios") return;
     void AppleAuthentication.isAvailableAsync().then(setAppleAvailable);
   }, []);
 
@@ -196,6 +199,24 @@ export default function LoginScreen() {
       return;
     }
 
+    if (Platform.OS === "android") {
+      googleProcessingRef.current = true;
+      setIsGoogleProcessing(true);
+      try {
+        const { getAndroidGoogleAccessToken } = await import("@/services/google-signin-android");
+        const accessToken = await getAndroidGoogleAccessToken();
+        if (accessToken) await signInWithGoogle({ accessToken });
+      } catch (googleError) {
+        const code = googleError && typeof googleError === "object" && "code" in googleError ? googleError.code : "unknown";
+        console.warn(`auth/google/android failure: ${String(code)}`);
+        setError(getOAuthErrorMessage("Google", t));
+      } finally {
+        googleProcessingRef.current = false;
+        setIsGoogleProcessing(false);
+      }
+      return;
+    }
+
     if (!hasGoogleConfig || !googleRequest) {
       setError(getOAuthErrorMessage("Google", t));
       return;
@@ -217,7 +238,7 @@ export default function LoginScreen() {
   const handleAppleLogin = async () => {
     setError("");
 
-    if (!appleAvailable) {
+    if (Platform.OS !== "ios" || !appleAvailable) {
       setError(getOAuthErrorMessage("Apple", t));
       return;
     }

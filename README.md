@@ -1,5 +1,7 @@
 # Polo Connect
 
+Para probar Android con Google Sign-In y notificaciones push, usá una build propia: [guía Android / EAS](frontend/ANDROID.md). Los perfiles `development`, `preview` y `production` ya están configurados. El flujo de Expo Go de abajo permite desarrollo parcial, pero no valida esas funciones nativas de Android.
+
 Paso a paso definitivo para levantar la app, poder registrarte, loguearte y usar Expo Go sin depender del agente.
 
 ## Comandos probados (copiar y pegar)

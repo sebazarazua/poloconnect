@@ -20,7 +20,7 @@ export class RefreshDto {
 
 export class ChangePasswordDto {
   @IsString() currentPassword!: string;
-  @IsString() @MinLength(8) newPassword!: string;
+  @IsString() @MinLength(3) newPassword!: string;
 }
 
 export class PasswordResetRequestDto {
@@ -30,7 +30,7 @@ export class PasswordResetRequestDto {
 export class PasswordResetConfirmDto {
   @IsEmail() email!: string;
   @IsString() code!: string;
-  @IsString() @MinLength(8) newPassword!: string;
+  @IsString() @MinLength(3) newPassword!: string;
 }
 
 export class GoogleLoginDto {

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
 import { RequestUser } from "../common/decorators/current-user.decorator";
@@ -13,6 +13,8 @@ import { CreateTeamDto, UpdateMatchDto, UpsertMatchDto, UpsertMatchStatDto, Upse
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
@@ -783,56 +785,23 @@ export class AdminService {
     }
 
     try {
-      const response = await fetch("https://polohub.net/feed/", {
+      const response = await fetch("https://polohub.net/es/noticias", {
         headers: {
+          Accept: "text/html",
           "User-Agent": "PoloConnect/1.0"
-        }
+        },
+        signal: AbortSignal.timeout(10_000)
       });
 
       if (!response.ok) {
-        throw new Error(`Polo Hub feed returned ${response.status}`);
+        throw new Error(`PoloHUB news page returned ${response.status}`);
       }
 
-      const xml = await response.text();
-      const itemBlocks = xml.match(/<item>[\s\S]*?<\/item>/g) ?? [];
+      const html = await response.text();
+      const items = this.parsePolohubNewsPage(html, limit);
 
-      const parsed = await Promise.all(
-        itemBlocks.map(async (block, index) => {
-          const title = this.decodeHtmlEntities(this.extractCDataOrTag(block, "title"));
-          const link = this.extractCDataOrTag(block, "link").trim();
-          const description = this.decodeHtmlEntities(this.extractCDataOrTag(block, "description"));
-          const categories = [...block.matchAll(/<category><!\[CDATA\[(.*?)\]\]><\/category>/g)].map((match) => match[1]).filter(Boolean);
-          const contentEncoded = this.extractCDataOrTag(block, "content:encoded");
-          const imageUrl = await this.resolveFeedImage(block, contentEncoded, description, link);
-
-          if (!title || !link) {
-            return null;
-          }
-
-          const subtitle = categories[0] || "Actualidad";
-          const body = this.trimWords(this.stripHtml(description), 36);
-
-          return {
-            id: `polohub-${index}-${this.slugify(title)}`,
-            type: "news" as const,
-            section: "home" as const,
-            slot: "main_news" as const,
-            title,
-            subtitle,
-            body,
-            imageUrl: imageUrl || "https://polohub.net/wp-content/uploads/2022/06/cropped-favicon-polomagazine-1-270x270.jpg",
-            targetUrl: link,
-            priority: 100,
-            sortOrder: index + 1,
-            isActive: true as const
-          };
-        })
-      );
-
-      const items = parsed.filter((item): item is NonNullable<typeof item> => Boolean(item)).slice(0, limit);
-
-      if (items.length === 0 && this.polohubCache?.items.length) {
-        return this.polohubCache.items.slice(0, limit);
+      if (items.length === 0) {
+        throw new Error("PoloHUB news page did not contain recognizable articles");
       }
 
       this.polohubCache = {
@@ -841,12 +810,67 @@ export class AdminService {
       };
 
       return items;
-    } catch {
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Could not refresh PoloHUB news: ${detail}`);
+
       if (this.polohubCache?.items.length) {
         return this.polohubCache.items.slice(0, limit);
       }
 
       return [];
+    }
+  }
+
+  private parsePolohubNewsPage(html: string, limit: number) {
+    const articleBlocks = html.match(/<article\b[\s\S]*?<\/article>/gi) ?? [];
+
+    return articleBlocks
+      .map((block, index) => {
+        const link = this.toAbsolutePolohubUrl(block.match(/href=["']([^"']*\/(?:noticias|news)\/[^"'?#]+)["']/i)?.[1] ?? "");
+        const title = this.decodeHtmlEntities(this.stripHtml(block.match(/<h3\b[^>]*>([\s\S]*?)<\/h3>/i)?.[1] ?? ""));
+        const description = this.decodeHtmlEntities(
+          this.stripHtml(block.match(/<\/h3>[\s\S]*?<p\b[^>]*>([\s\S]*?)<\/p>/i)?.[1] ?? "")
+        );
+        const category = this.decodeHtmlEntities(
+          this.stripHtml(block.match(/<span\b[^>]*class=["'][^"']*\bml-3\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/i)?.[1] ?? "")
+        );
+        const imageTag = block.match(/<img\b[^>]*>/i)?.[0] ?? "";
+        const imageUrl = this.toAbsolutePolohubUrl(imageTag.match(/\ssrc=["']([^"']+)["']/i)?.[1] ?? "");
+
+        if (!title || !link) return null;
+
+        return {
+          id: `polohub-${index}-${this.slugify(title)}`,
+          type: "news" as const,
+          section: "home" as const,
+          slot: "main_news" as const,
+          title,
+          subtitle: category || "Actualidad",
+          body: this.trimWords(description, 36),
+          imageUrl: imageUrl || "https://polohub.net/wp-content/uploads/2022/06/cropped-favicon-polomagazine-1-270x270.jpg",
+          targetUrl: link,
+          priority: 100,
+          sortOrder: index + 1,
+          isActive: true as const
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      .slice(0, limit);
+  }
+
+  private toAbsolutePolohubUrl(value: string) {
+    if (!value) return "";
+
+    try {
+      const absolute = new URL(this.decodeHtmlEntities(value).trim(), "https://polohub.net");
+      if (absolute.pathname === "/_next/image") {
+        const originalUrl = absolute.searchParams.get("url");
+        if (originalUrl) return new URL(originalUrl, "https://polohub.net").toString();
+      }
+      return absolute.toString();
+    } catch {
+      return "";
     }
   }
 
@@ -947,6 +971,7 @@ export class AdminService {
       .replace(/&quot;/g, '"')
       .replace(/&apos;/g, "'")
       .replace(/&nbsp;/g, " ")
+      .replace(/&#x([0-9a-f]+);/gi, (_match, code) => String.fromCodePoint(Number.parseInt(code, 16)))
       .replace(/&#(\d+);/g, (_match, code) => String.fromCharCode(Number(code)));
   }
 
